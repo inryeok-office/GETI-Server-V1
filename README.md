@@ -4,6 +4,7 @@
 
 - `main`: 운영/배포 가능한 안정 버전입니다. 직접 Push하지 않습니다.
 - `develop`: 다음 개발 버전을 통합하는 기본 개발 브랜치입니다. 직접 Push하지 않습니다.
+- `main`, `develop`은 GitHub Branch Protection이 적용되어 있어 직접 Push와 강제 Push, 브랜치 삭제가 차단됩니다. Pull Request는 **작성자 본인이 아닌 다른 리뷰어의 승인 1건 이상**이 있어야 Merge할 수 있으며, 이 규칙은 저장소 관리자에게도 동일하게 적용됩니다(`enforce_admins`).
 - 작업 브랜치는 `develop`에서 분기하며 아래 형식을 사용합니다.
 
   ```text
@@ -85,7 +86,7 @@ config: PostgreSQL 연결 환경변수 추가
 - `WIP`, `update`, `수정함`, `최종`, `진짜 최종` 같은 메시지는 사용하지 않습니다.
 - Issue 종료는 커밋이 아닌 Pull Request 본문의 `Closes #번호`로 처리합니다. 필요한 경우에만 Footer에 `Refs: #번호`를 추가합니다.
 
-Merge 시 불필요한 Merge Commit을 줄이기 위해 Squash and Merge 또는 Rebase and Merge를 우선 검토합니다. 실제 Repository Merge 전략 설정은 후속 PR(Repository 정책 작업)에서 다룹니다. Squash Merge를 사용하는 경우 최종 Squash Commit도 한글 규칙을 따릅니다. (예: `chore: 프로젝트 기본 및 협업 기반 설정 (#1)`)
+Merge 시 불필요한 Merge Commit을 줄이기 위해 Squash and Merge 또는 Rebase and Merge를 우선 검토합니다. 어떤 방식을 저장소의 기본 Merge 옵션으로 강제할지(Merge Button 옵션 제한 등)는 후속 PR(Repository 정책 작업)에서 다룹니다. Squash Merge를 사용하는 경우 최종 Squash Commit도 한글 규칙을 따릅니다. (예: `chore: 프로젝트 기본 및 협업 기반 설정 (#1)`)
 
 커밋 메시지 자동 검증(Commitlint 등)은 이번 단계에서 도입하지 않으며, 후속 CI/Repository 정책 작업에서 별도로 검토합니다.
 
