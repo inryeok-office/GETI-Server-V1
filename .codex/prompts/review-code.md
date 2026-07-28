@@ -43,6 +43,8 @@ git diff origin/develop...HEAD
 - 관련 없는 변경 포함 여부
 - 남아 있는 Debug Code
 
+포맷(공백, Import 정렬 등)은 Spotless(ktlint)가, 상당수 코드 스멜/복잡도는 detekt가 이미 자동 검사하니(./gradlew spotlessCheck, ./gradlew detekt) 같은 내용을 중복으로 지적하지 말고 논리·설계 문제에 집중해.
+
 발견 사항마다 중요도(Critical/High/Medium/Low/Suggestion), 파일과 위치, 문제, 영향, 수정 방향, 근거를 포함해서 보고해.
 
 내가 수정까지 명시적으로 요청하지 않는 한 코드를 변경하지 마.

@@ -66,6 +66,8 @@ Windows:
 ```powershell
 .\gradlew.bat test
 .\gradlew.bat build
+.\gradlew.bat spotlessApply
+.\gradlew.bat check
 .\gradlew.bat clean test build
 ```
 
@@ -74,8 +76,12 @@ Unix 또는 Git Bash:
 ```bash
 ./gradlew test
 ./gradlew build
+./gradlew spotlessApply
+./gradlew check
 ./gradlew clean test build
 ```
+
+`check`(그리고 `clean test build`)는 `spotlessCheck`(포맷 검사)와 `detekt`(정적 분석)를 자동으로 포함한다. 포맷 위반이 있으면 `spotlessApply`로 먼저 정리한다. 도구별 설정은 [`docs/development/code-quality.md`](./docs/development/code-quality.md)를 따른다.
 
 ## Claude Code Rules
 

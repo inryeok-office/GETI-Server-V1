@@ -28,17 +28,18 @@ GETI-Server 저장소, Issue #{ISSUE_NUMBER} 작업을 Commit, Push하고 develo
 4. git status, git diff로 Working Tree를 확인해.
 5. Issue 요구사항과 제외 범위를 대조해.
 6. 관련 Test를 실행해.
-7. 전체 Test와 Build를 실행해 (./gradlew clean test build).
-8. git diff --check를 실행해.
-9. Secret과 불필요한 파일이 포함되지 않았는지 확인해.
-10. 관련된 파일만 Stage해.
-11. Commit 메시지를 작성해: <type>: <한글 작업 내용> 형식, Type은 영문 소문자.
-12. Commit해.
-13. Push해 (Force Push 금지).
-14. develop을 대상으로 Draft PR을 생성해 (또는 기존 PR을 갱신해).
-15. PR 본문에 Closes #{ISSUE_NUMBER}로 Issue를 연결해.
-16. 저장소에 실제 존재하는 Label만 gh label list로 확인해서 PR에 적용해.
-17. Issue 상태 Label을 review로 바꿔.
+7. Kotlin 코드를 변경했다면 ./gradlew spotlessCheck와 ./gradlew detekt를 확인해.
+8. 전체 Test와 Build를 실행해 (./gradlew clean test build, check에 spotlessCheck/detekt 포함됨).
+9. git diff --check를 실행해.
+10. Secret과 불필요한 파일이 포함되지 않았는지 확인해.
+11. 관련된 파일만 Stage해.
+12. Commit 메시지를 작성해: <type>: <한글 작업 내용> 형식, Type은 영문 소문자.
+13. Commit해.
+14. Push해 (Force Push 금지).
+15. develop을 대상으로 Draft PR을 생성해 (또는 기존 PR을 갱신해).
+16. PR 본문에 Closes #{ISSUE_NUMBER}로 Issue를 연결해.
+17. 저장소에 실제 존재하는 Label만 gh label list로 확인해서 PR에 적용해.
+18. Issue 상태 Label을 review로 바꿔.
 
 PR 본문은 다음 구조를 사용해:
 
