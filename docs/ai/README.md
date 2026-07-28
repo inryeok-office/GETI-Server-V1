@@ -21,7 +21,7 @@
 - `AGENTS.md`, `docs/ai/*` : Claude Code, Codex를 포함한 **모든 AI 도구에 공통으로 적용**되는 규칙
 - `CLAUDE.md`, `.claude/rules/` : Claude Code에서만 사용하는 진입 문서와 작업 규칙 (구성 완료)
 - `.claude/commands/`, `.claude/skills/` : Claude Code 전용 반복 작업 Command/Skill (구성 완료)
-- `.codex/` : Codex에서만 사용하는 실행 정책과 Prompt Template (후속 단계에서 추가 예정)
+- `.codex/` : Codex에서만 사용하는 실행 정책과 Prompt Template (구성 완료)
 
 도구별 설정은 공통 규칙을 대체하지 않으며, 공통 규칙 위에서 도구에 특화된 사용 방법만 추가한다.
 
@@ -105,10 +105,27 @@ Claude Code는 저장소 Root의 [`CLAUDE.md`](../../CLAUDE.md)를 세션 시작
 - 자동 인식을 확인하지 못한 부분: `@path/to/file.md` Import 문법의 실제 런타임 동작(외부 경로 승인 다이얼로그 등)은 세션 재시작으로 직접 관찰하지 못함
 - Command/Skill 파일은 문법 오류가 있어도 일반 Markdown 문서로서 사람이 읽고 참고하는 데는 문제가 없도록 작성했다
 
+## Codex 전용 설정
+
+Codex CLI는 저장소의 [`AGENTS.md`](../../AGENTS.md)를 **별도 설정 없이 자동으로 읽어 지침으로 주입**한다 (설치된 `codex.exe` 바이너리에서 `AGENTS.md`를 읽어 지침에 포함시키는 로직과 개인 전용 `AGENTS.override.md` 지원을 직접 확인했다). Claude Code처럼 `CLAUDE.md`에 해당하는 별도 진입 문서가 필요하지 않고, `AGENTS.md` 자체가 Codex의 진입 문서 역할을 한다.
+
+- [`.codex/README.md`](../../.codex/README.md) — Codex 사용 진입 문서, 실행 방식, Sandbox/Approval 값, Windows 환경 확인 사항
+- [`.codex/policies/execution-policy.md`](../../.codex/policies/execution-policy.md) — 실행 전 확인, 대화형/비대화형 실행 기준, 중단 조건
+- [`.codex/policies/sandbox-policy.md`](../../.codex/policies/sandbox-policy.md) — 작업 유형별 최소 권한 Sandbox/Network 선택 기준
+- [`.codex/policies/prompt-policy.md`](../../.codex/policies/prompt-policy.md) — Prompt 구성 요소, Placeholder 표기, 금지되는 Prompt 방식
+
+`.codex/prompts/`의 Prompt Template 6종(`start-issue`, `implement-feature`, `fix-bug`, `review-code`, `verify-changes`, `prepare-pr`)은 Claude Code의 `.claude/commands/`와 달리 **Codex가 자동으로 찾아서 등록하는 공식 기능이 아니다** (설치된 CLI 바이너리에서 관련 자동 등록 로직을 찾지 못했다). 내용을 복사하거나 `codex exec - < 파일` 형태로 표준 입력에 전달해서 사용하는 템플릿 모음으로 취급한다.
+
+### 사용자 전역 설정을 저장소에 포함하지 않는 이유
+
+`~/.codex/config.toml`(Model, Sandbox, Approval 기본값 등)과 `~/.codex/auth.json`(인증 토큰)은 사용자별 환경과 인증 정보를 담는 개인 전역 파일이다. 이 값을 저장소에 Commit하면 다른 사용자의 환경을 덮어쓰거나 인증 정보가 유출될 위험이 있어, 저장소에는 문서(사용법·정책·Template)만 포함하고 실제 설정 파일은 포함하지 않는다.
+
+### 현재까지 확인한 Codex 지원 범위
+
+- 설치 버전: `codex-cli 0.145.0` (`codex --version`)
+- 확인된 기능: `codex`(대화형), `codex exec`(비대화형, 인자 또는 표준 입력으로 Prompt 전달), `codex review --base <branch>`/`--uncommitted`(전용 코드 리뷰 명령), `-s/--sandbox`(`read-only`/`workspace-write`/`danger-full-access`), `-a/--ask-for-approval`(`untrusted`/`on-request`/`never`), `AGENTS.md` 자동 로드와 `AGENTS.override.md` — 모두 `codex --help`, `codex exec --help`, `codex review --help`, `codex doctor` 실행 결과와 설치된 CLI 바이너리의 문자열 검사로 확인
+- 확인하지 못한 부분: `.codex/prompts/`의 실제 자동 등록 여부(위 근거로 "아니다"에 무게를 두었으나 CLI 소스 전체를 확인한 것은 아님), WSL 환경에서의 동작 차이
+
 ## 이후 추가될 설정 안내
 
-같은 Issue의 후속 단계에서 다음을 추가할 예정이다.
-
-- `.codex/` : Codex 실행 정책과 작업 유형별 Prompt Template
-
-아직 위 경로는 존재하지 않으므로, 이 문서를 포함한 어떤 문서에서도 위 경로를 유효한 링크로 연결하지 않는다.
+이번 PR의 AI 하네스 구성 범위(공통 규칙, Claude Code, Codex)는 여기까지다. 남은 작업은 전체 일관성 최종 검토와 Draft Pull Request 생성이다.
