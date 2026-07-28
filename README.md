@@ -98,6 +98,10 @@ Issue와 Pull Request는 `{emoji} {label-name}` 형식의 라벨을 사용합니
 - 우선순위 라벨은 Issue 하나당 하나만 사용합니다.
 - 영향 영역(`area:`) 라벨은 Issue 하나에 여러 개를 적용할 수 있습니다.
 
+## AI 기반 개발
+
+Claude Code, Codex 등의 AI 개발 도구를 사용할 때는 [`AGENTS.md`](./AGENTS.md)와 [`docs/ai`](./docs/ai/README.md)의 규칙을 따릅니다.
+
 ## 빌드
 
 ```bash

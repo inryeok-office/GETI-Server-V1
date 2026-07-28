@@ -57,4 +57,3 @@ Thumbs.db
 
 ### AI Agent runtime artifacts ###
 .claude/settings.local.json
-.codex/
