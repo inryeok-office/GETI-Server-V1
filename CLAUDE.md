@@ -87,6 +87,34 @@ Unix 또는 Git Bash:
 - [`.claude/rules/git-and-github.md`](./.claude/rules/git-and-github.md) — Branch, Commit, PR, Issue Label 규칙
 - [`.claude/rules/security.md`](./.claude/rules/security.md) — Secret, Shell, Dependency 보안 규칙
 
+## Commands와 Skills
+
+`.claude/commands/`의 Markdown 파일은 Claude Code가 `/파일이름` 형태의 Slash Command로 자동 등록한다. `.claude/skills/*/SKILL.md`는 Claude Code가 자동으로 인식하는 공식 Skill 구조다.
+
+- **Commands**: 사용자가 직접 호출하는 짧고 실행 중심의 Workflow. 세부 판단 기준을 복사하지 않고 관련 Skill을 참조한다.
+- **Skills**: Command 실행 중 참고하는 상세 판단 기준, 예외 처리, 금지 사항.
+
+Command를 실행하기 전에 관련 Skill을 먼저 참고한다. 어떤 Command도 사용자가 요청한 범위를 벗어나 Commit, Push, PR, Merge를 임의로 수행하지 않는다.
+
+| Command | 목적 |
+| --- | --- |
+| [`/start-issue`](./.claude/commands/start-issue.md) | Issue 기반 작업 시작 (develop 최신화, Branch 생성, 상태 Label 전환) |
+| [`/implement`](./.claude/commands/implement.md) | 현재 Issue의 기능/설정/문서 변경 구현 |
+| [`/fix-bug`](./.claude/commands/fix-bug.md) | 버그 재현 및 원인 수정 |
+| [`/review`](./.claude/commands/review.md) | 코드 리뷰 (기본적으로 수정 없음) |
+| [`/verify`](./.claude/commands/verify.md) | Test/Build/링크/Secret 종합 검증 |
+| [`/prepare-pr`](./.claude/commands/prepare-pr.md) | Commit, Push, Draft PR 준비 (명시적 요청 시에만) |
+
+| Skill | 목적 |
+| --- | --- |
+| [`issue-workflow`](./.claude/skills/issue-workflow/SKILL.md) | Issue 분석, Branch, 상태 Label 흐름, 실패 처리 기준 |
+| [`spring-boot-change`](./.claude/skills/spring-boot-change/SKILL.md) | Spring Boot/Kotlin 변경 시 환경 분석과 구현 원칙 |
+| [`test-and-verify`](./.claude/skills/test-and-verify/SKILL.md) | 변경 유형별 테스트/검증 기준과 실패 분석 |
+| [`code-review`](./.claude/skills/code-review/SKILL.md) | 기능/보안/성능/유지보수성 검토 기준 |
+| [`pull-request`](./.claude/skills/pull-request/SKILL.md) | Commit/Push/Draft PR 준비 기준 |
+
+권장 흐름: `/start-issue` → `/implement` 또는 `/fix-bug` → `/verify` → `/review` → `/prepare-pr`
+
 ## 완료 보고
 
 작업 완료 시 다음을 보고한다.

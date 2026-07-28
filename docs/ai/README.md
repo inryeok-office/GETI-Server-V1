@@ -20,7 +20,7 @@
 
 - `AGENTS.md`, `docs/ai/*` : Claude Code, Codex를 포함한 **모든 AI 도구에 공통으로 적용**되는 규칙
 - `CLAUDE.md`, `.claude/rules/` : Claude Code에서만 사용하는 진입 문서와 작업 규칙 (구성 완료)
-- `.claude/commands/`, `.claude/skills/` : Claude Code 전용 반복 작업 Command/Skill (후속 단계에서 추가 예정)
+- `.claude/commands/`, `.claude/skills/` : Claude Code 전용 반복 작업 Command/Skill (구성 완료)
 - `.codex/` : Codex에서만 사용하는 실행 정책과 Prompt Template (후속 단계에서 추가 예정)
 
 도구별 설정은 공통 규칙을 대체하지 않으며, 공통 규칙 위에서 도구에 특화된 사용 방법만 추가한다.
@@ -73,11 +73,42 @@ Claude Code는 저장소 Root의 [`CLAUDE.md`](../../CLAUDE.md)를 세션 시작
 
 `CLAUDE.md` 자동 로드와 `.claude/rules/` 자동 로드는 Claude Code 공식 기능이다. 이 저장소에서는 로컬 CLI 캐시(`~/.claude/cache/changelog.md`)의 공식 Changelog로 확인했다.
 
+### Commands와 Skills
+
+`.claude/commands/`의 각 Markdown 파일은 Claude Code가 `/파일이름` 형태의 Slash Command로 자동 등록한다. `.claude/skills/*/SKILL.md`는 Claude Code가 자동으로 인식하는 공식 Skill 구조다. 두 기능 모두 로컬 CLI 캐시의 공식 Changelog로 확인했다.
+
+- Command : 사용자가 직접 호출하는 짧고 실행 중심의 Workflow
+- Skill : Command가 참조하는 상세 판단 기준, 예외 처리, 금지 사항
+
+| Command | 목적 |
+| --- | --- |
+| [`start-issue`](../../.claude/commands/start-issue.md) | Issue 기반 작업 시작 |
+| [`implement`](../../.claude/commands/implement.md) | 기능/설정/문서 변경 구현 |
+| [`fix-bug`](../../.claude/commands/fix-bug.md) | 버그 재현 및 원인 수정 |
+| [`review`](../../.claude/commands/review.md) | 코드 리뷰 |
+| [`verify`](../../.claude/commands/verify.md) | Test/Build/링크/Secret 검증 |
+| [`prepare-pr`](../../.claude/commands/prepare-pr.md) | Commit/Push/Draft PR 준비 |
+
+| Skill | 목적 |
+| --- | --- |
+| [`issue-workflow`](../../.claude/skills/issue-workflow/SKILL.md) | Issue 분석, Branch, 상태 Label 흐름 |
+| [`spring-boot-change`](../../.claude/skills/spring-boot-change/SKILL.md) | Spring Boot/Kotlin 변경 원칙 |
+| [`test-and-verify`](../../.claude/skills/test-and-verify/SKILL.md) | 변경 유형별 테스트/검증 기준 |
+| [`code-review`](../../.claude/skills/code-review/SKILL.md) | 코드 리뷰 검토 기준 |
+| [`pull-request`](../../.claude/skills/pull-request/SKILL.md) | Commit/Push/Draft PR 준비 기준 |
+
+권장 흐름: `start-issue` → `implement` 또는 `fix-bug` → `verify` → `review` → `prepare-pr`
+
+### 현재까지 지원 확인 범위
+
+- 자동 인식이 확인된 기능: `CLAUDE.md` 자동 로드, `AGENTS.md` 비자동 인식, `.claude/rules/*.md` 자동 로드, `.claude/settings.json`/`.claude/settings.local.json` 구분, `.claude/commands/*.md` Slash Command 등록, `.claude/skills/*/SKILL.md` Skill 인식 — 모두 로컬 CLI 캐시의 공식 Changelog로 확인
+- 자동 인식을 확인하지 못한 부분: `@path/to/file.md` Import 문법의 실제 런타임 동작(외부 경로 승인 다이얼로그 등)은 세션 재시작으로 직접 관찰하지 못함
+- Command/Skill 파일은 문법 오류가 있어도 일반 Markdown 문서로서 사람이 읽고 참고하는 데는 문제가 없도록 작성했다
+
 ## 이후 추가될 설정 안내
 
 같은 Issue의 후속 단계에서 다음을 추가할 예정이다.
 
-- `.claude/commands/`, `.claude/skills/` : Claude Code 전용 반복 작업 Command와 Skill
 - `.codex/` : Codex 실행 정책과 작업 유형별 Prompt Template
 
 아직 위 경로는 존재하지 않으므로, 이 문서를 포함한 어떤 문서에서도 위 경로를 유효한 링크로 연결하지 않는다.
