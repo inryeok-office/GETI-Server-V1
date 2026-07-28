@@ -1,0 +1,70 @@
+name: "🔧 Refactor / Chore"
+description: "리팩터링, 초기 설정, 문서, 의존성 변경 등 코드 동작을 바꾸지 않는 작업에 사용합니다."
+title: "[CHORE] "
+body:
+  - type: textarea
+    id: background
+    attributes:
+      label: 작업 배경
+      description: 이 작업이 왜 필요한지 작성해 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-problem
+    attributes:
+      label: 현재 문제
+      description: 현재 상태에서 어떤 점이 아쉬운지, 어떤 문제가 있는지 작성해 주세요.
+    validations:
+      required: false
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 작업 범위
+      description: 이번 작업에서 다룰 범위를 작성해 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: 세부 작업
+      description: 진행할 작업을 체크리스트로 작성해 주세요.
+      placeholder: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: 완료 조건
+      description: 작업이 완료되었다고 판단할 수 있는 기준을 작성해 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: 제외 범위
+      description: 이번 작업에서 다루지 않는 범위를 명확히 작성해 주세요.
+    validations:
+      required: false
+
+  - type: textarea
+    id: risk
+    attributes:
+      label: 영향 및 위험
+      description: 이 작업이 다른 코드나 팀원에게 미치는 영향, 잠재적 위험을 작성해 주세요.
+    validations:
+      required: false
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: 검증 방법
+      description: "어떻게 검증할 것인지 작성해 주세요. (예: 테스트, 빌드, 수동 확인)"
+    validations:
+      required: true
