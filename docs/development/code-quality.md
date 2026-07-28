@@ -66,14 +66,15 @@ Windows:
 ## Report 위치
 
 ```text
-build/reports/spotless/         Spotless 관련 산출물
 build/reports/detekt/detekt.html   detekt HTML Report
 build/reports/detekt/detekt.md     detekt Markdown Report
 build/reports/detekt/detekt.xml    detekt Checkstyle 형식 Report
 build/reports/detekt/detekt.sarif  detekt SARIF Report
 ```
 
-`build/`는 `.gitignore`에 이미 포함되어 있어 Report가 Git에 커밋되지 않는다.
+Spotless는 별도의 사람이 읽는 Report 파일을 생성하지 않는다. `spotlessCheck` 실패 시 위반 파일과 Diff가 콘솔 출력에 직접 나타난다. `build/spotless-clean/`, `build/spotless-lints/`는 Spotless의 내부 증분 처리 Cache이며 검토용 Report가 아니다.
+
+`build/`는 `.gitignore`에 이미 포함되어 있어 위 산출물이 Git에 커밋되지 않는다.
 
 ## detekt 설정
 

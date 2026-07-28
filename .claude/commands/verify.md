@@ -52,6 +52,8 @@ Git Bash 또는 Unix:
 Spring Context 실패
 설정 실패
 Dependency 실패
+포맷 위반 (spotlessCheck)
+정적 분석 위반 (detekt)
 문서 또는 경로 실패
 외부 서비스 실패
 로컬 환경 실패
