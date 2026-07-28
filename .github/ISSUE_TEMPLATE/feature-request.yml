@@ -2,7 +2,8 @@ name: "✨ Feature Request"
 description: "새로운 기능이나 개선 사항을 제안할 때 사용합니다."
 title: "[FEAT] "
 labels:
-  - enhancement
+  - "✨ feature"
+  - "📋 backlog"
 body:
   - type: textarea
     id: background

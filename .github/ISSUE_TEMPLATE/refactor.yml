@@ -1,6 +1,9 @@
-name: "🔧 Refactor / Chore"
-description: "리팩터링, 초기 설정, 문서, 의존성 변경 등 코드 동작을 바꾸지 않는 작업에 사용합니다."
-title: "[CHORE] "
+name: "♻️ Refactor"
+description: "외부 동작 변경 없이 코드 구조를 개선하는 작업에 사용합니다."
+title: "[REFACTOR] "
+labels:
+  - "♻️ refactor"
+  - "📋 backlog"
 body:
   - type: textarea
     id: background
@@ -14,7 +17,7 @@ body:
     id: current-problem
     attributes:
       label: 현재 문제
-      description: 현재 상태에서 어떤 점이 아쉬운지, 어떤 문제가 있는지 작성해 주세요.
+      description: 현재 코드 구조에서 어떤 점이 아쉬운지 작성해 주세요.
     validations:
       required: false
 
@@ -57,7 +60,7 @@ body:
     id: risk
     attributes:
       label: 영향 및 위험
-      description: 이 작업이 다른 코드나 팀원에게 미치는 영향, 잠재적 위험을 작성해 주세요.
+      description: 외부 동작이나 API가 실제로 변경되지 않는지, 다른 코드에 미치는 영향을 작성해 주세요.
     validations:
       required: false
 
@@ -65,6 +68,6 @@ body:
     id: verification
     attributes:
       label: 검증 방법
-      description: "어떻게 검증할 것인지 작성해 주세요. (예: 테스트, 빌드, 수동 확인)"
+      description: "어떻게 검증할 것인지 작성해 주세요. (예: 기존 테스트 통과, 수동 확인)"
     validations:
       required: true

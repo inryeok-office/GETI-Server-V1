@@ -2,7 +2,8 @@ name: "🐛 Bug Report"
 description: "버그를 발견했을 때 사용합니다."
 title: "[BUG] "
 labels:
-  - bug
+  - "🐛 bug"
+  - "📝 ready"
 body:
   - type: textarea
     id: description
