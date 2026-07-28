@@ -56,6 +56,7 @@ Dependency 다운로드 또는 GitHub(gh) 접근이 필요한 작업
 
 ### GitHub Issue 및 PR 작업 (`start-issue`, `prepare-pr` Prompt)
 
+- `--sandbox workspace-write` (Branch 전환, Commit 등 Workspace 쓰기가 필요하다)
 - `gh` 인증과 Network가 필요하다
 - Merge 권한은 사용하지 않는다
 - Force Push는 금지한다

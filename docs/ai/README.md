@@ -32,7 +32,7 @@
 2. docs/ai/README.md (이 문서)
 3. docs/ai/workflow.md
 4. 작업 유형에 맞는 세부 정책
-5. 도구별 진입 문서 (CLAUDE.md, 후속 추가될 Codex 진입 문서 등)
+5. 도구별 진입 문서 (Claude Code는 `CLAUDE.md`, Codex는 자동 인식되는 `AGENTS.md` 자체)
 ```
 
 ## 문서별 책임
@@ -126,6 +126,8 @@ Codex CLI는 저장소의 [`AGENTS.md`](../../AGENTS.md)를 **별도 설정 없�
 - 확인된 기능: `codex`(대화형), `codex exec`(비대화형, 인자 또는 표준 입력으로 Prompt 전달), `codex review --base <branch>`/`--uncommitted`(전용 코드 리뷰 명령), `-s/--sandbox`(`read-only`/`workspace-write`/`danger-full-access`), `-a/--ask-for-approval`(`untrusted`/`on-request`/`never`), `AGENTS.md` 자동 로드와 `AGENTS.override.md` — 모두 `codex --help`, `codex exec --help`, `codex review --help`, `codex doctor` 실행 결과와 설치된 CLI 바이너리의 문자열 검사로 확인
 - 확인하지 못한 부분: `.codex/prompts/`의 실제 자동 등록 여부(위 근거로 "아니다"에 무게를 두었으나 CLI 소스 전체를 확인한 것은 아님), WSL 환경에서의 동작 차이
 
-## 이후 추가될 설정 안내
+## 구성 완료 상태
 
-이번 PR의 AI 하네스 구성 범위(공통 규칙, Claude Code, Codex)는 여기까지다. 남은 작업은 전체 일관성 최종 검토와 Draft Pull Request 생성이다.
+이번 PR(AI 기반 개발 환경 및 하네스 구성)의 범위는 공통 규칙, Claude Code 하네스, Codex 하네스까지다. 세 영역 모두 구성과 최종 검토를 마쳤다.
+
+새로운 AI 도구 추가나 Command/Skill/Prompt 확장은 이 문서가 갱신될 별도의 후속 Issue에서 다룬다.

@@ -193,4 +193,4 @@ docs/ai/security-policy.md      보안 및 위험 작업 방지 정책
 docs/ai/completion-policy.md    완료 판단 및 결과 보고 정책
 ```
 
-Claude Code 전용 설정(`CLAUDE.md`, `.claude/`)과 Codex 전용 설정(`.codex/`)은 같은 Issue의 후속 단계에서 추가될 예정이다.
+Claude Code 전용 설정은 [`CLAUDE.md`](./CLAUDE.md)와 `.claude/`(`rules/`, `commands/`, `skills/`)에, Codex 전용 설정은 `.codex/`(`policies/`, `prompts/`)에 있다.
