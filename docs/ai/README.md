@@ -19,7 +19,8 @@
 ## 공통 규칙과 도구별 규칙의 차이
 
 - `AGENTS.md`, `docs/ai/*` : Claude Code, Codex를 포함한 **모든 AI 도구에 공통으로 적용**되는 규칙
-- `CLAUDE.md`, `.claude/` : Claude Code에서만 사용하는 설정, Command, Skill (후속 단계에서 추가 예정)
+- `CLAUDE.md`, `.claude/rules/` : Claude Code에서만 사용하는 진입 문서와 작업 규칙 (구성 완료)
+- `.claude/commands/`, `.claude/skills/` : Claude Code 전용 반복 작업 Command/Skill (후속 단계에서 추가 예정)
 - `.codex/` : Codex에서만 사용하는 실행 정책과 Prompt Template (후속 단계에서 추가 예정)
 
 도구별 설정은 공통 규칙을 대체하지 않으며, 공통 규칙 위에서 도구에 특화된 사용 방법만 추가한다.
@@ -31,7 +32,7 @@
 2. docs/ai/README.md (이 문서)
 3. docs/ai/workflow.md
 4. 작업 유형에 맞는 세부 정책
-5. 도구별 진입 문서 (CLAUDE.md 등, 추가되는 대로)
+5. 도구별 진입 문서 (CLAUDE.md, 후속 추가될 Codex 진입 문서 등)
 ```
 
 ## 문서별 책임
@@ -58,12 +59,25 @@
 6. 기존 코드의 일관된 패턴
 ```
 
+## Claude Code 전용 설정
+
+Claude Code는 저장소 Root의 [`CLAUDE.md`](../../CLAUDE.md)를 세션 시작 시 자동으로 발견해서 로드한다. `CLAUDE.md`는 `AGENTS.md`를 Import(`@AGENTS.md`)해 공통 규칙이 항상 함께 로드되도록 하고, 그 위에 Claude Code 전용 안내(문서 읽기 순서, 작업 시작 체크리스트, 핵심 행동 규칙, 프로젝트 명령)를 추가한다.
+
+`.claude/rules/`의 Markdown 파일도 Claude Code가 세션 시작 시 자동으로 로드한다.
+
+- [`.claude/rules/repository-workflow.md`](../../.claude/rules/repository-workflow.md) — 저장소 작업 실행 절차, 자율 판단 기준
+- [`.claude/rules/spring-boot.md`](../../.claude/rules/spring-boot.md) — Spring Boot/Kotlin 작업 원칙
+- [`.claude/rules/testing.md`](../../.claude/rules/testing.md) — 테스트 작성·실행·우회 금지 규칙
+- [`.claude/rules/git-and-github.md`](../../.claude/rules/git-and-github.md) — Branch, Commit, PR, Issue Label 규칙
+- [`.claude/rules/security.md`](../../.claude/rules/security.md) — Secret, Shell, Dependency 보안 규칙
+
+`CLAUDE.md` 자동 로드와 `.claude/rules/` 자동 로드는 Claude Code 공식 기능이다. 이 저장소에서는 로컬 CLI 캐시(`~/.claude/cache/changelog.md`)의 공식 Changelog로 확인했다.
+
 ## 이후 추가될 설정 안내
 
-이번 단계에서는 공통 AI 규칙(`AGENTS.md`, `docs/ai/`)만 구성한다. 같은 Issue의 후속 단계에서 다음을 추가할 예정이다.
+같은 Issue의 후속 단계에서 다음을 추가할 예정이다.
 
-- `CLAUDE.md` : Claude Code 진입 문서
-- `.claude/rules/`, `.claude/commands/`, `.claude/skills/` : Claude Code 전용 규칙, Command, Skill
+- `.claude/commands/`, `.claude/skills/` : Claude Code 전용 반복 작업 Command와 Skill
 - `.codex/` : Codex 실행 정책과 작업 유형별 Prompt Template
 
-아직 위 파일들은 존재하지 않으므로, 이 문서를 포함한 어떤 문서에서도 위 경로를 유효한 링크로 연결하지 않는다.
+아직 위 경로는 존재하지 않으므로, 이 문서를 포함한 어떤 문서에서도 위 경로를 유효한 링크로 연결하지 않는다.
