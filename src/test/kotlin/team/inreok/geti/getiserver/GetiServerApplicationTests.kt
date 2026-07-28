@@ -1,0 +1,13 @@
+package team.inreok.geti.getiserver
+
+import org.junit.jupiter.api.Test
+import org.springframework.boot.test.context.SpringBootTest
+
+@SpringBootTest
+class GetiServerApplicationTests {
+
+    @Test
+    fun contextLoads() {
+    }
+
+}

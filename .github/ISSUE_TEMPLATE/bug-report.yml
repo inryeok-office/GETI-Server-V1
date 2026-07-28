@@ -1,0 +1,77 @@
+name: "🐛 Bug Report"
+description: "버그를 발견했을 때 사용합니다."
+title: "[BUG] "
+labels:
+  - "🐛 bug"
+  - "📝 ready"
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 버그 설명
+      description: 어떤 버그인지 명확하고 간결하게 설명해 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: 재현 절차
+      description: 버그를 재현하는 단계를 순서대로 작성해 주세요.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: 기대 동작
+      description: 원래 어떻게 동작해야 하는지 작성해 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: 실제 동작
+      description: 실제로 어떻게 동작했는지 작성해 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: 영향 범위
+      description: 영향을 받는 기능, API, 모듈 등을 작성해 주세요.
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 실행 환경
+      description: OS, Java/Kotlin 버전, 브랜치/커밋 등 재현에 필요한 환경 정보를 작성해 주세요.
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 로그 또는 스크린샷
+      description: |
+        관련 로그나 스크린샷을 첨부해 주세요.
+        Secret, Token, Password 등 민감 정보는 절대 포함하지 마세요.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 추가 정보
+      description: 그 외 참고할 내용이 있다면 작성해 주세요.
+    validations:
+      required: false
