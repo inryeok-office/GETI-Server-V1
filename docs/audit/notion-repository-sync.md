@@ -116,6 +116,8 @@ Notion API 명세서:
 
 **사용자 결정이 필요한 질문**: Notion 명세대로 `success`/`error`/`meta.requestId` 구조로 변경할지, 현재 구조를 유지하고 Notion 문서를 갱신할지. `requestId`는 아직 Trace/Correlation ID 인프라가 없어(Observability 범위, PR 9에서 의도적으로 보류) 어느 쪽을 택하든 실제 값을 채우려면 후속 작업이 필요하다.
 
+**PR 12 갱신**: `requestId`는 PR 12에서 구현했다(`RequestIdFilter`, MDC, Response Header `X-Request-Id`, 성공/오류 응답 Body의 `requestId` Field). 다만 Notion이 요구하는 `meta.requestId`처럼 `meta` 객체 하위에 중첩하지 않고 기존 응답 구조와 동일하게 최상위 Field로 추가했다 — `status`/`path`/`timestamp`처럼 이미 최상위에 있는 다른 Field와의 일관성을 우선했고, `meta` 객체를 새로 도입하는 것은 아래 `success`/`error`/`meta` Wrapper 구조 자체를 바꾸는 결정과 사실상 같아서 이번 PR에서 임의로 선행하지 않았다. `success`/`error`/`meta` Wrapper 구조로 바꿀지는 여전히 **DECISION_REQUIRED**로 남아 있다. Package 위치도 PR 12에서 `team.inreok.getiserver.web` → `team.inreok.getiserver.global.error`(오류)/`team.inreok.getiserver.global.web`(응답/설정)로 재구성했다(사용자가 확정한 `{root}/domain`, `{root}/global` 최상위 구조 반영).
+
 ### 4. Git/Commit/Issue/PR Convention
 
 Notion 컨벤션은 영문 Commit(`type(scope): subject`)과 `[Domain]` Issue/PR 제목을 명시한다. 이 저장소는 `AGENTS.md`/`CLAUDE.md`/`docs/ai/git-conventions.md`/`.claude/rules/git-and-github.md`에 명시된 대로 한글 Commit(`type: 한글 설명`, Scope 없음)과 `[TYPE]` Issue/PR 제목을 PR 1부터 PR 10까지 총 10개 PR, 수십 개 Commit에서 일관되게 사용했다. 이 지침은 이번 세션 전체에서 사용자가 각 PR 작업 지시마다 반복해서 명시한 내용이기도 하다.
