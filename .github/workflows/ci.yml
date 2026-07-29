@@ -1,0 +1,254 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+  push:
+    branches:
+      - develop
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_DISTRIBUTION: temurin
+  JAVA_VERSION: "25"
+
+jobs:
+  wrapper-validation:
+    name: Wrapper Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+  quality:
+    name: Quality
+    needs: wrapper-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      # detekt는 compileKotlin 산출물에 의존하지 않지만, Compile 실패를 가장 먼저
+      # 확인하기 위해 명시적으로 함께 실행한다.
+      - name: Compile and run Spotless / detekt
+        run: ./gradlew compileKotlin compileTestKotlin spotlessCheck detekt
+
+      - name: Upload detekt report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: detekt-report
+          path: build/reports/detekt/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### Quality"
+            echo "- 실행 Task: \`compileKotlin compileTestKotlin spotlessCheck detekt\`"
+            echo "- detekt Report Artifact: \`detekt-report\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  unit-test:
+    name: Unit Test
+    needs: wrapper-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      # test는 Docker 없이 실행된다(src/test는 PostgreSQL/Redis에 의존하지 않는다).
+      # Spring Modulith 구조 검증(ModularityTest)과 Web Slice/Configuration Test도
+      # 이 일반 test Task에 포함되어 함께 실행된다.
+      - name: Run Unit Test and Coverage Report
+        run: ./gradlew test koverHtmlReport koverXmlReport
+
+      - name: Upload Unit Test report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-report
+          path: build/reports/tests/test/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: |
+            build/reports/kover/html/
+            build/reports/kover/report.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### Unit Test"
+            echo "- 실행 Task: \`test koverHtmlReport koverXmlReport\`"
+            echo "- 포함 검증: Unit Test, Web Slice Test, Configuration Test, Spring Modulith 구조 검증(ModularityTest)"
+            echo "- Test Report Artifact: \`unit-test-report\`, Coverage Artifact: \`coverage-report\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  integration-test:
+    name: Integration Test
+    needs: wrapper-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      # GitHub-hosted ubuntu-latest Runner는 Docker Daemon을 기본 제공한다.
+      # Testcontainers(PostgreSQL, Redis)가 이를 자동으로 사용하므로 별도
+      # Docker Socket 설정이나 Ryuk 비활성화 같은 Workaround를 추가하지 않는다.
+      - name: Run Integration Test (Testcontainers)
+        run: ./gradlew integrationTest
+
+      - name: Upload Integration Test report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-test-report
+          path: build/reports/tests/integrationTest/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### Integration Test"
+            echo "- 실행 Task: \`integrationTest\`"
+            echo "- 포함 검증: PostgreSQL/Redis Testcontainers, Flyway, JPA"
+            echo "- Test Report Artifact: \`integration-test-report\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build
+    needs:
+      - wrapper-validation
+      - quality
+      - unit-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      # quality/unit-test Job에서 이미 Spotless/detekt/Unit Test를 실행했지만,
+      # 이 Repository의 표준 최종 검증 명령(clean test build, docs/AGENTS.md 등에서
+      # 반복 사용)과 동일하게 유지해 로컬 재현성을 우선한다. needs로 앞선 Job이
+      # 먼저 실패하면 이 Job 자체가 실행되지 않아 중복 비용은 제한적이다.
+      - name: Gradle Build
+        run: ./gradlew build
+
+      - name: Upload Build Jars
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-jars
+          path: build/libs/*.jar
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### Build"
+            echo "- 실행 Task: \`build\` (spotlessCheck/detekt/test/koverVerify 포함)"
+            echo "- Jar Artifact: \`build-jars\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  docker-validation:
+    name: Docker Validation
+    needs:
+      - wrapper-validation
+      - quality
+      - unit-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate Docker Compose configuration
+        run: docker compose config --quiet
+
+      # Registry Login과 Image Push는 수행하지 않는다. Build 성공 여부만 검증한다.
+      - name: Build Spring Boot Docker image
+        run: docker build -t geti-server-app:ci .
+
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### Docker Validation"
+            echo "- \`docker compose config\`, \`docker build\`(Registry Push 없음)"
+          } >> "$GITHUB_STEP_SUMMARY"
