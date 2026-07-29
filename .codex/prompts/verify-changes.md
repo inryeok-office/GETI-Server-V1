@@ -23,7 +23,7 @@ GETI-Server 저장소의 현재 변경 사항을 검증해줘. 코드를 새로 
 6. 변경 범위에 맞는 Test를 실행해 (./gradlew test).
 7. Kotlin 코드를 변경했다면 ./gradlew spotlessCheck와 ./gradlew detekt를 실행해 (포맷 위반은 ./gradlew spotlessApply로 정리).
 8. 전체 Test를 실행해.
-9. Build를 실행해 (./gradlew clean test build, check에 spotlessCheck/detekt 포함됨).
+9. Build를 실행해 (./gradlew clean test build, check에 spotlessCheck/detekt/koverVerify 포함됨). 커버리지 Report가 필요하면 ./gradlew koverHtmlReport, ./gradlew koverXmlReport를 별도로 실행해 (check에는 포함 안 됨).
 10. 문서를 변경했다면 상대 링크와 경로가 유효한지 확인해.
 11. Secret이나 개인 환경 파일이 포함되지 않았는지 확인해.
 12. 불필요한 파일이 포함되지 않았는지 확인해.

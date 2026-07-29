@@ -22,7 +22,7 @@ argument-hint: [구현할 내용에 대한 추가 설명 (선택)]
 7. 관련 Test를 작성하거나 수정한다.
 8. 변경 범위에 해당하는 Test를 실행한다.
 9. Kotlin 코드를 변경했다면 `./gradlew spotlessApply`로 포맷을 정리하고 `./gradlew detekt`로 정적 분석을 확인한다.
-10. 전체 Test와 Build를 실행한다 (`check`에 `spotlessCheck`, `detekt`가 포함됨).
+10. 전체 Test와 Build를 실행한다 (`check`에 `spotlessCheck`, `detekt`, `koverVerify`가 포함됨).
 11. `git diff --check`를 실행한다.
 12. Diff를 직접 리뷰한다.
 13. 결과를 보고한다.

@@ -33,7 +33,7 @@ GETI-Server 저장소, Issue #{ISSUE_NUMBER} 작업 Branch에서 다음을 구�
 7. 관련 Test를 작성하거나 수정해.
 8. 변경 범위에 해당하는 Test를 실행해 (./gradlew test).
 9. Kotlin 코드를 변경했다면 ./gradlew spotlessApply로 포맷을 정리하고 ./gradlew detekt로 정적 분석을 확인해.
-10. 전체 Test와 Build를 실행해 (./gradlew clean test build, check에 spotlessCheck/detekt 포함됨).
+10. 전체 Test와 Build를 실행해 (./gradlew clean test build, check에 spotlessCheck/detekt/koverVerify 포함됨).
 11. git diff --check를 실행해.
 12. Diff를 직접 리뷰해.
 

@@ -57,7 +57,8 @@ GETI-Server에서 변경 사항을 검증할 때 참고하는 상세 기준이�
 - 가장 작은 관련 Test부터 실행한다 (`./gradlew test`).
 - 영향 범위가 넓으면 전체 Test를 실행한다.
 - Kotlin 코드를 변경했다면 `./gradlew spotlessCheck`(포맷)와 `./gradlew detekt`(정적 분석)도 확인한다. 포맷 위반은 `./gradlew spotlessApply`로 정리한다.
-- 마지막에 항상 `./gradlew clean test build`로 마무리한다. `check`에 `spotlessCheck`와 `detekt`가 이미 포함되어 있어 별도로 반복 실행할 필요는 없다.
+- 마지막에 항상 `./gradlew clean test build`로 마무리한다. `check`에 `spotlessCheck`, `detekt`, `koverVerify`가 이미 포함되어 있어 별도로 반복 실행할 필요는 없다.
+- 커버리지 수치 확인이 필요하면 `./gradlew koverHtmlReport` 또는 `./gradlew koverXmlReport`를 별도로 실행한다(`check`에는 포함되지 않는다).
 - 이미 통과가 확인된 범위를 불필요하게 반복 실행하지 않는다.
 - 실행하지 못한 검증은 숨기지 않고 명시한다.
 

@@ -53,13 +53,20 @@ Kotlin 코드를 변경했다면 포맷과 정적 분석도 확인한다.
 ./gradlew detekt
 ```
 
-마지막에 전체 검증을 실행한다. `check`(`clean test build`에 포함됨)가 `spotlessCheck`와 `detekt`를 자동으로 실행하므로 별도로 반복 실행할 필요는 없다.
+마지막에 전체 검증을 실행한다. `check`(`clean test build`에 포함됨)가 `spotlessCheck`, `detekt`, `koverVerify`를 자동으로 실행하므로 별도로 반복 실행할 필요는 없다(`koverVerify`는 현재 최소 기준을 설정하지 않아 항상 통과한다).
 
 ```bash
 ./gradlew clean test build
 ```
 
-Windows에서는 `.\gradlew.bat`를 사용한다. 도구별 설정은 [`docs/development/code-quality.md`](../../docs/development/code-quality.md)를 따른다.
+Windows에서는 `.\gradlew.bat`를 사용한다. 도구별 설정은 [`docs/development/code-quality.md`](../../docs/development/code-quality.md)와 [`docs/development/testing.md`](../../docs/development/testing.md)를 따른다.
+
+커버리지 Report가 필요하면 별도로 실행한다(`check`에는 포함되지 않는다).
+
+```bash
+./gradlew koverHtmlReport
+./gradlew koverXmlReport
+```
 
 ## 실패 분류
 
