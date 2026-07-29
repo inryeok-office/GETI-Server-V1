@@ -82,7 +82,10 @@ git checkout -- .
 git push --force
 git push --force-with-lease
 rm -rf
+docker compose down -v
 ```
+
+`docker compose down -v`는 로컬 PostgreSQL/Redis/MinIO 데이터를 삭제하는 파괴적 명령이다([`docs/development/docker.md`](../../docs/development/docker.md) 참고).
 
 ## 참고
 

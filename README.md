@@ -111,6 +111,15 @@ EditorConfig, Spotless(ktlint), detekt로 코드 스타일과 정적 분석을 �
 ./gradlew check
 ```
 
+## 로컬 인프라 (Docker)
+
+PostgreSQL, Redis, MinIO를 Docker Compose로 실행합니다. Spring Boot는 평소 Host에서 직접 실행합니다. 사용법과 접속 정보, Local Credential 정책은 [`docs/development/docker.md`](./docs/development/docker.md)를 따릅니다.
+
+```bash
+docker compose up -d
+SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
+```
+
 ## Configuration과 실행
 
 공통 설정과 `local`/`test`/`prod` Profile을 분리하고, Secret은 저장소에 포함하지 않고 환경 변수로 관리합니다. Profile 전략, 환경 변수, `.env.example` 사용법은 [`docs/development/configuration.md`](./docs/development/configuration.md)를 따릅니다.

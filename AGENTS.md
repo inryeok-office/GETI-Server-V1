@@ -117,7 +117,10 @@ git restore .
 git push --force
 git push --force-with-lease
 rm -rf
+docker compose down -v
 ```
+
+`docker compose down -v`는 로컬 PostgreSQL/Redis/MinIO Named Volume 데이터를 삭제한다([`docs/development/docker.md`](./docs/development/docker.md) 참고).
 
 ## 테스트 및 검증
 

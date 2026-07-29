@@ -15,6 +15,13 @@
 - `.env`는 Spring Boot가 자동으로 읽는 파일이 아니다. 자동 로딩된다고 문서화하거나 가정하지 않는다.
 - Secret에는 안전하지 않은 기본값(`${SECRET:change-me}` 등)을 제공하지 않는다. 필수 Secret이 없으면 명확하게 실패하도록 둔다.
 
+## Docker
+
+- 로컬 인프라(`compose.yaml`)는 개발 전용이며, PostgreSQL/Redis/MinIO Image는 공식 Image와 고정 Version(Patch/Release Tag)만 사용한다. `latest`나 Major-only Tag를 사용하지 않는다.
+- Compose 파일에 실제 운영 Secret을 작성하지 않는다. Local 전용 기본 Credential은 운영에서 재사용할 수 없다는 점을 문서에 명시한다.
+- `privileged`, Docker Socket Mount, Host Network를 사용하지 않는다.
+- `docker compose down -v`는 Local 데이터를 삭제하는 파괴적 명령이다. 사용자의 명시적 요청 없이 실행하지 않는다([`docs/development/docker.md`](../development/docker.md) 참고).
+
 ## 로그와 출력
 
 - 로그, 커밋 메시지, PR 본문, 완료 보고에 Secret이나 개인정보(실제 사용자 이메일, 전화번호 등)를 출력하지 않는다.
