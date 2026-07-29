@@ -6,4 +6,12 @@ empty-blocks:
   # (예: `@Test fun contextLoads() {}`)은 의도적으로 빈 본문을 사용한다.
   EmptyFunctionBlock:
     active: true
-    excludes: ['**/test/**']
+    excludes: ['**/test/**', '**/integrationTest/**']
+
+naming:
+  # 기본 Config는 Test Source의 Backtick 함수 이름(예: `` `유효한 요청이면 사용자를 생성한다`() ``)을
+  # src/test/**에서만 허용한다. PR 8에서 추가한 src/integrationTest/**도 동일한 Test Naming
+  # Convention을 쓰므로 같은 예외를 적용한다.
+  FunctionNaming:
+    active: true
+    excludes: ['**/test/**', '**/integrationTest/**']

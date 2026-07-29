@@ -69,6 +69,12 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
       SERVER_PORT: ${SERVER_PORT:-8080}
+      # Host(localhost)가 아닌 Compose Service 이름으로 접속한다.
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-geti}
+      DATABASE_USERNAME: ${POSTGRES_USER:-geti}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-geti-local-only}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     ports:
       - "127.0.0.1:${SERVER_PORT:-8080}:8080"
     depends_on:
