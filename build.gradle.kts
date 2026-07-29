@@ -9,7 +9,7 @@ plugins {
     id("org.jetbrains.kotlinx.kover") version "0.9.9"
 }
 
-group = "team.inreok.GETI"
+group = "team.inreok"
 version = "0.0.1-SNAPSHOT"
 description = "GETI-Server"
 

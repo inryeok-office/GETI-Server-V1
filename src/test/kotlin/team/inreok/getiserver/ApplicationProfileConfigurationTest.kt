@@ -1,4 +1,4 @@
-package team.inreok.geti.getiserver
+package team.inreok.getiserver
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -15,7 +15,7 @@ class ApplicationProfileConfigurationTest {
         contextRunner
             .withPropertyValues("spring.profiles.active=local")
             .run { context ->
-                assertThat(context.environment.getProperty("logging.level.team.inreok.geti.getiserver"))
+                assertThat(context.environment.getProperty("logging.level.team.inreok.getiserver"))
                     .isEqualTo("DEBUG")
             }
     }
@@ -24,7 +24,7 @@ class ApplicationProfileConfigurationTest {
     fun `default profile does not enable debug logging`() {
         contextRunner
             .run { context ->
-                assertThat(context.environment.getProperty("logging.level.team.inreok.geti.getiserver"))
+                assertThat(context.environment.getProperty("logging.level.team.inreok.getiserver"))
                     .isNull()
             }
     }

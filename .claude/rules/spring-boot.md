@@ -1,6 +1,6 @@
 # Spring Boot / Kotlin 작업 원칙 (Claude Code)
 
-GETI-Server의 실제 환경(Spring Boot 4.1.0, Kotlin 2.3.21, Gradle 9.5.1 Kotlin DSL, Java Toolchain 25, Root Package `team.inreok.geti.getiserver`)을 기준으로 한 Claude Code 전용 작업 규칙이다. 아직 도입되지 않은 Architecture를 확정된 규칙처럼 강제하지 않는다 ([`docs/ai/coding-conventions.md`](../../docs/ai/coding-conventions.md) 참고).
+GETI-Server의 실제 환경(Spring Boot 4.1.0, Kotlin 2.3.21, Gradle 9.5.1 Kotlin DSL, Java Toolchain 25, Root Package `team.inreok.getiserver`)을 기준으로 한 Claude Code 전용 작업 규칙이다. 아직 도입되지 않은 Architecture를 확정된 규칙처럼 강제하지 않는다 ([`docs/ai/coding-conventions.md`](../../docs/ai/coding-conventions.md) 참고).
 
 ## 버전과 Build
 
@@ -11,7 +11,7 @@ GETI-Server의 실제 환경(Spring Boot 4.1.0, Kotlin 2.3.21, Gradle 9.5.1 Kotl
 
 ## 기존 구조 우선
 
-- 기존 Root Package(`team.inreok.geti.getiserver`)와 하위 Package 구조를 확인한다.
+- 기존 Root Package(`team.inreok.getiserver`)와 하위 Package 구조를 확인한다.
 - 기존 Naming, Component/Configuration 구조를 확인한다.
 - 기존 Test 위치(`src/test/kotlin/...`)를 확인한다.
 - `GetiServerApplication`(Main Application Class) 위치를 임의로 이동하지 않는다.

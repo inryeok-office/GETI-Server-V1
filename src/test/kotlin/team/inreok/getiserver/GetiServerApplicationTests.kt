@@ -1,4 +1,4 @@
-package team.inreok.geti.getiserver
+package team.inreok.getiserver
 
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest

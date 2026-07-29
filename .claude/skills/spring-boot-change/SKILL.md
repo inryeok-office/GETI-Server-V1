@@ -14,7 +14,7 @@ GETI-Server의 Spring Boot/Kotlin 코드를 변경할 때 참고하는 상세 �
 - Java 버전 (`build.gradle.kts`의 Toolchain)
 - Spring Boot 버전
 - Gradle 버전과 DSL(Kotlin DSL)
-- Root Package (`team.inreok.geti.getiserver`)
+- Root Package (`team.inreok.getiserver`)
 - 적용된 Plugin
 - 선언된 Dependency
 - Profile 구성 (`local`/`test`/`prod`, [`docs/development/configuration.md`](../../../docs/development/configuration.md) 참고)

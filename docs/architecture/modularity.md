@@ -6,10 +6,29 @@ Spring Modulith 도입은 즉시 MSA로 분리한다는 뜻이 아니다. 현재
 
 ## 현재 상태
 
-- Root Package: `team.inreok.geti.getiserver`
+- Root Package: `team.inreok.getiserver`
 - 이 Package 바로 아래에는 `GetiServerApplication`(Application 진입점) 하나만 있고, 하위 Package(도메인 후보)가 아직 없다.
 - 따라서 `ApplicationModules.of(GetiServerApplication::class.java)`로 탐지되는 Application Module은 현재 **0개**다. 이는 실제 측정 결과이며, 모듈을 만들기 위해 가짜 Package나 Marker Class를 추가하지 않았다.
 - 도메인 Package가 추가되면 별도 설정 변경 없이 Root Package 바로 아래 Package가 자동으로 Application Module로 탐지된다(Spring Modulith 기본 탐지 전략, Direct Subpackage 기준).
+
+## Package Tree
+
+실제 Production/Test Package 구조는 다음과 같다(2026-07-29 기준, Package Structure Refactoring 검토 시점).
+
+```text
+team.inreok.getiserver                            (Root Package)
+├── GetiServerApplication.kt                      (Production, Application 진입점)
+├── GetiServerApplicationTests.kt                 (Test, Application Context Smoke Test)
+├── ModularityTest.kt                             (Test, 구조 검증)
+├── ModuleDocumentationTest.kt                     (Test, 문서 생성)
+└── ApplicationProfileConfigurationTest.kt         (Test, Profile Config Data Binding 검증)
+```
+
+Root Package 바로 아래에는 Sub-package가 하나도 없다. Production Class 1개(Application 진입점)와 이를 검증하는 Test 4개만 존재하며, 모두 같은 Package에 있다. `common`/`global`/`util`/`controller`/`service`/`repository` 같은 기술 또는 포괄 Package도 없다.
+
+이 구조를 다른 형태로 재배치할 근거가 없다. Class가 1개뿐인 상태에서 미리 Layer나 기술 Package를 만들면 실제 코드보다 구조가 앞서게 되므로, 실제 Class가 추가되는 시점까지 현재 평평한 구조를 유지한다.
+
+모든 Spring Bean은 Main Application Class(`GetiServerApplication`)가 있는 Root Package 아래에 위치해야 한다. `@SpringBootApplication`은 별도 `scanBasePackages` 없이 Application Class가 속한 Package를 기준으로 Component Scan을 수행하므로, Root Package 밖에 Bean을 두면 자동으로 탐지되지 않는다.
 
 ## 의존성 구성
 
@@ -44,6 +63,26 @@ Spring Modulith 공식 Reference Documentation의 Compatibility Matrix 기준으
 
 Custom Detection Strategy를 별도로 구현하지 않고 Spring Modulith 기본 전략(Root Package의 Direct Subpackage를 Module로 인식)을 그대로 사용한다. 현재는 도메인 Package가 없어 이 전략을 바꿀 근거도, 예외를 선언할 대상도 없다.
 
+## 기반 기술 Package 규칙 (Configuration / Infrastructure / Support)
+
+특정 Domain에 속하지 않는 기술 기반 코드를 어디에 둘지는 실제 코드가 생기는 시점에 판단한다. 세 후보 모두를 미리 만들지 않는다.
+
+| Package 후보 | 용도 | 현재 상태 |
+| --- | --- | --- |
+| `configuration` | Spring Framework Configuration Class, `@ConfigurationProperties` | 없음. Kotlin Class가 하나도 없다(Profile YAML 파일만 존재, [`configuration.md`](../development/configuration.md) 참고) |
+| `infrastructure` | 실제 외부 시스템 Adapter(PostgreSQL, Redis, MinIO 등과 통신하는 코드) | 없음. Docker Compose로 Infra Container는 준비되어 있지만([`docker.md`](../development/docker.md)) Application이 아직 연결되지 않는다 |
+| `support` | 여러 Module이 실제로 공유하는 순수 기술 지원 코드(Clock Adapter, ID 생성기 등) | 없음. 공유가 필요한 코드 자체가 없다 |
+
+이 세 Package는 각각 다음 조건을 만족하는 실제 Class가 생겼을 때만 만든다.
+
+- `configuration`: 첫 `@Configuration` Class 또는 `@ConfigurationProperties` Class가 추가될 때. `config`, `configs`, `properties` 등 다른 이름과 혼용하지 않고 `configuration`으로 통일한다([`configuration.md`](../development/configuration.md)와 동일한 용어).
+- `infrastructure`: 첫 외부 시스템 Adapter(예: PR 8의 Persistence Adapter)가 추가될 때. `infra`로 축약하지 않는다.
+- `support`: 두 개 이상의 Module이 실제로 같은 기술 코드를 공유해야 하는 근거가 생겼을 때. 특정 Domain 전용 코드(Entity, DTO, Validator, Exception)는 이유를 막론하고 넣지 않는다.
+
+Class가 한두 개뿐이라면 위 Package 아래에 다시 하위 Package(`configuration.properties` 등)를 만들지 않는다. 하위 Package는 같은 Package 안에서 관리하기 어려울 만큼 Class 수가 늘어났을 때 재검토한다.
+
+Root Package(`team.inreok.getiserver`)는 Spring Modulith가 Direct Subpackage를 Module로 자동 탐지하므로, `configuration`/`infrastructure`/`support`를 Root Package 바로 아래에 추가하면 그 자체로 하나의 Application Module처럼 탐지된다. 이는 의도한 동작이다(기술 기반 코드를 하나의 논리적 경계로 보는 것). 여러 Domain Module이 이 Package에 실제로 의존하게 되면 `ModularityTest` 결과에서 의존 관계로 나타나므로, 그 시점에 이 판단이 여전히 타당한지 다시 확인한다.
+
 ## 향후 Module을 추가할 때의 원칙
 
 아직 확정된 하위 Package 구조(`api`/`internal`, `domain`/`application` 등)를 강제하지 않는다. 다만 다음 원칙은 Module이 실제로 추가될 때부터 지킨다.
@@ -54,6 +93,27 @@ Custom Detection Strategy를 별도로 구현하지 않고 Spring Modulith 기�
 - Module 간 강한 결합이 필요 없다면 직접 참조 대신 Application Event를 검토한다(Event Publication Registry 등 영속 Event 인프라는 이번 범위가 아니다. [`docs/ai/testing-policy.md`](../ai/testing-policy.md), [`AGENTS.md`](../../AGENTS.md)의 제외 범위 참고).
 - `common`/`global` 성격의 Package는 여러 Module이 실제로 공유하는 기술 요소(예: 공통 예외 타입, 공통 설정)만 담는다. 특정 도메인 전용 DTO, Validator, Exception을 편의상 넣지 않는다.
 - 서로 다른 Module이 같은 JPA Entity를 직접 공유하지 않는다.
+- Module 내부를 `presentation`/`application`/`domain`/`infrastructure`처럼 Layer로 다시 나눌지는 이 문서가 강제하지 않는다. Module 하나의 실제 Class 수와 책임이 그런 세분화를 정당화할 때 해당 Module PR에서 결정한다. Module 내부 상세 구조는 [`docs/ai/coding-conventions.md`](../ai/coding-conventions.md)의 "아직 확정되지 않은 규칙"에 남아 있다.
+
+## 만들지 않는 Package
+
+다음은 이 저장소에서 만들지 않는다. 편의를 위해 예외를 두지 않는다.
+
+```text
+Root 수준의 controller / service / repository / entity / dto (기술 Layer를 비즈니스 Module처럼 사용)
+무제한 common / global / util / shared / core (책임이 불명확한 포괄 Package)
+특정 Domain 전용 코드를 담은 공용 Package
+아직 실제 Class가 없는 빈 Domain 또는 Layer Package
+아직 필요하지 않은 미래 기능을 위한 Marker/Placeholder Class
+다른 Module의 내부 구현을 직접 참조하는 코드
+```
+
+## Test Package 원칙
+
+- Test Class는 검증 대상 Production Class와 같은 Package에 둔다. 이 저장소는 `src/test/kotlin/team/inreok/getiserver/`에 Production과 동일한 Root Package 구조를 그대로 사용한다.
+- `ModularityTest`/`ModuleDocumentationTest`(구조 검증·문서 생성)처럼 특정 Production Class를 검증하지 않는 Architecture Test도 별도 `architecture`/`modularity` Package로 분리하지 않고 Root Package에 둔다. 이 Package는 Test Source에만 존재하며 Production Module로 탐지되지 않는다.
+- Domain Module이 추가되면 그 Module의 Test도 같은 Module Package 안에 둔다. 모든 Test를 하나의 `test`나 `integration` Package로 모으지 않는다.
+- 실제 공유 Fixture가 필요해지기 전에는 Test Support Package를 만들지 않는다.
 
 ## 구조 검증
 
@@ -61,7 +121,7 @@ Custom Detection Strategy를 별도로 구현하지 않고 Spring Modulith 기�
 ./gradlew test --tests "*ModularityTest"
 ```
 
-`ModularityTest`(`src/test/kotlin/team/inreok/geti/getiserver/ModularityTest.kt`)는 `ApplicationModules.of(GetiServerApplication::class.java)`를 생성하고 `verify()`를 호출해 다음을 검증한다.
+`ModularityTest`(`src/test/kotlin/team/inreok/getiserver/ModularityTest.kt`)는 `ApplicationModules.of(GetiServerApplication::class.java)`를 생성하고 `verify()`를 호출해 다음을 검증한다.
 
 - Module 간 순환 의존성
 - 다른 Module의 내부 구현(Non-public) 접근
@@ -79,7 +139,7 @@ Custom Detection Strategy를 별도로 구현하지 않고 Spring Modulith 기�
 ./gradlew test --tests "*ModuleDocumentationTest"
 ```
 
-`ModuleDocumentationTest`(`src/test/kotlin/team/inreok/geti/getiserver/ModuleDocumentationTest.kt`)는 `Documenter`로 PlantUML Component Diagram과 Module Canvas를 생성한다. 출력 경로는 실제 실행 결과로 확인했다.
+`ModuleDocumentationTest`(`src/test/kotlin/team/inreok/getiserver/ModuleDocumentationTest.kt`)는 `Documenter`로 PlantUML Component Diagram과 Module Canvas를 생성한다. 출력 경로는 실제 실행 결과로 확인했다.
 
 ```text
 build/spring-modulith-docs/components.puml   전체 Module 관계 PlantUML

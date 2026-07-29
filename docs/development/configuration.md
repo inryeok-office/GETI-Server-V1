@@ -7,7 +7,7 @@ GETI-Server는 공통 설정과 환경별 설정을 분리하고, Secret을 저�
 | Profile | 설정 파일 | 책임 |
 | --- | --- | --- |
 | 공통 | `src/main/resources/application.yaml` | 모든 환경에서 동일하고 Secret이 아닌 설정. 현재는 `spring.application.name`만 있다. |
-| `local` | `src/main/resources/application-local.yaml` | 개발자 로컬 실행에 필요한 안전한 Override. 현재는 애플리케이션 Package(`team.inreok.geti.getiserver`) Logging 수준을 `DEBUG`로 높이는 설정만 있다. |
+| `local` | `src/main/resources/application-local.yaml` | 개발자 로컬 실행에 필요한 안전한 Override. 현재는 애플리케이션 Package(`team.inreok.getiserver`) Logging 수준을 `DEBUG`로 높이는 설정만 있다. |
 | `test` | (파일 없음) | 테스트는 `spring-boot-starter-data-jpa-test`/`webmvc-test`가 제공하는 `com.h2database:h2`(`testRuntimeOnly`)를 Spring Boot가 자동으로 감지해 In-memory DB로 JPA Context를 구성한다. 현재 Override가 필요한 설정이 없어 `application-test.yaml`을 만들지 않았다. |
 | `prod` | (파일 없음) | 현재 운영 환경에 필요한 실제 설정이 없다. 빈 파일을 미리 만들지 않았다. 운영 전용 값이 실제로 생기면 이 표와 함께 `application-prod.yaml`을 추가한다. |
 
@@ -37,7 +37,7 @@ set SPRING_PROFILES_ACTIVE=local
 gradlew.bat bootRun
 ```
 
-Profile을 지정하지 않으면 공통 설정만 적용된다(현재는 `local`의 `DEBUG` Logging도 적용되지 않는 상태이며, 이는 [`ApplicationProfileConfigurationTest`](../../src/test/kotlin/team/inreok/geti/getiserver/ApplicationProfileConfigurationTest.kt)로 검증한다).
+Profile을 지정하지 않으면 공통 설정만 적용된다(현재는 `local`의 `DEBUG` Logging도 적용되지 않는 상태이며, 이는 [`ApplicationProfileConfigurationTest`](../../src/test/kotlin/team/inreok/getiserver/ApplicationProfileConfigurationTest.kt)로 검증한다).
 
 ## 환경 변수
 
@@ -83,7 +83,7 @@ data class AppProperties(val name: String = "app")
 - 등록은 `@ConfigurationPropertiesScan`(Package 전체 자동 등록)과 `@EnableConfigurationProperties`(명시적 등록) 중 하나를 선택한다. 현재 등록 대상 Class가 없어 두 Annotation 모두 아직 추가하지 않았다. Class 수가 늘어나기 전까지는 명시적인 `@EnableConfigurationProperties`를 우선 검토한다.
 - Bean Validation(`@NotBlank`, `@NotNull`, `@Positive` 등)이 필요하면 그 시점에 `spring-boot-starter-validation` 추가 여부를 판단한다(현재 미도입).
 - Secret 성격의 Property는 `toString()`이나 Log에 노출되지 않도록 주의한다.
-- **Package 배치 주의**: 이 프로젝트는 Spring Modulith로 Root Package(`team.inreok.geti.getiserver`) 바로 아래 Package를 Application Module로 자동 탐지한다([`modularity.md`](../architecture/modularity.md)). `team.inreok.geti.getiserver.config`처럼 새 Sub-package를 만들면 그 자체로 `config`라는 이름의 Application Module이 생기는 것과 같다. 여러 Module이 공유하는 순수 기술 Configuration이라면 이를 의도한 것인지 먼저 판단하고, 의도한 것이 아니라면 Root Package에 그대로 두거나 실제 소유 Module 내부에 배치한다.
+- **Package 배치 주의**: 이 프로젝트는 Spring Modulith로 Root Package(`team.inreok.getiserver`) 바로 아래 Package를 Application Module로 자동 탐지한다([`modularity.md`](../architecture/modularity.md)). `team.inreok.getiserver.config`처럼 새 Sub-package를 만들면 그 자체로 `config`라는 이름의 Application Module이 생기는 것과 같다. 여러 Module이 공유하는 순수 기술 Configuration이라면 이를 의도한 것인지 먼저 판단하고, 의도한 것이 아니라면 Root Package에 그대로 두거나 실제 소유 Module 내부에 배치한다.
 
 ## Configuration Validation / Metadata
 
@@ -93,13 +93,13 @@ data class AppProperties(val name: String = "app")
 
 ## 설정 테스트
 
-[`ApplicationProfileConfigurationTest`](../../src/test/kotlin/team/inreok/geti/getiserver/ApplicationProfileConfigurationTest.kt)는 `ApplicationContextRunner` + `ConfigDataApplicationContextInitializer`로 전체 Spring Context(Bean, DataSource 등)를 띄우지 않고 Profile별 Property Binding만 검증한다.
+[`ApplicationProfileConfigurationTest`](../../src/test/kotlin/team/inreok/getiserver/ApplicationProfileConfigurationTest.kt)는 `ApplicationContextRunner` + `ConfigDataApplicationContextInitializer`로 전체 Spring Context(Bean, DataSource 등)를 띄우지 않고 Profile별 Property Binding만 검증한다.
 
 ```bash
 ./gradlew test --tests "*ApplicationProfileConfigurationTest*"
 ```
 
-- `spring.profiles.active=local`일 때 `logging.level.team.inreok.geti.getiserver`가 `DEBUG`로 해석되는지
+- `spring.profiles.active=local`일 때 `logging.level.team.inreok.getiserver`가 `DEBUG`로 해석되는지
 - Profile을 지정하지 않았을 때 위 값이 설정되지 않는지(운영에 `DEBUG` Logging이 새어 나가지 않는지)
 
 새 Profile Override나 `@ConfigurationProperties`를 추가하면 이 Test 파일에 검증을 추가하거나 유사한 방식의 별도 Test를 작성한다. Property Binding 검증에는 `ApplicationContextRunner`를 우선 사용하고, 여러 Bean의 실제 협력이 검증 대상일 때만 `@SpringBootTest`를 사용한다.
