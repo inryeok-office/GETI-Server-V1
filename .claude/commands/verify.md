@@ -44,6 +44,13 @@ Git Bash 또는 Unix:
 ./gradlew clean test build
 ```
 
+커버리지 Report 확인이 필요하면 별도로 실행한다(`check`에는 포함되지 않는다).
+
+```bash
+./gradlew koverHtmlReport
+./gradlew koverXmlReport
+```
+
 ## 실패 분류
 
 ```text

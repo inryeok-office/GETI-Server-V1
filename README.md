@@ -111,6 +111,15 @@ EditorConfig, Spotless(ktlint), detekt로 코드 스타일과 정적 분석을 �
 ./gradlew check
 ```
 
+## 테스트와 커버리지
+
+JUnit Platform 기반으로 테스트를 실행하고, Kover로 Kotlin 코드 커버리지 Report를 생성합니다. 테스트 유형별 정책과 도구 상세는 [`docs/development/testing.md`](./docs/development/testing.md)를 따릅니다.
+
+```bash
+./gradlew test
+./gradlew koverHtmlReport
+```
+
 ## 빌드
 
 ```bash

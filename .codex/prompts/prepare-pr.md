@@ -29,7 +29,7 @@ GETI-Server 저장소, Issue #{ISSUE_NUMBER} 작업을 Commit, Push하고 develo
 5. Issue 요구사항과 제외 범위를 대조해.
 6. 관련 Test를 실행해.
 7. Kotlin 코드를 변경했다면 ./gradlew spotlessCheck와 ./gradlew detekt를 확인해.
-8. 전체 Test와 Build를 실행해 (./gradlew clean test build, check에 spotlessCheck/detekt 포함됨).
+8. 전체 Test와 Build를 실행해 (./gradlew clean test build, check에 spotlessCheck/detekt/koverVerify 포함됨).
 9. git diff --check를 실행해.
 10. Secret과 불필요한 파일이 포함되지 않았는지 확인해.
 11. 관련된 파일만 Stage해.
