@@ -1,175 +1,159 @@
 # GETI-Server
 
-처음 이 저장소를 Clone했다면 [`docs/development/quick-start.md`](./docs/development/quick-start.md)를 먼저 확인하세요.
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.3.21-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![CI](https://github.com/inryeok-office/GETI-Server/actions/workflows/ci.yml/badge.svg)](https://github.com/inryeok-office/GETI-Server/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-## 브랜치 전략 (Git Flow)
+GETI 서비스의 Backend Server 저장소다. 처음 이 저장소를 Clone했다면 이 문서로 개발 환경을 구성한 뒤 [`docs/development/quick-start.md`](./docs/development/quick-start.md)에서 Clone부터 첫 PR까지의 실제 명령 순서를 확인한다.
 
-- `main`: 운영/배포 가능한 안정 버전입니다. 직접 Push하지 않습니다.
-- `develop`: 다음 개발 버전을 통합하는 기본 개발 브랜치입니다. 직접 Push하지 않습니다.
-- `main`, `develop`은 GitHub Branch Protection이 적용되어 있어 직접 Push와 강제 Push, 브랜치 삭제가 차단됩니다. Pull Request는 **작성자 본인이 아닌 다른 리뷰어의 승인 1건 이상**이 있어야 Merge할 수 있으며, 이 규칙은 저장소 관리자에게도 동일하게 적용됩니다(`enforce_admins`).
-- 작업 브랜치는 `develop`에서 분기하며 아래 형식을 사용합니다.
+## 현재 개발 상태
 
-  ```text
-  feature/{issue-number}-{short-description}
-  fix/{issue-number}-{short-description}
-  refactor/{issue-number}-{short-description}
-  chore/{issue-number}-{short-description}
-  docs/{issue-number}-{short-description}
-  hotfix/{issue-number}-{short-description}
-  ```
+이 저장소는 실제 Domain(Auth, Member, Job 등) 기능을 아직 구현하지 않은 **기반 구축(Foundation) 완료 단계**다. Repository 구조, AI 개발 하네스, 코드 품질, 테스트, Spring Modulith, Configuration, Docker, Persistence, 공통 Web/API, CI, 전역 예외 처리까지 구성되어 있으며, 다음 단계부터 실제 Domain 기능 개발을 시작한다. 전체 감사 결과는 [`docs/audit/foundation-audit.md`](./docs/audit/foundation-audit.md)를, GETI Notion 요구사항과 저장소 구현의 대조 결과는 [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md)를 따른다.
 
-  예: `chore/1-project-foundation`
+## 실제 기술 스택
 
-## 협업 절차
+아래 표는 이 저장소에 실제로 적용된 기술만 담는다. GETI Notion Tech Stack에 계획되어 있지만 아직 저장소에 구현되지 않은 항목(Spring Security/OAuth/JWT, OpenAPI, QueryDSL, Elasticsearch, Kafka, Observability 스택 등)은 [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md)를 따르며, 이 표에는 포함하지 않는다.
 
-1. 작업 전에 GitHub Issue를 먼저 생성합니다.
-2. Issue 번호를 포함한 작업 브랜치를 `develop` 기준으로 생성합니다.
-3. 작업 후 `develop`을 대상으로 Pull Request를 생성합니다.
-4. PR 본문에서 `Closes #{issue-number}` 형식으로 연관 Issue를 연결합니다.
-5. 커밋 메시지는 하나의 명확한 작업 단위로 작성합니다.
+| 구분 | 기술 | 비고 |
+| --- | --- | --- |
+| 언어 | Kotlin 2.3.21 | [`build.gradle.kts`](./build.gradle.kts) |
+| Runtime | Java Toolchain 25 | Gradle Wrapper가 자동으로 Toolchain을 내려받는다 |
+| Framework | Spring Boot 4.1.0 (Spring Framework 7.0.8) | |
+| Build | Gradle 9.5.1 (Kotlin DSL, Wrapper 포함) | |
+| Web | Spring MVC(Servlet), Bean Validation, Spring Boot Actuator(`health`만 노출) | [`docs/development/web-api.md`](./docs/development/web-api.md) |
+| Persistence | Spring Data JPA + Hibernate, PostgreSQL 18, Flyway | [`docs/development/persistence.md`](./docs/development/persistence.md) |
+| Cache | Redis(Lettuce) | [`docs/development/persistence.md`](./docs/development/persistence.md) |
+| Object Storage | MinIO(Docker 인프라만 구성, Application Client 연동 없음) | [`docs/development/docker.md`](./docs/development/docker.md) |
+| 모듈 구조 | Spring Modulith 1.4.1 (Application Module 경계 검증) | [`docs/architecture/modularity.md`](./docs/architecture/modularity.md) |
+| Test | JUnit 5, AssertJ, Mockito, Testcontainers, Spring Modulith Test | [`docs/development/testing.md`](./docs/development/testing.md) |
+| Coverage | Kover | [`docs/development/testing.md`](./docs/development/testing.md) |
+| 코드 품질 | Spotless(ktlint), detekt, EditorConfig | [`docs/development/code-quality.md`](./docs/development/code-quality.md) |
+| 로컬 인프라 | Docker Compose(PostgreSQL, Redis, MinIO) | [`docs/development/docker.md`](./docs/development/docker.md) |
+| CI | GitHub Actions(`CI` Workflow) | [`docs/development/ci.md`](./docs/development/ci.md) |
 
-상세한 컨벤션(코드 스타일, 리뷰 정책 등)은 별도 문서 또는 후속 PR에서 확장할 예정입니다.
+## Architecture
 
-## Commit Convention
+- Root Package: `team.inreok.getiserver`
+- `domain`: 실제 비즈니스 기능을 담는 Package. 각 Domain은 Root Package 바로 아래 독립된 Package(Spring Modulith Application Module)로 구성한다. 아직 실제 Domain Package는 없다.
+- `global`: 여러 Domain이 공유하는 기술 기반(`global.web`의 공통 성공 응답/Pagination/CORS/requestId, `global.error`의 오류 응답/전역 예외 처리)만 담는다. 특정 Domain 로직을 두지 않는다.
+- Domain Module을 처음 만들 때는 `domain`/`application`/`infrastructure`/`presentation` 4-Layer 내부 구조(GETI Notion BE 컨벤션 확정)를 따른다.
 
-모든 일반 커밋 메시지는 Conventional Commits 형식을 사용하며, 작업 내용은 한글로 작성합니다.
+세부 Package Tree, Module 탐지 전략, 만들지 않는 Package 목록은 [`docs/architecture/modularity.md`](./docs/architecture/modularity.md)를 따른다. Domain 기능을 새로 개발하는 절차는 [`CONTRIBUTING.md`](./CONTRIBUTING.md)의 "기능 개발 절차"를 따른다.
 
-```text
-<type>: <한글 작업 내용>
-```
+## 시작하기
 
-예시:
+### 필수 설치 프로그램
 
-```text
-feat: 채용 공고 북마크 기능 추가
-fix: 로그인 Token 재발급 오류 수정
-refactor: 사용자 권한 검증 로직 분리
-chore: 프로젝트 기본 설정 구성
-docs: Git Flow 협업 규칙 추가
-test: 공고 조회 통합 테스트 추가
-config: 로컬 실행 환경 설정 정리
-build: Gradle 빌드 설정 개선
-ci: GitHub Actions 빌드 워크플로 추가
-perf: 공고 검색 쿼리 성능 개선
-style: 코드 포맷 정리
-revert: 사용자 조회 변경 사항 되돌리기
-```
+| 프로그램 | 용도 | 비고 |
+| --- | --- | --- |
+| Git | 저장소 Clone과 버전 관리 | |
+| Docker Desktop(Windows/macOS) 또는 Docker Engine(Linux) | PostgreSQL/Redis/MinIO 로컬 인프라 실행 | Docker Compose v2(`docker compose`) 필요 |
+| GitHub CLI(`gh`) | Issue/PR 생성과 확인 | 선택이지만 [`docs/development/quick-start.md`](./docs/development/quick-start.md)의 Workflow에 필요 |
+| Java 25 | Spring Boot 실행 | 선택. Gradle Wrapper가 Toolchain을 자동으로 내려받는다 |
 
-기술명, 클래스명, 라이브러리명과 같은 고유명사는 영문 표기를 유지할 수 있습니다.
-
-```text
-build: QueryDSL 의존성 및 생성 경로 설정
-config: PostgreSQL 연결 환경변수 추가
-```
-
-허용 Type:
-
-| Type       | 용도                  |
-| ---------- | ------------------- |
-| `feat`     | 새로운 기능 추가           |
-| `fix`      | 버그 수정               |
-| `refactor` | 기능 변화 없는 코드 구조 개선   |
-| `chore`    | 일반 유지보수 및 기타 작업     |
-| `docs`     | 문서 변경               |
-| `test`     | 테스트 코드 및 테스트 환경 변경  |
-| `config`   | 애플리케이션 및 개발 환경 설정   |
-| `build`    | 빌드 시스템 및 의존성 변경     |
-| `ci`       | CI/CD 설정 변경         |
-| `perf`     | 성능 개선               |
-| `style`    | 코드 동작에 영향 없는 스타일 변경 |
-| `revert`   | 이전 커밋 되돌리기          |
-
-작성 규칙:
-
-- Type은 영문 소문자로, 뒤에 콜론과 공백을 붙여 작성합니다.
-- 제목 설명은 한글로 작성하고, 끝에 마침표를 붙이지 않습니다.
-- 한 커밋에는 하나의 논리적 변경만 담습니다.
-- `수정`, `작업`, `변경`처럼 의미가 불분명한 단어만 사용하지 않고, 무엇을 왜 변경했는지 알아볼 수 있게 작성합니다.
-- `WIP`, `update`, `수정함`, `최종`, `진짜 최종` 같은 메시지는 사용하지 않습니다.
-- Issue 종료는 커밋이 아닌 Pull Request 본문의 `Closes #번호`로 처리합니다. 필요한 경우에만 Footer에 `Refs: #번호`를 추가합니다.
-
-Merge 시 불필요한 Merge Commit을 줄이기 위해 Squash and Merge 또는 Rebase and Merge를 우선 검토합니다. 어떤 방식을 저장소의 기본 Merge 옵션으로 강제할지(Merge Button 옵션 제한 등)는 후속 PR(Repository 정책 작업)에서 다룹니다. Squash Merge를 사용하는 경우 최종 Squash Commit도 한글 규칙을 따릅니다. (예: `chore: 프로젝트 기본 및 협업 기반 설정 (#1)`)
-
-커밋 메시지 자동 검증(Commitlint 등)은 이번 단계에서 도입하지 않으며, 후속 CI/Repository 정책 작업에서 별도로 검토합니다.
-
-## 라벨 체계
-
-Issue와 Pull Request는 `{emoji} {label-name}` 형식의 라벨을 사용합니다. 작업 유형, 작업 상태, 우선순위, 작업 규모, 영향 영역, 특별 관리 분류로 구성되어 있으며 전체 목록은 저장소의 [Labels 페이지](../../labels)에서 확인할 수 있습니다.
-
-- 상태 라벨(`📋 backlog` ~ `⛔ blocked`)은 Issue에만 적용합니다. 현재는 GitHub Project를 별도로 확인하지 못해 라벨로 상태를 관리하며, 추후 GitHub Project를 도입하면 상태 관리 방식을 정리할 예정입니다.
-- 우선순위 라벨은 Issue 하나당 하나만 사용합니다.
-- 영향 영역(`area:`) 라벨은 Issue 하나에 여러 개를 적용할 수 있습니다.
-
-## AI 기반 개발
-
-Claude Code, Codex 등의 AI 개발 도구를 사용할 때는 [`AGENTS.md`](./AGENTS.md)와 [`docs/ai`](./docs/ai/README.md)의 규칙을 따릅니다.
-
-## 코드 품질
-
-EditorConfig, Spotless(ktlint), detekt로 코드 스타일과 정적 분석을 관리합니다. 자동 포맷 적용, 검사 명령, 도구별 설정은 [`docs/development/code-quality.md`](./docs/development/code-quality.md)를 따릅니다.
+### 1. Clone
 
 ```bash
-./gradlew spotlessApply
-./gradlew check
+git clone https://github.com/inryeok-office/GETI-Server.git
+cd GETI-Server
 ```
 
-## 로컬 인프라 (Docker)
+### 2. 환경 변수
 
-PostgreSQL, Redis, MinIO를 Docker Compose로 실행합니다. Spring Boot는 평소 Host에서 직접 실행합니다. 사용법과 접속 정보, Local Credential 정책은 [`docs/development/docker.md`](./docs/development/docker.md)를 따릅니다.
+```bash
+cp .env.example .env      # PowerShell: Copy-Item .env.example .env
+```
+
+`.env`가 없어도 `compose.yaml`과 Spring Boot `local` Profile에 동일한 기본값이 있어 바로 실행할 수 있다. `.env`는 Spring Boot가 자동으로 읽는 파일이 아니며 Git에 추적되지 않는다. 실제 사용하는 환경 변수 전체 목록과 Secret 관리 기준은 [`docs/development/configuration.md`](./docs/development/configuration.md)를 따른다.
+
+### 3. Docker 인프라 실행
 
 ```bash
 docker compose up -d
+docker compose ps
+```
+
+PostgreSQL, Redis, MinIO 3개 Service만 실행된다(Spring Boot는 포함하지 않는다). 세부 사용법과 접속 정보, 문제 해결은 [`docs/development/docker.md`](./docs/development/docker.md)를 따른다.
+
+### 4. Spring Boot 실행
+
+```bash
 SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
 ```
 
-## Persistence (PostgreSQL / Redis)
+PowerShell:
 
-Spring Data JPA + Flyway로 PostgreSQL에, Lettuce로 Redis에 연결합니다. 연결 환경 변수, Migration/JPA 정책, Testcontainers 기반 Integration Test는 [`docs/development/persistence.md`](./docs/development/persistence.md)를 따릅니다.
+```powershell
+$env:SPRING_PROFILES_ACTIVE = "local"
+.\gradlew.bat bootRun
+```
+
+정상 기동 확인:
+
+```bash
+curl http://localhost:8080/actuator/health
+```
+
+### 5. 테스트 및 검증
 
 ```bash
 ./gradlew test              # Docker 불필요
 ./gradlew integrationTest   # Docker(Testcontainers) 필요
+./gradlew spotlessApply     # 포맷이 흐트러졌다면 자동 적용
+./gradlew check             # spotlessCheck + detekt + test + koverVerify
+./gradlew clean test build  # 전체 검증
 ```
 
-## 공통 Web 및 API 기반
+Windows에서는 `.\gradlew.bat`를 사용한다. 테스트 유형별 정책과 커버리지 Report는 [`docs/development/testing.md`](./docs/development/testing.md)를 따른다.
 
-모든 HTTP API가 공통 성공/오류 응답, 전역 예외 처리, Pagination, CORS 규칙을 따르도록 구성했습니다. 아직 실제 Domain API는 없습니다. 세부 형식과 정책은 [`docs/development/web-api.md`](./docs/development/web-api.md)를 따릅니다.
+## API 문서
+
+공통 성공/오류 응답, Pagination, CORS, requestId, Health Endpoint 등 모든 HTTP API가 따르는 공통 기반은 [`docs/development/web-api.md`](./docs/development/web-api.md)에 문서화되어 있다. OpenAPI(springdoc)는 아직 도입하지 않았다(첫 실제 Domain Controller가 추가되는 시점에 재검토, 같은 문서 참고). 현재 실제로 노출되는 Endpoint는 다음과 같다.
 
 ```text
-Health: /actuator/health
+GET /actuator/health
 ```
 
-## CI
+## 개발 Workflow
 
-Pull Request마다 GitHub Actions(`CI` Workflow)가 Gradle Wrapper 검증, Spotless/detekt, Unit Test, Spring Modulith 구조 검증, Integration Test(Testcontainers), Build, Docker 구성 검증을 자동 실행합니다. CD(배포)는 포함하지 않습니다. Job 구성, Required Status Check 이름, Repository Policy는 [`docs/development/ci.md`](./docs/development/ci.md)를 따릅니다.
+Issue 생성부터 Draft Pull Request까지의 전체 협업 절차, Branch/Commit Convention, Label 체계는 [`CONTRIBUTING.md`](./CONTRIBUTING.md)를 따른다. AI 개발 도구(Claude Code, Codex)를 사용할 때는 [`AGENTS.md`](./AGENTS.md)와 [`docs/ai/README.md`](./docs/ai/README.md)의 규칙을 따른다.
 
-## Configuration과 실행
+## 문서 목록
 
-공통 설정과 `local`/`test`/`prod` Profile을 분리하고, Secret은 저장소에 포함하지 않고 환경 변수로 관리합니다. Profile 전략, 환경 변수, `.env.example` 사용법은 [`docs/development/configuration.md`](./docs/development/configuration.md)를 따릅니다.
+| 문서 | 내용 |
+| --- | --- |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Issue/Branch/Commit/PR 협업 절차, Domain 기능 개발 절차 |
+| [`docs/development/quick-start.md`](./docs/development/quick-start.md) | Clone부터 첫 PR까지 실제 명령 순서 |
+| [`docs/development/configuration.md`](./docs/development/configuration.md) | Profile, 환경 변수, Secret 관리 |
+| [`docs/development/docker.md`](./docs/development/docker.md) | Docker Compose 실행법, 접속 정보, 문제 해결 |
+| [`docs/development/persistence.md`](./docs/development/persistence.md) | PostgreSQL/Redis 연결, Flyway, Testcontainers |
+| [`docs/development/web-api.md`](./docs/development/web-api.md) | 공통 응답, ErrorCode, 전역 예외 처리, requestId |
+| [`docs/development/testing.md`](./docs/development/testing.md) | 테스트 유형, Kover 커버리지 |
+| [`docs/development/code-quality.md`](./docs/development/code-quality.md) | Spotless/ktlint/detekt |
+| [`docs/development/ci.md`](./docs/development/ci.md) | GitHub Actions CI, Repository Policy |
+| [`docs/architecture/modularity.md`](./docs/architecture/modularity.md) | Spring Modulith, Package Architecture, Domain Module 내부 구조 |
+| [`docs/audit/foundation-audit.md`](./docs/audit/foundation-audit.md) | PR 1~11 기반 구축 전체 감사 결과 |
+| [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md) | GETI Notion과 저장소 대조, 결정 필요 항목 |
+| [`AGENTS.md`](./AGENTS.md), [`docs/ai/README.md`](./docs/ai/README.md) | AI 개발 도구 공통 규칙 |
+| [`CLAUDE.md`](./CLAUDE.md), `.claude/` | Claude Code 전용 규칙, Command, Skill |
+| `.codex/` | Codex 전용 정책, Prompt Template |
 
-```bash
-SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
-```
+## Troubleshooting
 
-## 모듈 구조
+| 문제 | 확인할 문서 |
+| --- | --- |
+| Docker가 실행되지 않음, Port 충돌 | [`docs/development/docker.md`](./docs/development/docker.md)의 "문제 해결" |
+| 환경 변수, Profile, Secret | [`docs/development/configuration.md`](./docs/development/configuration.md) |
+| PostgreSQL/Redis/Flyway 연결 문제 | [`docs/development/persistence.md`](./docs/development/persistence.md) |
+| API 응답 형식, 공통 오류 처리 | [`docs/development/web-api.md`](./docs/development/web-api.md) |
+| CI 실패 원인 분석 | [`docs/development/ci.md`](./docs/development/ci.md)의 "실패 시 확인" |
+| Package를 어디에 만들어야 하는지 | [`docs/architecture/modularity.md`](./docs/architecture/modularity.md) |
+| AI 도구(Claude Code, Codex) 사용 규칙 | [`AGENTS.md`](./AGENTS.md), [`docs/ai/README.md`](./docs/ai/README.md) |
+| Notion 요구사항과 저장소 구현이 다른 것 같을 때 | [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md) |
 
-[Spring Modulith](https://spring.io/projects/spring-modulith)로 Application Module 경계를 검증합니다. 현재 도메인 Module은 없으며, 탐지 전략과 검증/문서 생성 방법은 [`docs/architecture/modularity.md`](./docs/architecture/modularity.md)를 따릅니다.
+`docker compose down -v`는 로컬 PostgreSQL/Redis/MinIO 데이터를 모두 삭제하는 파괴적 명령이다. 의도적으로 로컬 환경을 초기화할 때만 실행한다.
 
-```bash
-./gradlew test --tests "*ModularityTest"
-```
+## License
 
-## 테스트와 커버리지
-
-JUnit Platform 기반으로 테스트를 실행하고, Kover로 Kotlin 코드 커버리지 Report를 생성합니다. 테스트 유형별 정책과 도구 상세는 [`docs/development/testing.md`](./docs/development/testing.md)를 따릅니다.
-
-```bash
-./gradlew test
-./gradlew koverHtmlReport
-```
-
-## 빌드
-
-```bash
-./gradlew clean test build
-```
+이 저장소는 [MIT License](./LICENSE)를 따른다.
