@@ -4,6 +4,8 @@ plugins {
     id("org.springframework.boot") version "4.1.0"
     id("io.spring.dependency-management") version "1.1.7"
     kotlin("plugin.jpa") version "2.3.21"
+    id("com.diffplug.spotless") version "8.9.0"
+    id("dev.detekt") version "2.0.0-alpha.3"
 }
 
 group = "team.inreok.GETI"
@@ -47,6 +49,25 @@ allOpen {
     annotation("jakarta.persistence.Entity")
     annotation("jakarta.persistence.MappedSuperclass")
     annotation("jakarta.persistence.Embeddable")
+}
+
+spotless {
+    kotlin {
+        target("src/**/*.kt")
+        ktlint("1.8.0")
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+    kotlinGradle {
+        target("*.gradle.kts", "gradle/**/*.gradle.kts")
+        ktlint("1.8.0")
+    }
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    allRules = false
+    config.setFrom(files("config/detekt/detekt.yml"))
 }
 
 tasks.withType<Test> {

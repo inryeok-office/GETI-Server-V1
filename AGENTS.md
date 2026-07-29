@@ -128,21 +128,16 @@ rm -rf
 - 변경 범위에 맞는 테스트를 먼저 실행하고 마지막에 전체 Build를 수행한다.
 - 경고를 오류처럼 과장하지 않고, 오류를 경고로 축소하지 않는다.
 
-기본 검증 명령:
-
-Windows:
-
-```powershell
-.\gradlew.bat clean test build
-```
-
-Unix 또는 Git Bash:
+Kotlin 코드를 변경했다면 Build 전에 포맷/정적 분석을 실행한다. `spotlessCheck`와 `detekt`는 `check`에 이미 포함되어 있어 `clean test build` 한 번으로도 함께 실행된다.
 
 ```bash
+./gradlew spotlessApply   # 포맷이 흐트러졌다면 자동 적용
 ./gradlew clean test build
 ```
 
-세부 기준은 [`docs/ai/testing-policy.md`](./docs/ai/testing-policy.md)를 따른다.
+Windows에서는 `.\gradlew.bat`를 사용한다.
+
+세부 기준은 [`docs/ai/testing-policy.md`](./docs/ai/testing-policy.md)와 [`docs/development/code-quality.md`](./docs/development/code-quality.md)를 따른다.
 
 ## 보안
 

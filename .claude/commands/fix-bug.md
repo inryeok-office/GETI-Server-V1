@@ -30,9 +30,10 @@ argument-hint: <버그 증상 또는 재현 조건>
 6. 가능하면 실패를 재현하는 Test를 먼저 작성한다.
 7. 최소 범위로 수정한다.
 8. 회귀 Test를 실행한다.
-9. 전체 Test와 Build를 실행한다.
-10. Diff를 직접 리뷰한다.
-11. 원인과 해결 방식을 보고한다.
+9. Kotlin 코드를 변경했다면 `./gradlew spotlessApply`와 `./gradlew detekt`로 포맷/정적 분석을 확인한다.
+10. 전체 Test와 Build를 실행한다 (`check`에 `spotlessCheck`, `detekt`가 포함됨).
+11. Diff를 직접 리뷰한다.
+12. 원인과 해결 방식을 보고한다.
 
 ## 금지 사항
 

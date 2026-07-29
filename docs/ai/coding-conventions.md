@@ -17,6 +17,10 @@ GETI-Server는 아직 초기 구축 단계이며, 확정된 도메인 Architectu
 - 사용되지 않는 Class, 빈 Package, 임시로 남겨둔 Placeholder 코드를 만들지 않는다.
 - 새 Dependency를 추가하기 전에 기존 Dependency로 대체할 수 있는지 먼저 확인한다.
 
+## 코드 스타일과 정적 분석
+
+Kotlin Source의 포맷은 EditorConfig(`.editorconfig`)와 Spotless(ktlint)로, 정적 분석은 detekt로 자동 검사한다. 도구가 검사하는 항목(공백, Import 정렬, 코드 스멜 등)을 수동으로 재판단하지 않고 `./gradlew spotlessApply`, `./gradlew spotlessCheck`, `./gradlew detekt`를 사용한다. 도구별 설정과 명령은 [`docs/development/code-quality.md`](../development/code-quality.md)를 따른다.
+
 ## 아직 확정되지 않은 규칙
 
 다음 항목은 이 저장소에 아직 도입되지 않았다. 확정된 규칙인 것처럼 강제하거나 임의로 구현하지 않는다.
@@ -31,4 +35,4 @@ Global Exception 구조
 Spring Security 구조
 ```
 
-위 항목은 추후 Architecture 및 Code Quality 관련 PR에서 결정되고 문서화될 예정이다. 관련 작업이 필요한 Issue를 받으면, 이 문서가 갱신되기 전까지는 최소한의 구현만 하고 확정된 규칙처럼 문서화하지 않는다.
+위 항목은 추후 Architecture 관련 PR에서 결정되고 문서화될 예정이다. 관련 작업이 필요한 Issue를 받으면, 이 문서가 갱신되기 전까지는 최소한의 구현만 하고 확정된 규칙처럼 문서화하지 않는다.

@@ -21,15 +21,16 @@ GETI-Server 저장소의 현재 변경 사항을 검증해줘. 코드를 새로 
 4. git diff로 변경 내용을 확인해.
 5. git diff --check를 실행해.
 6. 변경 범위에 맞는 Test를 실행해 (./gradlew test).
-7. 전체 Test를 실행해.
-8. Build를 실행해 (./gradlew clean test build).
-9. 문서를 변경했다면 상대 링크와 경로가 유효한지 확인해.
-10. Secret이나 개인 환경 파일이 포함되지 않았는지 확인해.
-11. 불필요한 파일이 포함되지 않았는지 확인해.
-12. Issue의 완료 조건과 제외 범위에 실제로 부합하는지 대조해.
+7. Kotlin 코드를 변경했다면 ./gradlew spotlessCheck와 ./gradlew detekt를 실행해 (포맷 위반은 ./gradlew spotlessApply로 정리).
+8. 전체 Test를 실행해.
+9. Build를 실행해 (./gradlew clean test build, check에 spotlessCheck/detekt 포함됨).
+10. 문서를 변경했다면 상대 링크와 경로가 유효한지 확인해.
+11. Secret이나 개인 환경 파일이 포함되지 않았는지 확인해.
+12. 불필요한 파일이 포함되지 않았는지 확인해.
+13. Issue의 완료 조건과 제외 범위에 실제로 부합하는지 대조해.
 
 실패하면 다음 중 어디에 해당하는지 분류해서 보고해:
-컴파일 실패, 테스트 실패, Spring Context 실패, 설정 실패, Dependency 실패, 문서/경로 실패, 외부 서비스 실패, 로컬 환경 실패, 권한 실패.
+컴파일 실패, 테스트 실패, Spring Context 실패, 설정 실패, Dependency 실패, 포맷 위반(spotlessCheck), 정적 분석 위반(detekt), 문서/경로 실패, 외부 서비스 실패, 로컬 환경 실패, 권한 실패.
 
 하지 말아야 할 것:
 - 실패 Test 삭제

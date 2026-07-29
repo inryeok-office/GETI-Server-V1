@@ -31,6 +31,8 @@ Unix 또는 Git Bash:
 ./gradlew clean test build
 ```
 
+`clean test build`는 `check` Lifecycle을 통해 `spotlessCheck`(포맷 검사)와 `detekt`(정적 분석)도 함께 실행한다. 포맷 위반이 있으면 `./gradlew spotlessApply`로 먼저 자동 정리한 뒤 재검증한다. 도구별 역할과 설정은 [`docs/development/code-quality.md`](../development/code-quality.md)를 따른다.
+
 ## 아직 필수로 요구하지 않는 도구
 
 다음 테스트 도구는 이 저장소에 아직 도입되지 않았다. 관련 작업이 아니라면 필수로 요구하거나 임의로 도입하지 않는다.

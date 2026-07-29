@@ -17,25 +17,30 @@ description: 현재 변경 사항이 요구사항과 품질 기준을 충족하�
 3. `git diff`
 4. `git diff --check`
 5. 변경 범위에 맞는 Test 실행
-6. 전체 Test 실행
-7. Build 실행
-8. Markdown 상대 링크 및 설정 경로 확인
-9. Secret 및 개인 환경 파일 포함 여부 확인
-10. 불필요한 파일 포함 여부 확인
-11. Issue의 완료 조건과 제외 범위 대조
-12. 결과 보고
+6. Kotlin 코드를 변경했다면 `spotlessCheck`, `detekt` 실행 (포맷 위반이 있으면 `spotlessApply`로 자동 정리 후 재확인)
+7. 전체 Test 실행
+8. Build 실행 (`check`에 `spotlessCheck`, `detekt`가 포함되어 함께 실행됨)
+9. Markdown 상대 링크 및 설정 경로 확인
+10. Secret 및 개인 환경 파일 포함 여부 확인
+11. 불필요한 파일 포함 여부 확인
+12. Issue의 완료 조건과 제외 범위 대조
+13. 결과 보고
 
 ## Gradle 기본 검증
 
 Windows:
 
 ```powershell
+.\gradlew.bat spotlessCheck
+.\gradlew.bat detekt
 .\gradlew.bat clean test build
 ```
 
 Git Bash 또는 Unix:
 
 ```bash
+./gradlew spotlessCheck
+./gradlew detekt
 ./gradlew clean test build
 ```
 
@@ -47,6 +52,8 @@ Git Bash 또는 Unix:
 Spring Context 실패
 설정 실패
 Dependency 실패
+포맷 위반 (spotlessCheck)
+정적 분석 위반 (detekt)
 문서 또는 경로 실패
 외부 서비스 실패
 로컬 환경 실패

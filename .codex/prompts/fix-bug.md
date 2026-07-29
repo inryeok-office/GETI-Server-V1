@@ -34,8 +34,9 @@ GETI-Server 저장소, Issue #{ISSUE_NUMBER} 작업 Branch에서 다음 버그�
 6. 가능한 원인 목록을 세우고, 로그와 코드로 실제 원인을 검증해.
 7. 최소 범위로 수정해.
 8. 회귀 Test를 실행해.
-9. 전체 Test와 Build를 실행해 (./gradlew clean test build).
-10. Diff를 직접 리뷰해.
+9. Kotlin 코드를 변경했다면 ./gradlew spotlessApply와 ./gradlew detekt로 포맷/정적 분석을 확인해.
+10. 전체 Test와 Build를 실행해 (./gradlew clean test build, check에 spotlessCheck/detekt 포함됨).
+11. Diff를 직접 리뷰해.
 
 하지 말아야 할 것:
 - 증상만 숨기는 수정

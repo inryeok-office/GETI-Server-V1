@@ -1,0 +1,9 @@
+# detekt는 buildUponDefaultConfig = true로 동작하며, 이 파일은 기본 Config 위에
+# 실제로 필요한 항목만 덮어쓴다. 전체 기본 Config를 복사해 오지 않는다.
+
+empty-blocks:
+  # Spring Boot의 관용적인 ApplicationContext 스모크 테스트 패턴
+  # (예: `@Test fun contextLoads() {}`)은 의도적으로 빈 본문을 사용한다.
+  EmptyFunctionBlock:
+    active: true
+    excludes: ['**/test/**']

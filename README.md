@@ -102,6 +102,15 @@ Issue와 Pull Request는 `{emoji} {label-name}` 형식의 라벨을 사용합니
 
 Claude Code, Codex 등의 AI 개발 도구를 사용할 때는 [`AGENTS.md`](./AGENTS.md)와 [`docs/ai`](./docs/ai/README.md)의 규칙을 따릅니다.
 
+## 코드 품질
+
+EditorConfig, Spotless(ktlint), detekt로 코드 스타일과 정적 분석을 관리합니다. 자동 포맷 적용, 검사 명령, 도구별 설정은 [`docs/development/code-quality.md`](./docs/development/code-quality.md)를 따릅니다.
+
+```bash
+./gradlew spotlessApply
+./gradlew check
+```
+
 ## 빌드
 
 ```bash
