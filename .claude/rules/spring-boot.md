@@ -26,12 +26,16 @@ GETI-Server의 실제 환경(Spring Boot 4.1.0, Kotlin 2.3.21, Gradle 9.5.1 Kotl
 - Spring Context 실패를 Test 비활성화로 숨기지 않는다.
 - 새 Starter를 추가하기 전에 기존 Dependency로 가능한지 확인한다.
 
+## 모듈 경계 (Spring Modulith)
+
+Spring Modulith 기반이 구성되어 있다(`spring-modulith-starter-test`, `ModularityTest`). 새 도메인 Package는 Root Package 바로 아래 독립된 Module로 만들고, 다른 Module의 내부 구현을 직접 참조하지 않는다. Package 구조를 바꾸면 `./gradlew test --tests "*ModularityTest"`로 구조 검증을 실행한다. 세부 원칙은 [`docs/architecture/modularity.md`](../../docs/architecture/modularity.md)를 따른다.
+
 ## Architecture 제한
 
 아래 항목은 이 저장소에 아직 확정되지 않았다. 관련 Issue 없이 전역 규칙처럼 강제하거나 임의로 구현하지 않는다.
 
 ```text
-Spring Modulith Module 경계
+Module 내부 상세 Package 구조 (api/internal 등)
 Controller-Service-Repository 고정 구조
 Hexagonal Architecture
 Clean Architecture

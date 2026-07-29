@@ -56,13 +56,14 @@ GETI-Server의 Spring Boot/Kotlin 코드를 변경할 때 참고하는 상세 �
 - 문제를 임시로 우회(예: `@Lazy` 남용, Exception 무조건 Catch)하지 않는다.
 - 의미 없는 Interface 분리를 하지 않는다.
 - 관련 없는 Package 이동을 함께 하지 않는다.
+- 새 도메인 Package는 Root Package 바로 아래 독립된 Application Module로 만들고, 다른 Module의 내부 구현을 직접 참조하지 않는다 ([`docs/architecture/modularity.md`](../../../docs/architecture/modularity.md) 참고).
 
 ## Architecture 제한
 
 아래 항목은 이 저장소에 아직 확정되지 않았다. 관련 전용 Issue 없이 전역 규칙처럼 강제하거나 임의로 도입하지 않는다.
 
 ```text
-Spring Modulith Module 경계
+Module 내부 상세 Package 구조 (api/internal 등)
 Controller-Service-Repository 고정 구조
 Hexagonal Architecture / Clean Architecture
 JPA Entity 공통 Base Class
@@ -73,13 +74,14 @@ Security Filter Chain 구조
 OAuth 및 JWT 구조
 ```
 
-([`docs/ai/coding-conventions.md`](../../../docs/ai/coding-conventions.md) 참고)
+([`docs/ai/coding-conventions.md`](../../../docs/ai/coding-conventions.md), [`docs/architecture/modularity.md`](../../../docs/architecture/modularity.md) 참고)
 
 ## 검증
 
 - Compile
 - 관련 Test
 - Spring Context 정상 로드
+- Package를 옮기거나 새 Module을 추가했다면 `./gradlew test --tests "*ModularityTest"`로 모듈 경계 검증
 - 전체 Test
 - Build
 - 변경한 설정 파일(`application.yaml` 등) 검토

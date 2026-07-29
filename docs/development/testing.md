@@ -13,6 +13,7 @@ GETI-Server는 개발자와 AI Agent가 동일한 방식으로 테스트를 작�
 | kotlin-test-junit5 | 2.3.21 | Kotlin JUnit 5 연동 |
 | H2 Database (`testRuntimeOnly`) | 2.4.240 | `@SpringBootTest`가 운영 PostgreSQL 없이 JPA Context를 구성하기 위한 In-memory DB |
 | Kover (`org.jetbrains.kotlinx.kover`) | 0.9.9 | Kotlin/JVM 코드 커버리지 Report |
+| Spring Modulith (`spring-modulith-starter-test`) | 1.4.1 | Application Module 경계 검증(`ApplicationModules.verify()`), 모듈 문서 생성(`Documenter`). `testImplementation`으로만 추가했다. 세부 내용은 [`docs/architecture/modularity.md`](../architecture/modularity.md) 참고 |
 
 `spring-boot-starter-data-jpa-test`/`spring-boot-starter-webmvc-test`는 기존에 이미 선언되어 있었고, AssertJ와 Mockito는 이 Starter가 Transitive하게 제공한다(`./gradlew dependencies --configuration testRuntimeClasspath`로 확인). 이번 작업에서 별도로 직접 선언하지 않았다.
 
@@ -91,14 +92,16 @@ build/reports/kover/report.xml        XML Report
 
 ### Coverage Gate
 
-`koverVerify`에 최소 Line/Branch 기준(Rule)을 아직 설정하지 않았다. 현재 테스트는 Application Context Smoke Test 하나뿐이라 임의의 기준(예: Line 80%)을 설정할 근거가 없다. 기능 구현과 테스트가 누적된 뒤, 실제 측정값을 근거로 CI 관련 후속 작업에서 기준 도입 여부를 재검토한다.
+`koverVerify`에 최소 Line/Branch 기준(Rule)을 아직 설정하지 않았다. 현재 테스트는 Application Context Smoke Test와 모듈 구조 검증/문서 생성 Test뿐이라 임의의 기준(예: Line 80%)을 설정할 근거가 없다. 기능 구현과 테스트가 누적된 뒤, 실제 측정값을 근거로 CI 관련 후속 작업에서 기준 도입 여부를 재검토한다.
 
 ### 현재 측정값 (참고용, 커밋 시점 스냅샷)
 
-`GetiServerApplicationTests.contextLoads()` 실행 기준:
+전체 Test(`GetiServerApplicationTests`, `ModularityTest`, `ModuleDocumentationTest`) 실행 기준:
 
 - Line Coverage: 50% (2개 중 1개) — `GetiServerApplication` 생성자는 Spring Context 기동으로 Covered, `main()` 함수는 Test에서 호출되지 않아 Uncovered.
 - Class Coverage: 50% (2개 중 1개)
+
+`ApplicationModules.of(GetiServerApplication::class.java)`는 Class 참조만 사용하고 Spring Context를 띄우거나 `main()`을 호출하지 않으므로 Modulith Test 추가로 Coverage 수치가 바뀌지 않았다.
 
 ## 테스트 유형
 
@@ -117,6 +120,10 @@ Controller, Repository, Configuration Binding 등 특정 계층만 필요한 Con
 ### Smoke Test
 
 `GetiServerApplicationTests.contextLoads()`가 여기에 해당한다. H2 In-memory DB로 운영 PostgreSQL 없이 Application Context가 정상 기동하는지 검증한다.
+
+### 모듈 구조 검증
+
+`ModularityTest`(`ApplicationModules.verify()`)는 Application Module 간 순환 의존성과 내부 구현 접근을 검증한다. Spring Context를 띄우지 않는다. `ModuleDocumentationTest`는 `Documenter`로 모듈 구조 문서(PlantUML, Module Canvas)를 생성한다. 세부 내용과 현재 탐지된 Module 상태는 [`docs/architecture/modularity.md`](../architecture/modularity.md)를 따른다.
 
 ## 테스트 작성 원칙
 
