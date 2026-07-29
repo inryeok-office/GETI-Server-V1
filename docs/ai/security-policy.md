@@ -57,6 +57,15 @@
 - Datasource URL, Redis 접속 정보를 Log로 출력할 때 Password 등 Secret 성격 값이 함께 노출되지 않도록 주의한다.
 - Testcontainers는 각 Test 종료 시 자동으로 정리된다. 이 PC에 다른 프로젝트의 기존 Container/Volume이 있을 수 있으므로, Persistence 검증 목적으로 `docker compose down -v`나 임의의 Container 정리 명령을 실행할 때는 대상이 이 저장소가 생성한 리소스인지 먼저 확인한다.
 
+## GitHub Actions / CI
+
+- Workflow의 기본 권한은 `permissions: contents: read`를 유지한다. `contents: write`, `pull-requests: write`, `actions: write`, `id-token: write` 등은 실제로 필요한 경우에만, 최소 범위(Job 단위)로 부여한다.
+- `pull_request_target`, `workflow_run` 등 Fork PR에서 상승된 권한이나 Secret에 접근할 수 있는 Trigger는 명확한 보안 검토와 사용자 승인 없이 추가하지 않는다.
+- Secret 값을 Workflow YAML에 직접 작성하지 않는다. GitHub Secret을 새로 생성하거나 조회·출력하지 않는다.
+- Third-party Action은 공식/검증된 Vendor Action만 사용하고 `@main`/`@master`/`@latest`가 아닌 고정된 Version(Major Tag 또는 Commit SHA)을 사용한다([`docs/development/ci.md`](../development/ci.md) 참고).
+- CI를 통과시키기 위해 Test, Spotless, detekt를 비활성화하거나 `continue-on-error: true`를 필수 Job에 추가하지 않는다.
+- Repository Ruleset, Branch Protection, Required Status Check는 사용자(Repository 관리자)의 명시적 승인 없이 파괴적으로 변경하지 않는다. 특히 아직 한 번도 성공하지 않은 Workflow의 Check를 Required로 설정해 이후 모든 PR이 막히는 상황을 만들지 않는다.
+
 ## Web / API
 
 - 오류 응답에 Exception Message, Stack Trace, Exception Class 이름, SQL, Database Connection 정보, Request Body 전체, Authorization Header, 내부 Package 경로를 포함하지 않는다([`docs/development/web-api.md`](../development/web-api.md)의 `GlobalExceptionHandler` 정책 참고).

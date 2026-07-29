@@ -97,4 +97,5 @@ Dependency 실패
 - 전체 Build 성공
 - Diff 직접 검토
 - Secret 미포함 확인
+- GitHub Actions CI([`docs/development/ci.md`](../../../docs/development/ci.md))가 구성되어 있고 PR을 생성했다면, 로컬 검증뿐 아니라 실제 Workflow Run 성공을 `gh pr checks`로 확인
 - 실행하지 못한 검증 명시

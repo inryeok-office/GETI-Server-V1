@@ -40,6 +40,7 @@ GETI-Server 저장소, Issue #{ISSUE_NUMBER} 작업을 Commit, Push하고 develo
 16. PR 본문에 Closes #{ISSUE_NUMBER}로 Issue를 연결해.
 17. 저장소에 실제 존재하는 Label만 gh label list로 확인해서 PR에 적용해.
 18. Issue 상태 Label을 review로 바꿔.
+19. GitHub Actions CI가 구성되어 있다면(.github/workflows/ci.yml, docs/development/ci.md 참고) gh pr checks로 실제 실행 결과를 확인해. 실패한 Job이 있으면 원인을 분석하고 새 Commit으로 수정해(Amend/Force Push 금지).
 
 PR 본문은 다음 구조를 사용해:
 
@@ -57,5 +58,5 @@ Closes #{ISSUE_NUMBER}
 
 사용자 요청 없이 Merge하지 마.
 
-마지막에 다음을 보고해: 검증 결과(Test/Build), Commit hash, Push 결과, PR 번호와 URL, base/head, Draft 여부, Issue Label 변경, 남은 작업.
+마지막에 다음을 보고해: 검증 결과(Test/Build), Commit hash, Push 결과, PR 번호와 URL, base/head, Draft 여부, Issue Label 변경, 실제 GitHub Actions CI 결과(확인했다면), 남은 작업.
 ```
