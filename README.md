@@ -1,5 +1,7 @@
 # GETI-Server
 
+처음 이 저장소를 Clone했다면 [`docs/development/quick-start.md`](./docs/development/quick-start.md)를 먼저 확인하세요.
+
 ## 브랜치 전략 (Git Flow)
 
 - `main`: 운영/배포 가능한 안정 버전입니다. 직접 Push하지 않습니다.
