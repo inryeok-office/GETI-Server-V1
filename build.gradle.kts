@@ -48,28 +48,40 @@ configurations["integrationTestImplementation"].extendsFrom(configurations.testI
 configurations["integrationTestRuntimeOnly"].extendsFrom(configurations.testRuntimeOnly.get())
 
 dependencies {
+    // Spring Modulith: Application Module 경계 검증(Production 미사용, Test 전용)
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
-    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+
+    // Spring Web / Validation / Actuator
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+
+    // Persistence: PostgreSQL(JPA/Hibernate) + Flyway, Redis(Lettuce)
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-flyway")
     implementation("org.flywaydb:flyway-core")
     implementation("org.flywaydb:flyway-database-postgresql")
+    runtimeOnly("org.postgresql:postgresql")
+
+    // Kotlin / Jackson
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
+
+    // Lombok
     compileOnly("org.projectlombok:lombok")
-    runtimeOnly("org.postgresql:postgresql")
     annotationProcessor("org.projectlombok:lombok")
+
+    // Test
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testCompileOnly("org.projectlombok:lombok")
+    testAnnotationProcessor("org.projectlombok:lombok")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testRuntimeOnly("com.h2database:h2")
-    testAnnotationProcessor("org.projectlombok:lombok")
 
+    // Integration Test(Docker/Testcontainers 필요, src/integrationTest 전용)
     "integrationTestImplementation"("org.springframework.boot:spring-boot-starter-data-redis-test")
     "integrationTestImplementation"("org.springframework.boot:spring-boot-testcontainers")
     "integrationTestImplementation"("org.testcontainers:testcontainers-junit-jupiter")
