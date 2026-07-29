@@ -1,4 +1,4 @@
-package team.inreok.getiserver.web
+package team.inreok.getiserver.global.error
 
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.matchesPattern
@@ -15,6 +15,8 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.inreok.getiserver.global.web.WebPageableConfig
+import team.inreok.getiserver.global.web.WebTestSupportController
 
 // WebPageableConfig는 일반 @Configuration이라 @WebMvcTest가 자동으로 인식하지 않는다
 // (Controller/ControllerAdvice/WebMvcConfigurer 등 특정 Stereotype만 자동 인식).
@@ -135,6 +137,23 @@ class GlobalExceptionHandlerTest
                 .andExpect(content().string(not(containsString("의도적으로 발생시킨"))))
                 .andExpect(content().string(not(containsString("IllegalStateException"))))
                 .andExpect(content().string(not(containsString("\tat "))))
+        }
+
+        @Test
+        fun `BusinessException은 정의된 ErrorCode의 상태와 Message로 응답한다`() {
+            mockMvc
+                .perform(get("/test/web/business-error"))
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.message").value("의도적으로 발생시킨 테스트 전용 Business 예외"))
+        }
+
+        @Test
+        fun `오류 응답에도 requestId가 포함된다`() {
+            mockMvc
+                .perform(get("/test/web/error"))
+                .andExpect(status().isInternalServerError)
+                .andExpect(jsonPath("$.requestId").isNotEmpty)
         }
 
         companion object {

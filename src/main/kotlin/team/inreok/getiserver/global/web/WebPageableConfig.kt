@@ -1,4 +1,4 @@
-package team.inreok.getiserver.web
+package team.inreok.getiserver.global.web
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
