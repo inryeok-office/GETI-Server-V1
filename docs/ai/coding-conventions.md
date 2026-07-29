@@ -23,7 +23,7 @@ Kotlin Source의 포맷은 EditorConfig(`.editorconfig`)와 Spotless(ktlint)로,
 
 ## 모듈 경계 (Spring Modulith)
 
-새 도메인 기능은 Root Package(`team.inreok.geti.getiserver`) 바로 아래의 독립된 Package(Application Module 후보)에 구현한다. 다른 Module의 내부 구현 Package를 직접 참조하지 않고, 순환 의존성을 만들지 않는다. `common`/`global` Package에는 여러 Module이 실제로 공유하는 기술 요소만 두고 특정 도메인 로직을 넣지 않는다. Package를 추가하거나 옮긴 뒤에는 `./gradlew test --tests "*ModularityTest"`로 구조 검증을 실행한다. 세부 원칙과 현재 상태는 [`docs/architecture/modularity.md`](../architecture/modularity.md)를 따른다.
+새 도메인 기능은 Root Package(`team.inreok.geti.getiserver`) 바로 아래의 독립된 Package(Application Module 후보)에 구현한다. 다른 Module의 내부 구현 Package를 직접 참조하지 않고, 순환 의존성을 만들지 않는다. `common`/`global` Package에는 여러 Module이 실제로 공유하는 기술 요소만 두고 특정 도메인 로직을 넣지 않는다. Configuration/Infrastructure/Support 등 기술 기반 Package는 실제 Class가 생기는 시점에만 만든다. Package를 추가하거나 옮긴 뒤에는 `./gradlew test --tests "*ModularityTest"`로 구조 검증을 실행한다. 세부 원칙과 현재 상태(Package Tree, 기술 기반 Package 생성 기준, 만들지 않는 Package 목록)는 [`docs/architecture/modularity.md`](../architecture/modularity.md)를 따른다.
 
 ## Configuration과 Profile
 
