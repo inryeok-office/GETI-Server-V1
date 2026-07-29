@@ -1,6 +1,6 @@
 # 테스트 및 검증 정책 (AI 작업 원칙)
 
-현재 GETI-Server는 JUnit 5(JUnit Platform)와 Spring Boot Test를 사용하며, Application Context 테스트(`GetiServerApplicationTests`)만 존재하는 초기 단계다. Context 테스트는 외부 PostgreSQL 없이도 통과하도록 테스트 전용 H2 In-Memory Database(`testRuntimeOnly`)를 사용한다. 코드 커버리지는 Kover로 측정한다. 테스트 유형별 정책, 도구 선정 이유, 커버리지 명령은 [`docs/development/testing.md`](../development/testing.md)를 따른다.
+현재 GETI-Server는 JUnit 5(JUnit Platform)와 Spring Boot Test를 사용한다. `src/test`의 Unit/Slice Test는 실제 PostgreSQL/Redis 없이 통과해야 하며, JPA Context 테스트는 테스트 전용 H2 In-Memory Database(`testRuntimeOnly`)를 사용한다. Docker(Testcontainers)가 필요한 PostgreSQL/Redis Persistence Integration Test는 별도 `integrationTest` Gradle Task로 분리되어 있으며 `test`/`check`/`build`가 의존하지 않는다([`docs/development/persistence.md`](../development/persistence.md) 참고). 코드 커버리지는 Kover로 측정한다. 테스트 유형별 정책, 도구 선정 이유, 커버리지 명령은 [`docs/development/testing.md`](../development/testing.md)를 따른다.
 
 ## 원칙
 
@@ -16,6 +16,8 @@
 - 내부 구현 세부사항에 지나치게 결합된 테스트(private 필드 직접 접근, 내부 순서에 의존하는 Mock 검증 등)를 피하고, 공개된 동작을 기준으로 검증한다.
 - 시간, 환경, 실행 순서에 따라 결과가 달라지는 비결정적 테스트를 만들지 않는다.
 - 실행하지 못한 테스트나 검증 항목은 완료 보고에 명확히 남긴다 ([`completion-policy.md`](./completion-policy.md) 참고).
+- `src/test`(Unit/Slice Test)는 실제 PostgreSQL/Redis 실행을 전제로 작성하지 않는다. PostgreSQL/Redis가 실제로 필요한 검증은 `src/integrationTest`에 Testcontainers로 작성한다.
+- Persistence(JPA/Flyway/Redis) 관련 코드를 변경하면 `./gradlew test`뿐 아니라 `./gradlew integrationTest`(Docker 필요), `./gradlew test --tests "*ModularityTest"`, 전체 Build(`clean test build`)까지 함께 확인한다.
 
 ## 기본 검증 명령
 
@@ -40,12 +42,13 @@ Unix 또는 Git Bash:
 다음 테스트 도구는 이 저장소에 아직 도입되지 않았다. 관련 작업이 아니라면 필수로 요구하거나 임의로 도입하지 않는다.
 
 ```text
-Testcontainers
 ArchUnit
 Mutation Testing
 Contract Test
 MockK
 kotlinx-coroutines-test
 ```
+
+Testcontainers는 `integrationTest` Source Set(PostgreSQL/Redis Persistence Integration Test)에 한해 도입되어 있다([`docs/development/persistence.md`](../development/persistence.md)). 그 외 목적(예: 다른 외부 시스템 Integration Test)으로 확대할지는 실제 필요가 생기는 시점에 판단한다.
 
 `MockK`는 실제 Mocking이 필요한 Kotlin Service/Slice Test가 생기는 시점에 도입 여부를 재검토한다(Mockito는 Spring Boot Test Starter를 통해 이미 사용 가능하다). `kotlinx-coroutines-test`는 Production Source가 Coroutine을 사용하기 시작하면 도입을 검토한다. 위 도구는 필요에 따라 후속 PR에서 도입되고, 이 문서도 함께 갱신될 예정이다.

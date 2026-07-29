@@ -70,8 +70,10 @@ Custom Detection Strategy를 별도로 구현하지 않고 Spring Modulith 기�
 | Package 후보 | 용도 | 현재 상태 |
 | --- | --- | --- |
 | `configuration` | Spring Framework Configuration Class, `@ConfigurationProperties` | 없음. Kotlin Class가 하나도 없다(Profile YAML 파일만 존재, [`configuration.md`](../development/configuration.md) 참고) |
-| `infrastructure` | 실제 외부 시스템 Adapter(PostgreSQL, Redis, MinIO 등과 통신하는 코드) | 없음. Docker Compose로 Infra Container는 준비되어 있지만([`docker.md`](../development/docker.md)) Application이 아직 연결되지 않는다 |
+| `infrastructure` | 실제 외부 시스템 Adapter(PostgreSQL, Redis, MinIO 등과 통신하는 코드) | 없음. PostgreSQL/Redis 연결 설정과 Migration/Test 기반은 구성했지만([`persistence.md`](../development/persistence.md)) 실제 Domain Entity/Repository/Adapter Class는 아직 없다 |
 | `support` | 여러 Module이 실제로 공유하는 순수 기술 지원 코드(Clock Adapter, ID 생성기 등) | 없음. 공유가 필요한 코드 자체가 없다 |
+
+`src/integrationTest/kotlin/team/inreok/getiserver/persistence/`에는 PostgreSQL/Redis Integration Test 전용 Entity/Repository(`PersistenceProbeEntity` 등, [`persistence.md`](../development/persistence.md) 참고)가 있다. 이는 `integrationTest`라는 별도 Gradle Source Set에만 존재하며 `main` Classpath에 포함되지 않으므로, `ApplicationModules.of(GetiServerApplication::class.java)` 탐지 대상이 아니고 Application Module로 세지 않는다. 위 표의 `infrastructure` Package(Production Adapter)와는 다른 목적이다.
 
 이 세 Package는 각각 다음 조건을 만족하는 실제 Class가 생겼을 때만 만든다.
 

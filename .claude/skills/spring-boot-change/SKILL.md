@@ -44,7 +44,7 @@ GETI-Server의 Spring Boot/Kotlin 코드를 변경할 때 참고하는 상세 �
 - Component Scan에 미치는 영향
 - Profile에 미치는 영향 (환경별 값은 공통 설정이 아닌 `local`/`test`/`prod` Profile 또는 환경 변수로 분리, [`docs/development/configuration.md`](../../../docs/development/configuration.md) 참고)
 - 공개 API(Controller Signature 등) 호환성
-- Migration이 필요한지 (DB Schema 등, 현재 저장소에는 아직 JPA Entity/Migration 체계가 없다)
+- Migration이 필요한지 (Flyway가 Schema를 관리한다. `ddl-auto`는 `validate`/`none`만 사용하고, 병합된 Migration 파일은 수정하지 않고 새 버전을 추가한다. [`docs/development/persistence.md`](../../../docs/development/persistence.md) 참고)
 
 ## 구현 원칙
 
@@ -57,6 +57,7 @@ GETI-Server의 Spring Boot/Kotlin 코드를 변경할 때 참고하는 상세 �
 - 의미 없는 Interface 분리를 하지 않는다.
 - 관련 없는 Package 이동을 함께 하지 않는다.
 - 새 도메인 Package는 Root Package 바로 아래 독립된 Application Module로 만들고, 다른 Module의 내부 구현을 직접 참조하지 않는다 ([`docs/architecture/modularity.md`](../../../docs/architecture/modularity.md) 참고).
+- Entity/Repository는 Root Package 바로 아래 공용 `entity`/`repository` Package가 아니라 해당 Domain Module 안에 둔다. `spring.jpa.hibernate.ddl-auto`를 `create`/`create-drop`/`update`로 바꾸지 않는다. Docker(Testcontainers)가 필요한 Persistence Test는 `src/test`가 아니라 `src/integrationTest`에 작성한다 ([`docs/development/persistence.md`](../../../docs/development/persistence.md) 참고).
 
 ## Architecture 제한
 

@@ -83,7 +83,7 @@ $env:SPRING_PROFILES_ACTIVE = "local"
 
 또는 IntelliJ에서 `GetiServerApplication`을 실행한다(Run Configuration에 `SPRING_PROFILES_ACTIVE=local` 환경 변수 설정).
 
-이번 PR 시점에는 Spring Boot가 PostgreSQL/Redis/MinIO에 실제로 연결하지 않는다. Application 연동은 PR 8(Persistence)에서 진행한다.
+Spring Boot는 PostgreSQL/Redis에 연결하도록 구성되어 있다(MinIO 연동은 아직 없다). 연결 설정과 환경 변수는 [`persistence.md`](./persistence.md)를 따른다.
 
 ## 전체 Container 환경 실행 (선택)
 

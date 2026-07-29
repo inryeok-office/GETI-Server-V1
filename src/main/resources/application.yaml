@@ -1,3 +1,9 @@
 spring:
   application:
     name: GETI-Server
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    clean-disabled: true

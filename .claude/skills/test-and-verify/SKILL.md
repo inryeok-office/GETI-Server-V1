@@ -44,19 +44,20 @@ GETI-Server에서 변경 사항을 검증할 때 참고하는 상세 기준이�
 
 ### DB 변경
 
-- Migration
-- Schema
+- Migration (Flyway. 병합된 Migration 파일은 수정하지 않고 새 버전을 추가한다)
+- Schema (`ddl-auto=validate`/`none`만 사용, `create`/`create-drop`/`update` 금지)
 - Constraint
 - Rollback 가능성
-- Test에서 사용할 Database (현재는 `testRuntimeOnly("com.h2database:h2")`로 외부 인프라 없이 Context Test를 실행한다)
+- Test에서 사용할 Database: `src/test`(Unit/Slice)는 `testRuntimeOnly("com.h2database:h2")`로 외부 인프라 없이 실행하고, 실제 PostgreSQL/Redis 연결 검증은 `src/integrationTest`의 Testcontainers(`./gradlew integrationTest`, Docker 필요)로 한다
 
-이 저장소에는 아직 DB Migration이나 API 구조가 없으므로, 해당 변경이 생기기 전까지는 이 절만 일반 기준으로 참고한다.
+세부 기준은 [`docs/development/persistence.md`](../../../docs/development/persistence.md)를 따른다. 이 저장소에는 아직 실제 GETI Domain Migration/Entity는 없으므로, 관련 Issue가 생기면 이 기준을 적용한다.
 
 ## Test 선택
 
 - 가장 작은 관련 Test부터 실행한다 (`./gradlew test`).
 - 영향 범위가 넓으면 전체 Test를 실행한다.
 - Kotlin 코드를 변경했다면 `./gradlew spotlessCheck`(포맷)와 `./gradlew detekt`(정적 분석)도 확인한다. 포맷 위반은 `./gradlew spotlessApply`로 정리한다.
+- Persistence(JPA/Flyway/Redis) 관련 변경이면 Docker가 있는 환경에서 `./gradlew integrationTest`도 실행한다. Docker를 사용할 수 없으면 실행하지 못했다고 명시한다(`test`/`check`/`build`는 Docker 없이도 통과해야 한다).
 - 마지막에 항상 `./gradlew clean test build`로 마무리한다. `check`에 `spotlessCheck`, `detekt`, `koverVerify`가 이미 포함되어 있어 별도로 반복 실행할 필요는 없다.
 - 커버리지 수치 확인이 필요하면 `./gradlew koverHtmlReport` 또는 `./gradlew koverXmlReport`를 별도로 실행한다(`check`에는 포함되지 않는다).
 - 이미 통과가 확인된 범위를 불필요하게 반복 실행하지 않는다.

@@ -49,6 +49,14 @@
 - 운영 환경의 데이터베이스나 서비스에 직접 접근하거나 수정하지 않는다.
 - 테스트 데이터로 실제 사용자 정보를 사용하지 않는다. 필요하면 명백히 가짜임을 알 수 있는 값을 사용한다.
 
+## Persistence (PostgreSQL / Redis)
+
+- `spring.jpa.hibernate.ddl-auto`를 `create`/`create-drop`/`update`로 설정하지 않는다. Schema 변경은 Flyway Migration만으로 수행한다([`docs/development/persistence.md`](../development/persistence.md)).
+- `spring.flyway.clean-disabled=true`(모든 환경에서 `flyway clean` 차단)를 임의로 되돌리지 않는다.
+- 실제 운영 PostgreSQL/Redis에 연결하거나 실제 값으로 마이그레이션을 실행하지 않는다. 로컬 검증은 `docker compose`(Local 전용 Credential) 또는 `integrationTest`의 Testcontainers만 사용한다.
+- Datasource URL, Redis 접속 정보를 Log로 출력할 때 Password 등 Secret 성격 값이 함께 노출되지 않도록 주의한다.
+- Testcontainers는 각 Test 종료 시 자동으로 정리된다. 이 PC에 다른 프로젝트의 기존 Container/Volume이 있을 수 있으므로, Persistence 검증 목적으로 `docker compose down -v`나 임의의 Container 정리 명령을 실행할 때는 대상이 이 저장소가 생성한 리소스인지 먼저 확인한다.
+
 ## 보고 원칙
 
 - 보안과 관련된 가정(예: "이 값은 아직 실제 Secret 관리 체계가 없어 평문으로 두었다")을 발견하면 임의로 판단해 조용히 넘어가지 않고 완료 보고에 명시한다.
