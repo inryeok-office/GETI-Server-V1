@@ -6,7 +6,7 @@ Spring Modulith 도입은 즉시 MSA로 분리한다는 뜻이 아니다. 현재
 
 ## 현재 상태
 
-- Root Package: `team.inreok.geti.getiserver`
+- Root Package: `team.inreok.getiserver`
 - 이 Package 바로 아래에는 `GetiServerApplication`(Application 진입점) 하나만 있고, 하위 Package(도메인 후보)가 아직 없다.
 - 따라서 `ApplicationModules.of(GetiServerApplication::class.java)`로 탐지되는 Application Module은 현재 **0개**다. 이는 실제 측정 결과이며, 모듈을 만들기 위해 가짜 Package나 Marker Class를 추가하지 않았다.
 - 도메인 Package가 추가되면 별도 설정 변경 없이 Root Package 바로 아래 Package가 자동으로 Application Module로 탐지된다(Spring Modulith 기본 탐지 전략, Direct Subpackage 기준).
@@ -16,7 +16,7 @@ Spring Modulith 도입은 즉시 MSA로 분리한다는 뜻이 아니다. 현재
 실제 Production/Test Package 구조는 다음과 같다(2026-07-29 기준, Package Structure Refactoring 검토 시점).
 
 ```text
-team.inreok.geti.getiserver                      (Root Package)
+team.inreok.getiserver                            (Root Package)
 ├── GetiServerApplication.kt                      (Production, Application 진입점)
 ├── GetiServerApplicationTests.kt                 (Test, Application Context Smoke Test)
 ├── ModularityTest.kt                             (Test, 구조 검증)
@@ -81,7 +81,7 @@ Custom Detection Strategy를 별도로 구현하지 않고 Spring Modulith 기�
 
 Class가 한두 개뿐이라면 위 Package 아래에 다시 하위 Package(`configuration.properties` 등)를 만들지 않는다. 하위 Package는 같은 Package 안에서 관리하기 어려울 만큼 Class 수가 늘어났을 때 재검토한다.
 
-Root Package(`team.inreok.geti.getiserver`)는 Spring Modulith가 Direct Subpackage를 Module로 자동 탐지하므로, `configuration`/`infrastructure`/`support`를 Root Package 바로 아래에 추가하면 그 자체로 하나의 Application Module처럼 탐지된다. 이는 의도한 동작이다(기술 기반 코드를 하나의 논리적 경계로 보는 것). 여러 Domain Module이 이 Package에 실제로 의존하게 되면 `ModularityTest` 결과에서 의존 관계로 나타나므로, 그 시점에 이 판단이 여전히 타당한지 다시 확인한다.
+Root Package(`team.inreok.getiserver`)는 Spring Modulith가 Direct Subpackage를 Module로 자동 탐지하므로, `configuration`/`infrastructure`/`support`를 Root Package 바로 아래에 추가하면 그 자체로 하나의 Application Module처럼 탐지된다. 이는 의도한 동작이다(기술 기반 코드를 하나의 논리적 경계로 보는 것). 여러 Domain Module이 이 Package에 실제로 의존하게 되면 `ModularityTest` 결과에서 의존 관계로 나타나므로, 그 시점에 이 판단이 여전히 타당한지 다시 확인한다.
 
 ## 향후 Module을 추가할 때의 원칙
 
@@ -110,7 +110,7 @@ Root 수준의 controller / service / repository / entity / dto (기술 Layer를
 
 ## Test Package 원칙
 
-- Test Class는 검증 대상 Production Class와 같은 Package에 둔다. 이 저장소는 `src/test/kotlin/team/inreok/geti/getiserver/`에 Production과 동일한 Root Package 구조를 그대로 사용한다.
+- Test Class는 검증 대상 Production Class와 같은 Package에 둔다. 이 저장소는 `src/test/kotlin/team/inreok/getiserver/`에 Production과 동일한 Root Package 구조를 그대로 사용한다.
 - `ModularityTest`/`ModuleDocumentationTest`(구조 검증·문서 생성)처럼 특정 Production Class를 검증하지 않는 Architecture Test도 별도 `architecture`/`modularity` Package로 분리하지 않고 Root Package에 둔다. 이 Package는 Test Source에만 존재하며 Production Module로 탐지되지 않는다.
 - Domain Module이 추가되면 그 Module의 Test도 같은 Module Package 안에 둔다. 모든 Test를 하나의 `test`나 `integration` Package로 모으지 않는다.
 - 실제 공유 Fixture가 필요해지기 전에는 Test Support Package를 만들지 않는다.
@@ -121,7 +121,7 @@ Root 수준의 controller / service / repository / entity / dto (기술 Layer를
 ./gradlew test --tests "*ModularityTest"
 ```
 
-`ModularityTest`(`src/test/kotlin/team/inreok/geti/getiserver/ModularityTest.kt`)는 `ApplicationModules.of(GetiServerApplication::class.java)`를 생성하고 `verify()`를 호출해 다음을 검증한다.
+`ModularityTest`(`src/test/kotlin/team/inreok/getiserver/ModularityTest.kt`)는 `ApplicationModules.of(GetiServerApplication::class.java)`를 생성하고 `verify()`를 호출해 다음을 검증한다.
 
 - Module 간 순환 의존성
 - 다른 Module의 내부 구현(Non-public) 접근
@@ -139,7 +139,7 @@ Root 수준의 controller / service / repository / entity / dto (기술 Layer를
 ./gradlew test --tests "*ModuleDocumentationTest"
 ```
 
-`ModuleDocumentationTest`(`src/test/kotlin/team/inreok/geti/getiserver/ModuleDocumentationTest.kt`)는 `Documenter`로 PlantUML Component Diagram과 Module Canvas를 생성한다. 출력 경로는 실제 실행 결과로 확인했다.
+`ModuleDocumentationTest`(`src/test/kotlin/team/inreok/getiserver/ModuleDocumentationTest.kt`)는 `Documenter`로 PlantUML Component Diagram과 Module Canvas를 생성한다. 출력 경로는 실제 실행 결과로 확인했다.
 
 ```text
 build/spring-modulith-docs/components.puml   전체 Module 관계 PlantUML

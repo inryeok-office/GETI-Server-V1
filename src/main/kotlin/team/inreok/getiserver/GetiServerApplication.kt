@@ -1,4 +1,4 @@
-package team.inreok.geti.getiserver
+package team.inreok.getiserver
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
