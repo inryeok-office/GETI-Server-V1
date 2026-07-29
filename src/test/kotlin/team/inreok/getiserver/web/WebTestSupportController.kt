@@ -4,6 +4,7 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -34,6 +35,10 @@ class WebTestSupportController {
 
     @GetMapping("/test/web/page")
     fun page(): PageResponse<String> = PageResponse.of(PageImpl(listOf("a", "b"), PageRequest.of(0, 2), 5))
+
+    @GetMapping("/test/web/pageable")
+    fun pageable(pageable: Pageable): ApiResponse<Map<String, Int>> =
+        ApiResponse.of(mapOf("page" to pageable.pageNumber, "size" to pageable.pageSize))
 }
 
 data class WebTestRequest(

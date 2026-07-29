@@ -6,6 +6,7 @@ import org.hamcrest.Matchers.not
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
+import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
@@ -15,7 +16,10 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
+// WebPageableConfig는 일반 @Configuration이라 @WebMvcTest가 자동으로 인식하지 않는다
+// (Controller/ControllerAdvice/WebMvcConfigurer 등 특정 Stereotype만 자동 인식).
 @WebMvcTest(controllers = [WebTestSupportController::class])
+@Import(WebPageableConfig::class)
 class GlobalExceptionHandlerTest
     @Autowired
     constructor(
@@ -27,6 +31,14 @@ class GlobalExceptionHandlerTest
                 .perform(get("/test/web/success"))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.data.id").value("1"))
+        }
+
+        @Test
+        fun `요청한 size가 최대값을 넘으면 서버가 100으로 제한한다`() {
+            mockMvc
+                .perform(get("/test/web/pageable").param("size", "500"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.size").value(100))
         }
 
         @Test
