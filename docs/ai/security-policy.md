@@ -11,7 +11,9 @@
 
 ## 환경변수
 
-- 환경별로 달라지는 값(연결 정보, Key 등)은 하드코딩 대신 환경변수나 설정 파일 참조로 다룬다. 다만 아직 이 저장소에 Profile/환경변수 체계가 도입되지 않았다면, 임의로 새 체계를 만들지 않고 관련 Issue 범위에서 다룬다.
+- 환경별로 달라지는 값(연결 정보, Key 등)은 하드코딩 대신 Profile(`local`/`test`/`prod`) 또는 환경변수로 다룬다. Profile 전략, 환경 변수 Naming Convention, `.env.example` 사용 방식은 [`docs/development/configuration.md`](../development/configuration.md)를 따른다.
+- `.env`는 Spring Boot가 자동으로 읽는 파일이 아니다. 자동 로딩된다고 문서화하거나 가정하지 않는다.
+- Secret에는 안전하지 않은 기본값(`${SECRET:change-me}` 등)을 제공하지 않는다. 필수 Secret이 없으면 명확하게 실패하도록 둔다.
 
 ## 로그와 출력
 

@@ -111,6 +111,14 @@ EditorConfig, Spotless(ktlint), detekt로 코드 스타일과 정적 분석을 �
 ./gradlew check
 ```
 
+## Configuration과 실행
+
+공통 설정과 `local`/`test`/`prod` Profile을 분리하고, Secret은 저장소에 포함하지 않고 환경 변수로 관리합니다. Profile 전략, 환경 변수, `.env.example` 사용법은 [`docs/development/configuration.md`](./docs/development/configuration.md)를 따릅니다.
+
+```bash
+SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
+```
+
 ## 모듈 구조
 
 [Spring Modulith](https://spring.io/projects/spring-modulith)로 Application Module 경계를 검증합니다. 현재 도메인 Module은 없으며, 탐지 전략과 검증/문서 생성 방법은 [`docs/architecture/modularity.md`](./docs/architecture/modularity.md)를 따릅니다.

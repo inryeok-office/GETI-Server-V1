@@ -17,7 +17,7 @@ GETI-Server의 Spring Boot/Kotlin 코드를 변경할 때 참고하는 상세 �
 - Root Package (`team.inreok.geti.getiserver`)
 - 적용된 Plugin
 - 선언된 Dependency
-- Profile 구성 여부 (현재는 별도 Profile 체계 없음)
+- Profile 구성 (`local`/`test`/`prod`, [`docs/development/configuration.md`](../../../docs/development/configuration.md) 참고)
 - Test Framework (JUnit 5, Spring Boot Test)
 
 ## 기존 구현 탐색
@@ -42,7 +42,7 @@ GETI-Server의 Spring Boot/Kotlin 코드를 변경할 때 참고하는 상세 �
 - 설정 변경이 다른 부분에 미치는 영향
 - Bean 충돌 가능성
 - Component Scan에 미치는 영향
-- Profile에 미치는 영향 (아직 없다면 임의로 새 체계를 도입하지 않는다)
+- Profile에 미치는 영향 (환경별 값은 공통 설정이 아닌 `local`/`test`/`prod` Profile 또는 환경 변수로 분리, [`docs/development/configuration.md`](../../../docs/development/configuration.md) 참고)
 - 공개 API(Controller Signature 등) 호환성
 - Migration이 필요한지 (DB Schema 등, 현재 저장소에는 아직 JPA Entity/Migration 체계가 없다)
 

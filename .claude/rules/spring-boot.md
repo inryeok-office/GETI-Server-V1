@@ -20,7 +20,8 @@ GETI-Server의 실제 환경(Spring Boot 4.1.0, Kotlin 2.3.21, Gradle 9.5.1 Kotl
 
 - Component Scan 범위를 임의로 변경하지 않는다.
 - 설정값을 Source Code에 Hard Coding하지 않는다.
-- 환경별로 달라지는 값은 적절한 Configuration 방식 도입이 필요한지 검토하되, 아직 Profile/환경변수 체계가 없다면 관련 Issue 범위에서만 도입한다.
+- 환경별로 달라지는 값은 공통 설정(`application.yaml`)이 아닌 Profile(`local`/`test`/`prod`) 또는 환경 변수로 분리한다. Profile 전략과 환경 변수 Naming, Secret 관리 기준은 [`docs/development/configuration.md`](../../docs/development/configuration.md)를 따른다.
+- Secret은 환경 변수로만 참조하고, 안전하지 않은 기본값(`${SECRET:change-me}` 등)을 제공하지 않는다.
 - Bean 충돌을 임시 이름 변경만으로 숨기지 않는다.
 - Circular Dependency를 `@Lazy`로 무조건 우회하지 않는다.
 - Spring Context 실패를 Test 비활성화로 숨기지 않는다.
