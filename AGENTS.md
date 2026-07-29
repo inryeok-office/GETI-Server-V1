@@ -7,9 +7,8 @@
 ## 프로젝트 개요
 
 - 프로젝트 이름: GETI-Server (Spring Boot Backend)
-- Kotlin(Gradle Kotlin DSL) 기반이며 현재 프로젝트 기본 구조와 GitHub 협업 기반을 갖춘 **초기 구축 단계**다.
-- 아직 실제 도메인 기능, Entity, API가 구현되어 있지 않다. 현재 코드는 `GetiServerApplication`(SpringBootApplication 진입점)과 Application Context 테스트만 존재한다.
-- 확인되지 않은 기능이나 Architecture를 추측해서 구현하지 않는다. 항상 Issue와 명세를 기준으로 작업하고, 작업 전 기존 코드와 테스트를 먼저 분석한다.
+- Kotlin(Gradle Kotlin DSL) 기반이며 Repository/AI Harness/Code Quality/Test/Spring Modulith/Configuration/Docker/Persistence/공통 Web·API/CI 기반을 모두 갖춘 **기반 구축 완료 단계**다(PR 1~10, [`docs/audit/foundation-audit.md`](./docs/audit/foundation-audit.md) 참고). 실제 Domain(Auth, Member, Job 등) 기능은 아직 구현되어 있지 않다.
+- 확인되지 않은 기능이나 Architecture를 추측해서 구현하지 않는다. 항상 Issue와 명세, 그리고 실제 Domain 기능이면 GETI Notion(기능명세서, API 명세서, PRD)을 기준으로 작업하고, 작업 전 기존 코드와 테스트를 먼저 분석한다. Notion과 저장소가 다르면 [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md)의 분류 기준을 따른다.
 
 ## 규칙 우선순위
 
@@ -18,11 +17,17 @@
 ```text
 1. 사용자의 현재 명시적 요청
 2. 현재 Issue와 작업 명세
-3. AGENTS.md
-4. 도구별 지침 (CLAUDE.md, .codex/ 등)
-5. docs/ai 세부 정책
-6. 기존 코드의 일관된 패턴
+3. GETI Notion의 명확히 확정된 제품 요구사항/API 계약(PRD, 기능명세서, API 명세서)
+4. Repository의 실제 Build/Test/Code(이미 구현되고 검증된 동작)
+5. AGENTS.md
+6. docs/architecture (Architecture 단일 기준)
+7. 도구별 지침 (CLAUDE.md, .claude/rules, .codex/ 등)
+8. docs/ai, docs/development 세부 정책
+9. Notion의 초안이거나 저장소 실제 구현과 명백히 오래된 페이지
+10. 기존 코드의 일관된 패턴, 개인 취향
 ```
+
+3번(Notion 확정 요구사항)과 4번 또는 9번(저장소 실제 구현)이 서로 다른 내용을 말하면, 어느 쪽이 "확정"이고 어느 쪽이 "오래됨"인지 AI Agent가 임의로 판단하지 않는다. 대신 `CONTRACT_MISMATCH` 또는 `DECISION_REQUIRED`로 분류해 보고하고 사용자 결정을 기다린다. 실제 판단 사례와 현재 알려진 불일치 목록은 [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md)를 따른다.
 
 상위 요청이 보안 또는 저장소 안전 원칙을 위반할 가능성이 있다면 작업을 그대로 진행하지 않고 위험을 명확하게 보고한다.
 
@@ -189,6 +194,10 @@ docs/ai/git-conventions.md      Git 및 한글 Commit 규칙
 docs/ai/testing-policy.md       테스트 및 검증 정책
 docs/ai/security-policy.md      보안 및 위험 작업 방지 정책
 docs/ai/completion-policy.md    완료 판단 및 결과 보고 정책
+docs/development/quick-start.md         신규 개발자용 로컬 환경 구성 순서
+docs/audit/foundation-audit.md          PR 1~10 전체 기반 Audit 결과
+docs/audit/notion-repository-sync.md    GETI Notion과 저장소 불일치 목록, DECISION_REQUIRED
+docs/audit/ai-scenario-audit.md         AI 개발 시나리오 Static Audit 결과
 ```
 
 Claude Code 전용 설정은 [`CLAUDE.md`](./CLAUDE.md)와 `.claude/`(`rules/`, `commands/`, `skills/`)에, Codex 전용 설정은 `.codex/`(`policies/`, `prompts/`)에 있다.

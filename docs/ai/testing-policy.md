@@ -17,6 +17,7 @@
 - 시간, 환경, 실행 순서에 따라 결과가 달라지는 비결정적 테스트를 만들지 않는다.
 - 실행하지 못한 테스트나 검증 항목은 완료 보고에 명확히 남긴다 ([`completion-policy.md`](./completion-policy.md) 참고).
 - `src/test`(Unit/Slice Test)는 실제 PostgreSQL/Redis 실행을 전제로 작성하지 않는다. PostgreSQL/Redis가 실제로 필요한 검증은 `src/integrationTest`에 Testcontainers로 작성한다.
+- Test에서 실제 외부 API(사람인, 고용24, Discord, OAuth Provider 등)를 호출하지 않는다. 외부 연동은 Mock/Stub 또는 WireMock 같은 Test Double로 검증한다.
 - Persistence(JPA/Flyway/Redis) 관련 코드를 변경하면 `./gradlew test`뿐 아니라 `./gradlew integrationTest`(Docker 필요), `./gradlew test --tests "*ModularityTest"`, 전체 Build(`clean test build`)까지 함께 확인한다.
 - 새 Controller나 공통 Web 기반(응답 형식, 전역 예외 처리, CORS 등)을 추가하거나 변경하면 `@WebMvcTest` 기반 Web Slice Test와 오류 응답 Contract Test(Field 이름, HTTP Status, Error Code, 내부 정보 미노출)를 함께 작성하거나 갱신한다. Production Source에는 예시/Test 전용 Controller를 두지 않는다(`src/test`에만 둔다).
 
@@ -48,10 +49,10 @@ GitHub Actions CI가 Pull Request마다 이 명령들을 자동으로 재실행�
 ArchUnit
 Mutation Testing
 Contract Test
-MockK
+REST Assured
 kotlinx-coroutines-test
 ```
 
 Testcontainers는 `integrationTest` Source Set(PostgreSQL/Redis Persistence Integration Test)에 한해 도입되어 있다([`docs/development/persistence.md`](../development/persistence.md)). 그 외 목적(예: 다른 외부 시스템 Integration Test)으로 확대할지는 실제 필요가 생기는 시점에 판단한다.
 
-`MockK`는 실제 Mocking이 필요한 Kotlin Service/Slice Test가 생기는 시점에 도입 여부를 재검토한다(Mockito는 Spring Boot Test Starter를 통해 이미 사용 가능하다). `kotlinx-coroutines-test`는 Production Source가 Coroutine을 사용하기 시작하면 도입을 검토한다. 위 도구는 필요에 따라 후속 PR에서 도입되고, 이 문서도 함께 갱신될 예정이다.
+GETI Notion Tech Stack은 Mocking 도구로 `Mockito`(MockK 아님)를 확정했다. Mockito는 별도 Dependency 없이 `spring-boot-starter-webmvc-test`/`spring-boot-starter-data-jpa-test`를 통해 이미 Test Classpath에서 사용할 수 있다. `ArchUnit`도 Notion이 확정 도구로 명시하지만, Spring Modulith `ModularityTest`가 이미 Module 경계를 검증하고 있고 실제 검증할 교차 참조 규칙은 Domain Module이 2개 이상 생겨야 의미가 있어 지금 추가하지 않았다. `kotlinx-coroutines-test`는 Production Source가 Coroutine을 사용하기 시작하면 도입을 검토한다. 위 도구는 필요에 따라 후속 PR에서 도입되고, 이 문서도 함께 갱신될 예정이다.

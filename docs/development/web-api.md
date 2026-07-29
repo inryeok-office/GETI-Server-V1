@@ -112,7 +112,7 @@ Spring Data의 `Page<T>`를 API 응답으로 직접 반환하지 않는다. `Pag
 }
 ```
 
-`page`는 Spring Data와 동일하게 0-based를 유지한다(내부 Repository 조회와 외부 API 응답 사이의 별도 변환이 없어 실수 위험이 적다). 최대 Page Size 제한은 실제 API가 생기고 Validation을 붙이는 시점에 해당 Domain PR에서 결정한다(이번 PR에서 임의로 20/100 등의 값을 강제하지 않았다).
+`page`는 Spring Data와 동일하게 0-based를 유지한다(내부 Repository 조회와 외부 API 응답 사이의 별도 변환이 없어 실수 위험이 적다). 최대 Page Size는 `WebPageableConfig`(`PageableHandlerMethodArgumentResolverCustomizer`)가 100으로 강제한다(GETI Notion API 명세서 "목록 기본값: page=0, size=20, 최대 size=100" 반영, [`docs/audit/notion-repository-sync.md`](../audit/notion-repository-sync.md) 참고). `size`가 100을 넘으면 Spring Data가 자동으로 100으로 잘라낸다. `@WebMvcTest`에서 이 Bean을 검증하려면 `@Import(WebPageableConfig::class)`가 필요하다 — `@WebMvcTest`는 `@Controller`/`@ControllerAdvice`/`WebMvcConfigurer` 등 특정 Stereotype만 자동 인식하고 일반 `@Configuration`은 인식하지 않기 때문이다(`GlobalExceptionHandlerTest`의 최대 Page Size Test로 실측 확인).
 
 ## 날짜와 시간
 

@@ -9,7 +9,7 @@ Claude Code는 `CLAUDE.md`만 자동으로 인식하고 `AGENTS.md`는 자동으
 ## 프로젝트 안내
 
 - 프로젝트: GETI-Server, Spring Boot Backend 프로젝트
-- 현재 프로젝트 기본 구조와 GitHub/AI 협업 기반을 갖추는 **초기 구축 단계**다. 아직 실제 도메인 기능은 구현되어 있지 않다.
+- 프로젝트 기본 구조, GitHub/AI 협업 기반, Configuration, Docker, Persistence, 공통 Web/API, CI 기반 구축을 마쳤다(PR 1~10, [`docs/audit/foundation-audit.md`](./docs/audit/foundation-audit.md)). 아직 실제 Domain 기능은 구현되어 있지 않다.
 - Issue와 명세를 기준으로 작업하고, 확인되지 않은 기능이나 Architecture를 추측해서 구현하지 않는다.
 - 코드를 수정하기 전에 기존 코드와 테스트를 먼저 분석한다.
 
