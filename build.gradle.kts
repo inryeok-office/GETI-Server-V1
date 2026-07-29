@@ -6,6 +6,7 @@ plugins {
     kotlin("plugin.jpa") version "2.3.21"
     id("com.diffplug.spotless") version "8.9.0"
     id("dev.detekt") version "2.0.0-alpha.3"
+    id("org.jetbrains.kotlinx.kover") version "0.9.9"
 }
 
 group = "team.inreok.GETI"
