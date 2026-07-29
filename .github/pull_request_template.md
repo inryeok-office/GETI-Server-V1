@@ -36,11 +36,20 @@ PR 제목은 아래 컨벤션을 따라 주세요.
 - [ ] 로컬 빌드가 성공했습니다. (`./gradlew clean test build`)
 - [ ] 기존 테스트가 성공했습니다.
 - [ ] 변경 사항에 필요한 테스트를 추가하거나 수정했습니다.
+- [ ] PostgreSQL/Redis 연동을 변경했다면 `./gradlew integrationTest`(Docker 필요)를 실행했습니다.
+- [ ] CI(GitHub Actions)의 모든 필수 Check가 성공했습니다.
 - [ ] 수동 검증이 필요한 항목을 확인했습니다.
 
 ## 영향 범위
 
 <!-- 영향을 받는 모듈, API, DB, 인프라 등을 작성해 주세요. -->
+
+## Architecture / Database 확인
+
+- [ ] 새 환경 변수를 추가했다면 PR 본문과 관련 문서(`.env.example`, `docs/development/configuration.md` 등)에 반영했습니다.
+- [ ] Migration을 수정하지 않고 새 파일로 추가했습니다(해당 없으면 체크).
+- [ ] JPA Entity를 API 응답으로 직접 노출하지 않았습니다(해당 없으면 체크).
+- [ ] 다른 Module의 내부 구현을 직접 참조하지 않았습니다(해당 없으면 체크).
 
 ## 체크리스트
 
