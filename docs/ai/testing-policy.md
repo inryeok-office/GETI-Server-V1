@@ -1,6 +1,6 @@
 # 테스트 및 검증 정책 (AI 작업 원칙)
 
-현재 GETI-Server는 JUnit 5(JUnit Platform)와 Spring Boot Test를 사용한다. `src/test`의 Unit/Slice Test는 실제 PostgreSQL/Redis 없이 통과해야 하며, JPA Context 테스트는 테스트 전용 H2 In-Memory Database(`testRuntimeOnly`)를 사용한다. Docker(Testcontainers)가 필요한 PostgreSQL/Redis Persistence Integration Test는 별도 `integrationTest` Gradle Task로 분리되어 있으며 `test`/`check`/`build`가 의존하지 않는다([`docs/development/persistence.md`](../development/persistence.md) 참고). 코드 커버리지는 Kover로 측정한다. 테스트 유형별 정책, 도구 선정 이유, 커버리지 명령은 [`docs/development/testing.md`](../development/testing.md)를 따른다.
+현재 GETI-Server는 JUnit 5(JUnit Platform)와 Spring Boot Test를 사용한다. `src/test`의 Unit/Slice Test는 실제 PostgreSQL/Redis 없이 통과해야 하며, JPA Context 테스트는 테스트 전용 H2 In-Memory Database(`testRuntimeOnly`)를 사용한다. Docker(Testcontainers)가 필요한 PostgreSQL/Redis Persistence Integration Test는 별도 `integrationTest` Gradle Task로 분리되어 있으며 `test`/`check`/`build`가 의존하지 않는다([`docs/development/persistence.md`](../development/persistence.md) 참고). Web/Controller 계층은 `@WebMvcTest` + `MockMvc` 기반 Slice Test로 검증한다([`docs/development/web-api.md`](../development/web-api.md) 참고). 코드 커버리지는 Kover로 측정한다. 테스트 유형별 정책, 도구 선정 이유, 커버리지 명령은 [`docs/development/testing.md`](../development/testing.md)를 따른다.
 
 ## 원칙
 
@@ -18,6 +18,7 @@
 - 실행하지 못한 테스트나 검증 항목은 완료 보고에 명확히 남긴다 ([`completion-policy.md`](./completion-policy.md) 참고).
 - `src/test`(Unit/Slice Test)는 실제 PostgreSQL/Redis 실행을 전제로 작성하지 않는다. PostgreSQL/Redis가 실제로 필요한 검증은 `src/integrationTest`에 Testcontainers로 작성한다.
 - Persistence(JPA/Flyway/Redis) 관련 코드를 변경하면 `./gradlew test`뿐 아니라 `./gradlew integrationTest`(Docker 필요), `./gradlew test --tests "*ModularityTest"`, 전체 Build(`clean test build`)까지 함께 확인한다.
+- 새 Controller나 공통 Web 기반(응답 형식, 전역 예외 처리, CORS 등)을 추가하거나 변경하면 `@WebMvcTest` 기반 Web Slice Test와 오류 응답 Contract Test(Field 이름, HTTP Status, Error Code, 내부 정보 미노출)를 함께 작성하거나 갱신한다. Production Source에는 예시/Test 전용 Controller를 두지 않는다(`src/test`에만 둔다).
 
 ## 기본 검증 명령
 

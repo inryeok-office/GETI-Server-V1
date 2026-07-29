@@ -77,6 +77,13 @@ services:
       REDIS_PORT: "6379"
     ports:
       - "127.0.0.1:${SERVER_PORT:-8080}:8080"
+    healthcheck:
+      # Runtime Image(eclipse-temurin:jre-alpine)에 curl이 없어 Alpine 기본 제공 wget(BusyBox)을 사용한다.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${SERVER_PORT:-8080}/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
     depends_on:
       postgres:
         condition: service_healthy

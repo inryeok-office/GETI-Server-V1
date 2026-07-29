@@ -33,6 +33,10 @@ Kotlin Source의 포맷은 EditorConfig(`.editorconfig`)와 Spotless(ktlint)로,
 
 PostgreSQL(Spring Data JPA + Flyway)과 Redis(Lettuce) 연결 기반이 구성되어 있다. 새 Entity/Repository는 Root Package 바로 아래 공용 `entity`/`repository` Package가 아니라 해당 Domain Module Package 안에 둔다. Schema 변경은 Flyway Migration으로만 하고 `spring.jpa.hibernate.ddl-auto`를 `create`/`create-drop`/`update`로 바꾸지 않는다(`validate`/`none`만 사용). 이미 병합된 Migration 파일의 내용은 수정하지 않고 새 버전을 추가한다. `spring.jpa.open-in-view=false`를 유지하고 Controller에서 Transaction을 시작하지 않는다. Redis는 우선 Spring Boot가 기본 제공하는 `StringRedisTemplate`을 사용하고, 실제 객체 직렬화가 필요해지는 시점에 방식(JSON 등)을 판단한다. Docker(Testcontainers)가 필요한 Persistence Integration Test는 `test`/`check`/`build`가 아니라 별도 `integrationTest` Gradle Task로 작성한다. 세부 환경 변수, 정책 근거, Integration Test 구조는 [`docs/development/persistence.md`](../development/persistence.md)를 따른다.
 
+## Web / API 공통 기반
+
+공통 성공 응답(`ApiResponse`), 오류 응답(`ErrorResponse`/`FieldErrorResponse`), Framework Error Code(`ErrorCode`), 전역 예외 처리(`GlobalExceptionHandler`), Pagination 응답(`PageResponse`), CORS(`CorsProperties`/`WebCorsConfig`)가 `team.inreok.getiserver.web`에 구성되어 있다. 새 Domain Controller와 요청/응답 DTO는 이 공용 Package가 아니라 해당 Domain Module 내부에 둔다. Controller에 비즈니스 로직을 작성하거나 Repository를 직접 호출하거나 Transaction을 시작하지 않는다. JPA Entity를 API Response로 직접 반환하지 않고, `Map<String, Any>`를 공통 응답으로 쓰지 않으며, `Page<T>`를 API에 직접 반환하지 않고 `PageResponse.of(page)`로 변환한다. 새 Error Code는 실제로 처리하는 오류에만 추가하고, Domain Error Code는 해당 Domain Module 내부에서 정의해 Web Adapter가 공통 `ErrorResponse`로 변환하게 한다. Exception Message를 검증 없이 그대로 Client에 반환하지 않는다. 시간 값은 `Instant` + UTC ISO-8601을 우선하며, CORS는 `allowedOrigins`가 비어 있으면 비활성 상태를 유지하고 Wildcard(`*`)와 `allowCredentials=true`를 함께 쓰지 않는다. 새 API를 구현하면 Web Slice Test(`@WebMvcTest`)와 오류 Contract Test를 함께 작성한다. 세부 정책과 근거는 [`docs/development/web-api.md`](../development/web-api.md)를 따른다.
+
 ## 아직 확정되지 않은 규칙
 
 다음 항목은 이 저장소에 아직 도입되지 않았다. 확정된 규칙인 것처럼 강제하거나 임의로 구현하지 않는다.
@@ -41,9 +45,8 @@ PostgreSQL(Spring Data JPA + Flyway)과 Redis(Lettuce) 연결 기반이 구성�
 상세 Package Architecture (api/internal 등 Module 내부 하위 구조)
 JPA Entity 상세 설계(공통 Base Class, ID 생성 전략 표준 등)
 QueryDSL 규칙
-공통 API Response 구조
-Global Exception 구조
 Spring Security 구조
+OpenAPI(springdoc) 실제 도입
 ```
 
 위 항목은 추후 Architecture 관련 PR에서 결정되고 문서화될 예정이다. 관련 작업이 필요한 Issue를 받으면, 이 문서가 갱신되기 전까지는 최소한의 구현만 하고 확정된 규칙처럼 문서화하지 않는다.

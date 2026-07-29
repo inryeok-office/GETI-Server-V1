@@ -7,3 +7,12 @@ spring:
       ddl-auto: validate
   flyway:
     clean-disabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
