@@ -51,6 +51,13 @@ GETI-Server에서 Commit, Push, PR을 준비할 때 참고하는 상세 기준�
 - 작업 유형(`🧹 chore` 등)과 영향 영역(`area:` 등) Label은 PR에도 적용한다.
 - 상태 Label(`in progress`, `review` 등)은 Issue에만 적용하고 PR에는 적용하지 않는다 ([`docs/ai/git-conventions.md`](../../../docs/ai/git-conventions.md) 참고).
 
+## CI 확인
+
+- Draft PR을 생성한 뒤 `gh pr checks {pr-number}`로 GitHub Actions(`CI` Workflow, [`docs/development/ci.md`](../../../docs/development/ci.md) 참고)가 실제로 실행되고 통과하는지 확인한다.
+- 실패한 Job이 있으면 `gh run view {run-id} --log-failed`로 원인을 확인하고 수정한 뒤 새 Commit으로 Push한다(Amend나 Force Push 사용 금지).
+- 실제 GitHub Actions Run 결과를 확인하지 않고 CI가 통과했다고 보고하지 않는다.
+- Workflow 파일(`.github/workflows/*.yml`)을 수정하는 경우 최소 권한(`permissions`)을 유지하고, `pull_request_target` 등 위험한 Trigger를 근거 없이 추가하지 않는다.
+
 ## Issue 상태
 
 PR을 생성하면 Issue 상태 Label을 다음과 같이 전환한다.

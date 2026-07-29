@@ -56,6 +56,8 @@ git diff --staged
 - PR 본문에 실제로 실행한 검증 결과를 작성하고, 실행하지 않은 항목을 체크하지 않는다.
 - PR 본문에 관련 Issue를 `Closes #{issue-number}` 형식으로 연결한다.
 - Merge는 사용자의 명시적 요청 없이 수행하지 않는다.
+- GitHub Actions CI(`.github/workflows/ci.yml`, [`docs/development/ci.md`](../../docs/development/ci.md))가 구성되어 있다면 PR 생성 후 `gh pr checks`로 실제 실행 결과를 확인한다. 확인하지 않은 CI 결과를 통과했다고 보고하지 않는다.
+- Repository Ruleset/Branch Protection의 Required Status Check는 사용자의 명시적 승인 없이 변경하지 않는다.
 
 ## Issue 상태 Label
 

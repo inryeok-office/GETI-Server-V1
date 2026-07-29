@@ -57,6 +57,20 @@
 - Datasource URL, Redis 접속 정보를 Log로 출력할 때 Password 등 Secret 성격 값이 함께 노출되지 않도록 주의한다.
 - Testcontainers는 각 Test 종료 시 자동으로 정리된다. 이 PC에 다른 프로젝트의 기존 Container/Volume이 있을 수 있으므로, Persistence 검증 목적으로 `docker compose down -v`나 임의의 Container 정리 명령을 실행할 때는 대상이 이 저장소가 생성한 리소스인지 먼저 확인한다.
 
+## GitHub Actions / CI
+
+- Workflow의 기본 권한은 `permissions: contents: read`를 유지한다. `contents: write`, `pull-requests: write`, `actions: write`, `id-token: write` 등은 실제로 필요한 경우에만, 최소 범위(Job 단위)로 부여한다.
+- `pull_request_target`, `workflow_run` 등 Fork PR에서 상승된 권한이나 Secret에 접근할 수 있는 Trigger는 명확한 보안 검토와 사용자 승인 없이 추가하지 않는다.
+- Secret 값을 Workflow YAML에 직접 작성하지 않는다. GitHub Secret을 새로 생성하거나 조회·출력하지 않는다.
+- Third-party Action은 공식/검증된 Vendor Action만 사용하고 `@main`/`@master`/`@latest`가 아닌 고정된 Version(Major Tag 또는 Commit SHA)을 사용한다([`docs/development/ci.md`](../development/ci.md) 참고).
+- CI를 통과시키기 위해 Test, Spotless, detekt를 비활성화하거나 `continue-on-error: true`를 필수 Job에 추가하지 않는다.
+- Repository Ruleset, Branch Protection, Required Status Check는 사용자(Repository 관리자)의 명시적 승인 없이 파괴적으로 변경하지 않는다. 특히 아직 한 번도 성공하지 않은 Workflow의 Check를 Required로 설정해 이후 모든 PR이 막히는 상황을 만들지 않는다.
+- Webhook URL과 API Token은 Source, Workflow, Issue, PR, Commit Message, 대화 응답 어디에도 평문으로 작성하지 않는다. Discord CI 알림은 `DISCORD_CI_WEBHOOK_URL` Repository Secret으로만 참조한다([`docs/development/ci.md`](../development/ci.md) 참고).
+- 사용자가 대화나 Issue/PR 등 외부 채널에 노출한 Webhook URL이나 Token은 이미 노출된 것으로 취급하고 재사용하지 않는다. 값을 조회하거나 다시 출력하지 않고, 사용자에게 즉시 재발급/재생성을 안내한다.
+- 알림(Discord 등) Job이 실패해도 코드 품질/테스트 결과 자체가 실패로 처리되지 않게 하고, 알림 Job을 Required Status Check로 지정하지 않는다.
+- Fork PR/Dependabot PR처럼 Secret이 전달되지 않는 상황에서는 알림 전송을 안전하게 Skip하고, 이를 위해 `pull_request_target`을 추가하지 않는다.
+- Discord 등 외부 서비스로 보내는 Payload에 Branch/Actor/PR 제목 등 외부 입력을 포함할 때는 Shell 문자열 결합이 아니라 `jq --arg` 등 안전한 Escape 방식을 사용하고, Mention Injection을 막기 위해 `allowed_mentions` 등 제공되는 제한 옵션을 적용한다.
+
 ## Web / API
 
 - 오류 응답에 Exception Message, Stack Trace, Exception Class 이름, SQL, Database Connection 정보, Request Body 전체, Authorization Header, 내부 Package 경로를 포함하지 않는다([`docs/development/web-api.md`](../development/web-api.md)의 `GlobalExceptionHandler` 정책 참고).

@@ -13,6 +13,7 @@ AI Agent가 작업을 "완료"라고 표현하기 전에 확인해야 하는 기
 - 변경과 관련된 테스트가 성공한다.
 - 가능한 범위에서 전체 테스트를 실행했다.
 - Build가 성공한다.
+- GitHub Actions Workflow(`.github/workflows/*.yml`)를 추가하거나 변경했다면, 로컬 검증만으로 완료를 표현하지 않고 실제 Pull Request에서 해당 Workflow Run이 성공한 것을 `gh pr checks`/`gh run view`로 확인했다.
 - 변경 사항의 Diff를 직접 확인했다.
 - Secret이나 민감정보가 포함되지 않았는지 확인했다.
 - 관련 없는 파일이 포함되지 않았는지 확인했다.

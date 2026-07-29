@@ -137,6 +137,10 @@ Spring Data JPA + Flyway로 PostgreSQL에, Lettuce로 Redis에 연결합니다. 
 Health: /actuator/health
 ```
 
+## CI
+
+Pull Request마다 GitHub Actions(`CI` Workflow)가 Gradle Wrapper 검증, Spotless/detekt, Unit Test, Spring Modulith 구조 검증, Integration Test(Testcontainers), Build, Docker 구성 검증을 자동 실행합니다. CD(배포)는 포함하지 않습니다. Job 구성, Required Status Check 이름, Repository Policy는 [`docs/development/ci.md`](./docs/development/ci.md)를 따릅니다.
+
 ## Configuration과 실행
 
 공통 설정과 `local`/`test`/`prod` Profile을 분리하고, Secret은 저장소에 포함하지 않고 환경 변수로 관리합니다. Profile 전략, 환경 변수, `.env.example` 사용법은 [`docs/development/configuration.md`](./docs/development/configuration.md)를 따릅니다.

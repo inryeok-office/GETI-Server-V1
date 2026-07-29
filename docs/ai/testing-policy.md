@@ -38,6 +38,8 @@ Unix 또는 Git Bash:
 
 커버리지 Report가 필요하면 `./gradlew koverHtmlReport`, `./gradlew koverXmlReport`를 실행한다. 이 Task는 `check`에 포함되어 있지 않으므로 필요할 때 별도로 실행한다.
 
+GitHub Actions CI가 Pull Request마다 이 명령들을 자동으로 재실행한다([`docs/development/ci.md`](../development/ci.md) 참고). 로컬 검증은 CI 실행 전에 실패를 미리 잡기 위한 것이며, CI 실행 결과를 대체하지 않는다.
+
 ## 아직 필수로 요구하지 않는 도구
 
 다음 테스트 도구는 이 저장소에 아직 도입되지 않았다. 관련 작업이 아니라면 필수로 요구하거나 임의로 도입하지 않는다.
