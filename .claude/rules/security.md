@@ -53,6 +53,19 @@ git push --force
 git push --force-with-lease
 ```
 
+## Docker
+
+- Image는 공식 Image와 고정 Version(Patch/Release Tag)만 사용한다. `latest`나 Major-only Tag를 사용하지 않는다.
+- `privileged`, Docker Socket Mount, Host Network를 사용하지 않는다.
+- Local 전용 Compose Credential은 운영에서 재사용할 수 없다고 문서화한다.
+- 다음은 Local 데이터를 삭제하는 파괴적 명령이다. 사용자의 명시적 요청 없이 실행하지 않는다.
+
+```bash
+docker compose down -v
+```
+
+세부 내용은 [`docs/development/docker.md`](../../docs/development/docker.md)를 따른다.
+
 ## Dependency
 
 새 Dependency를 추가하기 전에 다음을 확인한다.
