@@ -30,6 +30,7 @@ team.inreok.getiserver                            (Root Package)
     ├── GlobalExceptionHandler.kt                  (Production, 전역 예외 처리)
     ├── CorsProperties.kt                          (Production, CORS ConfigurationProperties)
     ├── WebCorsConfig.kt                           (Production, CORS 등록)
+    ├── WebPageableConfig.kt                       (Production, Pagination 최대 Size 강제)
     ├── WebTestSupportController.kt                (Test 전용 Controller)
     ├── GlobalExceptionHandlerTest.kt              (Test, 오류 응답 Contract 검증)
     └── WebCorsConfigTest.kt                       (Test, CORS 허용/거부 검증)
@@ -100,7 +101,7 @@ Root Package(`team.inreok.getiserver`)는 Spring Modulith가 Direct Subpackage�
 
 ## 향후 Module을 추가할 때의 원칙
 
-아직 확정된 하위 Package 구조(`api`/`internal`, `domain`/`application` 등)를 강제하지 않는다. 다만 다음 원칙은 Module이 실제로 추가될 때부터 지킨다.
+다음 원칙은 Module이 실제로 추가될 때부터 지킨다.
 
 - 각 도메인 기능은 Root Package 바로 아래의 독립된 Package(Application Module 후보)로 구성한다. Package를 `controller`/`service`/`repository`처럼 기술 Layer 중심으로만 나누지 않는다.
 - 다른 Module의 내부 구현 Package를 직접 참조하지 않는다. 다른 Module에 공개해야 하는 타입만 공개 API(또는 Spring Modulith Named Interface)로 노출한다.
@@ -108,7 +109,43 @@ Root Package(`team.inreok.getiserver`)는 Spring Modulith가 Direct Subpackage�
 - Module 간 강한 결합이 필요 없다면 직접 참조 대신 Application Event를 검토한다(Event Publication Registry 등 영속 Event 인프라는 이번 범위가 아니다. [`docs/ai/testing-policy.md`](../ai/testing-policy.md), [`AGENTS.md`](../../AGENTS.md)의 제외 범위 참고).
 - `common`/`global` 성격의 Package는 여러 Module이 실제로 공유하는 기술 요소(예: 공통 예외 타입, 공통 설정)만 담는다. 특정 도메인 전용 DTO, Validator, Exception을 편의상 넣지 않는다.
 - 서로 다른 Module이 같은 JPA Entity를 직접 공유하지 않는다.
-- Module 내부를 `presentation`/`application`/`domain`/`infrastructure`처럼 Layer로 다시 나눌지는 이 문서가 강제하지 않는다. Module 하나의 실제 Class 수와 책임이 그런 세분화를 정당화할 때 해당 Module PR에서 결정한다. Module 내부 상세 구조는 [`docs/ai/coding-conventions.md`](../ai/coding-conventions.md)의 "아직 확정되지 않은 규칙"에 남아 있다.
+- Module 내부 Layer 구조는 아래 "Domain Module 내부 구조(DDD)"를 따른다.
+
+## Domain Module 내부 구조 (DDD)
+
+GETI Notion BE 컨벤션([`docs/audit/notion-repository-sync.md`](../audit/notion-repository-sync.md) 참고)이 Domain Module 내부 구조를 확정했다. 실제 Domain Module을 처음 만드는 PR부터 이 구조를 적용한다. `api`/`internal` 같은 대안 명명은 사용하지 않는다.
+
+```text
+{root-package}.{domain}
+├── domain
+│   ├── model            Entity, Value Object
+│   ├── repository        Repository Interface(구현 아님)
+│   ├── service            Domain Service
+│   └── event              Domain/Application Event
+├── application
+│   ├── command            상태를 변경하는 Use Case 입력
+│   ├── query               조회 전용 Use Case 입력
+│   ├── service             Use Case 구현, Transaction 경계
+│   └── dto                 Application 계층 내부 전달 객체
+├── infrastructure
+│   ├── persistence         JPA Repository 구현
+│   ├── client              외부 API Client
+│   ├── config              이 Module 전용 Configuration
+│   └── adapter             기술별 Adapter
+└── presentation
+    ├── controller
+    ├── request              Request DTO(입력 검증 포함)
+    └── response             Response DTO
+```
+
+계층 책임(Notion 컨벤션 원문 요약):
+
+- **presentation**: HTTP 요청/응답 처리, Request Validation, 인증 사용자 정보 전달, Application Service 호출. 비즈니스 로직을 작성하지 않는다.
+- **application**: Use Case 실행, Transaction 경계 설정(`@Transactional`은 여기서 시작), Domain 객체 조합, 외부 Port 호출. Presentation 전용 객체(Request/Response DTO)에 의존하지 않는다.
+- **domain**: 핵심 비즈니스 규칙, Entity/Value Object/Domain Service, Repository Interface. 특정 Framework/외부 기술 의존을 최소화한다.
+- **infrastructure**: JPA Repository 구현, Redis/Elasticsearch/MinIO 연동, 외부 API Client, 기술별 Adapter.
+
+이 4-Layer 구조는 Module **내부** 구조에만 적용된다. Module 간 경계(다른 Module의 내부 구현을 직접 참조하지 않음, 공개 API/Named Interface로만 협력)는 기존 Spring Modulith 원칙을 그대로 따른다. Class 수가 매우 적은 초기 단계의 Module까지 4-Layer를 전부 채우도록 강제하지는 않는다 — 실제로 필요한 Sub-package부터 만들고, 책임이 늘어나면 채워 나간다.
 
 ## 만들지 않는 Package
 

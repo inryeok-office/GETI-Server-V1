@@ -24,7 +24,9 @@ AI Agent가 GETI-Server 저장소에서 작업을 수행할 때 따르는 표준
 ### 1. 요구사항 확인
 
 - 할 일: 사용자 요청, 연결된 Issue 본문, 완료 조건, 제외 범위를 정확히 읽는다.
+- 할 일(실제 Domain 기능일 때): 사용자가 명시적으로 언급하지 않았더라도 GETI Notion(기능명세서, API 명세서, PRD, BE 도메인)에서 관련 Domain 문서를 먼저 확인한다. Notion에 이미 확정된 필드, 권한, 상태 전이, 개인정보 규칙이 있는데 이를 확인하지 않고 임의로 설계하면 후속 작업에서 다시 만들어야 한다. Notion과 저장소 구현이 다르면 임의로 판단하지 않고 [`docs/audit/notion-repository-sync.md`](../audit/notion-repository-sync.md)의 분류 기준(`CONTRACT_MISMATCH`/`DECISION_REQUIRED`)을 따른다.
 - 하지 말 것: 요청에 없는 내용을 짐작해서 작업 범위에 포함시키지 않는다.
+- 하지 말 것: Notion 확인 없이 Domain 필드·권한·상태값을 추측해서 만들지 않는다.
 
 ### 2. Git 상태 확인
 
