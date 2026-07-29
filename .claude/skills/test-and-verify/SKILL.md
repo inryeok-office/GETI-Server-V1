@@ -19,7 +19,7 @@ GETI-Server에서 변경 사항을 검증할 때 참고하는 상세 기준이�
 ### 설정 변경 (`build.gradle.kts`, `application.yaml` 등)
 
 - Parsing이 성공하는지
-- Profile에 영향이 있는지 (현재 저장소는 별도 Profile 체계가 없다)
+- Profile에 영향이 있는지 (`local`/`test`/`prod` Profile 전략은 [`docs/development/configuration.md`](../../../docs/development/configuration.md) 참고)
 - 관련 Bean이 정상 생성되는지
 - Spring Context가 정상 로드되는지
 - Build 성공 여부
