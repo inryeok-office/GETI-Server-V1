@@ -144,7 +144,7 @@ Host에서 실행하는 Spring Boot(`bootRun`, IntelliJ)는 `localhost` 열을, 
 | `POSTGRES_USER` | `geti` | PostgreSQL User |
 | `POSTGRES_PASSWORD` | `geti-local-only` | PostgreSQL Password |
 | `MINIO_ROOT_USER` | `geti-local` | MinIO Root User |
-| `MINIO_ROOT_PASSWORD` | `geti-local-only` | MinIO Root Password |
+| `MINIO_ROOT_PASSWORD` | `geti-local-minio` | MinIO Root Password |
 
 **이 값들은 Local 개발 전용이며 운영 환경이나 공유 환경에서 절대 재사용하지 않는다.** 실제 값은 `.env.example`과 `compose.yaml`에서 확인할 수 있으며 둘 다 실제 운영 Secret이 아니다. 운영 Credential 관리 방식은 [`configuration.md`](./configuration.md)의 Secret 관리 정책을 따른다.
 
