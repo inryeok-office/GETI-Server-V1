@@ -21,13 +21,16 @@ GETI-Server는 아직 초기 구축 단계이며, 확정된 도메인 Architectu
 
 Kotlin Source의 포맷은 EditorConfig(`.editorconfig`)와 Spotless(ktlint)로, 정적 분석은 detekt로 자동 검사한다. 도구가 검사하는 항목(공백, Import 정렬, 코드 스멜 등)을 수동으로 재판단하지 않고 `./gradlew spotlessApply`, `./gradlew spotlessCheck`, `./gradlew detekt`를 사용한다. 도구별 설정과 명령은 [`docs/development/code-quality.md`](../development/code-quality.md)를 따른다.
 
+## 모듈 경계 (Spring Modulith)
+
+새 도메인 기능은 Root Package(`team.inreok.geti.getiserver`) 바로 아래의 독립된 Package(Application Module 후보)에 구현한다. 다른 Module의 내부 구현 Package를 직접 참조하지 않고, 순환 의존성을 만들지 않는다. `common`/`global` Package에는 여러 Module이 실제로 공유하는 기술 요소만 두고 특정 도메인 로직을 넣지 않는다. Package를 추가하거나 옮긴 뒤에는 `./gradlew test --tests "*ModularityTest"`로 구조 검증을 실행한다. 세부 원칙과 현재 상태는 [`docs/architecture/modularity.md`](../architecture/modularity.md)를 따른다.
+
 ## 아직 확정되지 않은 규칙
 
 다음 항목은 이 저장소에 아직 도입되지 않았다. 확정된 규칙인 것처럼 강제하거나 임의로 구현하지 않는다.
 
 ```text
-Spring Modulith Module 경계
-상세 Package Architecture
+상세 Package Architecture (api/internal 등 Module 내부 하위 구조)
 JPA Entity 규칙
 QueryDSL 규칙
 공통 API Response 구조

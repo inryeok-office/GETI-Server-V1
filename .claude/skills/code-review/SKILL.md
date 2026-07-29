@@ -61,6 +61,7 @@ GETI-Server 변경 사항을 검토할 때 참고하는 상세 기준이다. [`r
 - 과도한 추상화
 - 불필요한 Dependency
 - 남아 있는 Debug Code
+- 새 Package를 추가했다면 다른 Application Module의 내부 구현을 직접 참조하지 않는지, 순환 의존을 만들지 않는지 ([`docs/architecture/modularity.md`](../../../docs/architecture/modularity.md) 참고)
 
 공백, Import 정렬 등 순수 포맷 문제는 Spotless(ktlint)가, 코드 스멜/복잡도 등 상당수 정적 분석 항목은 detekt가 이미 `check`에서 자동 검사한다 ([`docs/development/code-quality.md`](../../../docs/development/code-quality.md) 참고). 리뷰에서는 이런 도구가 잡아내지 못하는 논리·설계 문제에 집중하고, 도구가 이미 강제하는 규칙을 중복으로 지적하지 않는다.
 

@@ -42,6 +42,7 @@ git diff origin/develop...HEAD
 - 테스트 누락
 - 관련 없는 변경 포함 여부
 - 남아 있는 Debug Code
+- 새 Package가 다른 Application Module의 내부 구현을 직접 참조하지 않는지, 순환 의존을 만들지 않는지 (docs/architecture/modularity.md 참고)
 
 포맷(공백, Import 정렬 등)은 Spotless(ktlint)가, 상당수 코드 스멜/복잡도는 detekt가 이미 자동 검사하니(./gradlew spotlessCheck, ./gradlew detekt) 같은 내용을 중복으로 지적하지 말고 논리·설계 문제에 집중해.
 
