@@ -252,3 +252,191 @@ jobs:
             echo "### Docker Validation"
             echo "- \`docker compose config\`, \`docker build\`(Registry Push 없음)"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  notify-discord:
+    name: Notify Discord
+    needs:
+      - wrapper-validation
+      - quality
+      - unit-test
+      - integration-test
+      - build
+      - docker-validation
+    # 선행 Job의 성공/실패/Skip과 관계없이 완료 결과를 항상 알려야 하므로 always()를
+    # 사용한다. 이 Job은 Required Status Check가 아니며(docs/development/ci.md 참고),
+    # 알림 성공/실패가 CI의 필수 결과에 영향을 주지 않는다.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Determine overall CI result
+        id: overall
+        env:
+          WRAPPER_VALIDATION_RESULT: ${{ needs.wrapper-validation.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          UNIT_TEST_RESULT: ${{ needs.unit-test.result }}
+          INTEGRATION_TEST_RESULT: ${{ needs.integration-test.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          DOCKER_VALIDATION_RESULT: ${{ needs.docker-validation.result }}
+        run: |
+          set -Eeuo pipefail
+          results="$WRAPPER_VALIDATION_RESULT $QUALITY_RESULT $UNIT_TEST_RESULT $INTEGRATION_TEST_RESULT $BUILD_RESULT $DOCKER_VALIDATION_RESULT"
+
+          if grep -qw "failure" <<< "$results"; then
+            overall="failure"
+          elif grep -qw "cancelled" <<< "$results"; then
+            overall="cancelled"
+          elif grep -qw "skipped" <<< "$results"; then
+            overall="skipped"
+          else
+            overall="success"
+          fi
+
+          echo "result=$overall" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Pull Request info
+        id: pr
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -Eeuo pipefail
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+
+      # Webhook 전송 없이도 Payload만 단위로 검증할 수 있도록 생성과 전송 Step을
+      # 분리한다. 이 Step은 Secret을 전혀 참조하지 않는다.
+      - name: Build Discord payload
+        id: payload
+        env:
+          OVERALL_RESULT: ${{ steps.overall.outputs.result }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          EVENT_NAME: ${{ github.event_name }}
+          # pull_request Event에서는 github.ref_name이 PR Merge Ref(예: 123/merge)이므로
+          # 실제 Source Branch 이름은 head_ref를 우선 사용한다.
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+          WRAPPER_VALIDATION_RESULT: ${{ needs.wrapper-validation.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          UNIT_TEST_RESULT: ${{ needs.unit-test.result }}
+          INTEGRATION_TEST_RESULT: ${{ needs.integration-test.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          DOCKER_VALIDATION_RESULT: ${{ needs.docker-validation.result }}
+        run: |
+          set -Eeuo pipefail
+
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+
+          case "$OVERALL_RESULT" in
+            success)   TITLE="✅ CI 성공"; COLOR=3066993 ;;
+            failure)   TITLE="❌ CI 실패"; COLOR=15158332 ;;
+            cancelled) TITLE="⚠️ CI 취소"; COLOR=15105570 ;;
+            *)         TITLE="ℹ️ CI 일부 건너뜀"; COLOR=16776960 ;;
+          esac
+
+          fields=$(jq -n \
+            --arg repo "$REPOSITORY" \
+            --arg event "$EVENT_NAME" \
+            --arg branch "$BRANCH_NAME" \
+            --arg commit "$SHORT_SHA" \
+            --arg actor "$ACTOR" \
+            --arg overall "$OVERALL_RESULT" \
+            --arg wrapper "$WRAPPER_VALIDATION_RESULT" \
+            --arg quality "$QUALITY_RESULT" \
+            --arg unitTest "$UNIT_TEST_RESULT" \
+            --arg integrationTest "$INTEGRATION_TEST_RESULT" \
+            --arg build "$BUILD_RESULT" \
+            --arg docker "$DOCKER_VALIDATION_RESULT" \
+            '[
+              {name: "Repository", value: $repo, inline: true},
+              {name: "Event", value: $event, inline: true},
+              {name: "Branch", value: $branch, inline: true},
+              {name: "Commit", value: $commit, inline: true},
+              {name: "Actor", value: $actor, inline: true},
+              {name: "Overall Result", value: $overall, inline: true},
+              {name: "Wrapper Validation", value: $wrapper, inline: true},
+              {name: "Quality", value: $quality, inline: true},
+              {name: "Unit Test", value: $unitTest, inline: true},
+              {name: "Integration Test", value: $integrationTest, inline: true},
+              {name: "Build", value: $build, inline: true},
+              {name: "Docker Validation", value: $docker, inline: true}
+            ]')
+
+          if [ -n "${PR_NUMBER:-}" ]; then
+            fields=$(jq --arg num "$PR_NUMBER" --arg url "$PR_URL" \
+              '. + [{name: "Pull Request", value: ("#" + $num + " " + $url), inline: false}]' \
+              <<< "$fields")
+          fi
+
+          jq -n \
+            --arg title "$TITLE" \
+            --argjson color "$COLOR" \
+            --argjson fields "$fields" \
+            --arg runUrl "$RUN_URL" \
+            --arg workflow "$WORKFLOW_NAME" \
+            '{
+              embeds: [
+                {
+                  title: $title,
+                  description: ($workflow + " Workflow 실행 결과"),
+                  color: $color,
+                  fields: $fields,
+                  url: $runUrl
+                }
+              ],
+              allowed_mentions: { parse: [] }
+            }' > /tmp/discord-payload.json
+
+          # 생성된 Payload가 유효한 JSON인지만 확인한다(Secret이 없어도 검증 가능).
+          jq empty /tmp/discord-payload.json
+
+      # Webhook URL은 이 Step의 Environment Variable로만 존재하며 Log, echo, set -x
+      # 어디에도 출력하지 않는다. Secret이 없으면(Fork PR, Dependabot PR, 미등록)
+      # 안전하게 Skip하고 Job 자체를 실패시키지 않는다.
+      - name: Send Discord notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_CI_WEBHOOK_URL }}
+          OVERALL_RESULT: ${{ steps.overall.outputs.result }}
+        run: |
+          set -Eeuo pipefail
+
+          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
+            echo "::notice::Discord CI notification skipped because DISCORD_CI_WEBHOOK_URL is unavailable."
+            {
+              echo "### Discord 알림"
+              echo "- 결과: Skip (\`DISCORD_CI_WEBHOOK_URL\` Secret 없음 — Fork PR/Dependabot PR 또는 미등록)"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          http_status=$(curl \
+            --silent \
+            --show-error \
+            --output /tmp/discord-response.json \
+            --write-out "%{http_code}" \
+            --connect-timeout 10 \
+            --max-time 20 \
+            --request POST \
+            --header "Content-Type: application/json" \
+            --data @/tmp/discord-payload.json \
+            "${DISCORD_WEBHOOK_URL}?wait=true") || http_status="curl_error"
+
+          if [ "$http_status" = "curl_error" ] || [ "$http_status" -ge 300 ]; then
+            echo "::warning::Discord CI notification failed (HTTP status: ${http_status})."
+            {
+              echo "### Discord 알림"
+              echo "- 결과: 전송 실패 (HTTP ${http_status})"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "### Discord 알림"
+            echo "- 결과: 전송 성공 (Overall: ${OVERALL_RESULT})"
+          } >> "$GITHUB_STEP_SUMMARY"

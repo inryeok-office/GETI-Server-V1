@@ -65,6 +65,11 @@
 - Third-party Action은 공식/검증된 Vendor Action만 사용하고 `@main`/`@master`/`@latest`가 아닌 고정된 Version(Major Tag 또는 Commit SHA)을 사용한다([`docs/development/ci.md`](../development/ci.md) 참고).
 - CI를 통과시키기 위해 Test, Spotless, detekt를 비활성화하거나 `continue-on-error: true`를 필수 Job에 추가하지 않는다.
 - Repository Ruleset, Branch Protection, Required Status Check는 사용자(Repository 관리자)의 명시적 승인 없이 파괴적으로 변경하지 않는다. 특히 아직 한 번도 성공하지 않은 Workflow의 Check를 Required로 설정해 이후 모든 PR이 막히는 상황을 만들지 않는다.
+- Webhook URL과 API Token은 Source, Workflow, Issue, PR, Commit Message, 대화 응답 어디에도 평문으로 작성하지 않는다. Discord CI 알림은 `DISCORD_CI_WEBHOOK_URL` Repository Secret으로만 참조한다([`docs/development/ci.md`](../development/ci.md) 참고).
+- 사용자가 대화나 Issue/PR 등 외부 채널에 노출한 Webhook URL이나 Token은 이미 노출된 것으로 취급하고 재사용하지 않는다. 값을 조회하거나 다시 출력하지 않고, 사용자에게 즉시 재발급/재생성을 안내한다.
+- 알림(Discord 등) Job이 실패해도 코드 품질/테스트 결과 자체가 실패로 처리되지 않게 하고, 알림 Job을 Required Status Check로 지정하지 않는다.
+- Fork PR/Dependabot PR처럼 Secret이 전달되지 않는 상황에서는 알림 전송을 안전하게 Skip하고, 이를 위해 `pull_request_target`을 추가하지 않는다.
+- Discord 등 외부 서비스로 보내는 Payload에 Branch/Actor/PR 제목 등 외부 입력을 포함할 때는 Shell 문자열 결합이 아니라 `jq --arg` 등 안전한 Escape 방식을 사용하고, Mention Injection을 막기 위해 `allowed_mentions` 등 제공되는 제한 옵션을 적용한다.
 
 ## Web / API
 

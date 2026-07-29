@@ -56,6 +56,7 @@ concurrency:
 | Integration Test | `integrationTest`(PostgreSQL/Redis Testcontainers) | 예(GitHub-hosted Runner 기본 제공) | Wrapper Validation |
 | Build | `build`(Spotless/detekt/Test/Kover Verify 포함) | 아니오 | Wrapper Validation, Quality, Unit Test |
 | Docker Validation | `docker compose config`, `docker build`(Push 없음) | 예 | Wrapper Validation, Quality, Unit Test |
+| Notify Discord | 위 6개 Job 결과를 종합해 Discord로 완료 알림 전송(아래 [Discord CI 알림](#discord-ci-알림) 참고) | 아니오 | 위 6개 Job 전체, `if: always()` |
 
 Job을 Wrapper Validation 뒤에 병렬로 배치해 실패 원인을 빠르게 구분할 수 있게 했다. Quality/Unit Test가 실패하면 Build/Docker Validation은 실행되지 않아 불필요한 비용을 줄인다.
 
@@ -140,6 +141,8 @@ CI / Docker Validation
 ```
 
 Workflow 파일의 `name:`(workflow)과 각 Job의 `name:`을 변경하면 이 Check 이름도 바뀌어 기존 Required Check 설정이 끊어질 수 있다. 이름을 바꾸는 PR에서는 이 표와 실제 Branch Protection 설정을 함께 갱신한다.
+
+`Notify Discord` Job은 이 목록에 포함하지 않는다. Discord 알림은 부가 기능이며 실패해도 CI의 필수 결과에 영향을 주지 않아야 하므로 Required Status Check로 지정하지 않는다.
 
 ## Repository Policy 현재 상태 (2026-07-29 실측)
 
@@ -266,3 +269,110 @@ Required Check
 ```
 
 실패를 숨기기 위해 `continue-on-error`를 추가하지 않는다.
+
+## Discord CI 알림
+
+`CI` Workflow의 마지막 Job `notify-discord`(표시 이름 `Notify Discord`)가 앞선 6개 Job(Wrapper Validation, Quality, Unit Test, Integration Test, Build, Docker Validation) 결과를 종합해 Discord Channel로 완료 알림을 보낸다.
+
+### Repository Secret
+
+| 항목 | 값 |
+| --- | --- |
+| Secret 이름 | `DISCORD_CI_WEBHOOK_URL` |
+| 값 | Discord Channel의 Webhook URL(이 저장소 어디에도 실제 값을 기록하지 않는다) |
+| 등록 방법 | 아래 참고 |
+| 등록 확인 | `gh secret list`(이름만 확인 가능, 값은 조회하지 않는다) |
+
+등록:
+
+```bash
+gh secret set DISCORD_CI_WEBHOOK_URL
+```
+
+또는 GitHub UI:
+
+```text
+Repository Settings → Secrets and variables → Actions → New repository secret
+```
+
+**Webhook URL은 채팅, Issue, PR, Commit Message, 이 문서를 포함한 어떤 곳에도 평문으로 작성하지 않는다.** 이미 외부에 노출된 Webhook URL이 있다면 사용하지 않고 Discord Channel 설정에서 즉시 재생성(Regenerate)한 뒤, 새 값만 위 명령으로 등록한다.
+
+### 알림 대상 Event와 정책
+
+| Event | Success 알림 | Failure 알림 |
+| --- | --- | --- |
+| `pull_request`(develop, main) | O | O |
+| `push`(develop, main) | O | O |
+| `workflow_dispatch` | O | O |
+
+같은 Workflow Run에서 알림은 `notify-discord` Job 한 번만 실행되며, Job별로 별도 메시지를 보내지 않는다.
+
+### 전체 결과 계산
+
+`notify-discord` Job은 6개 선행 Job의 `needs.<job-id>.result`를 다음 우선순위로 종합한다(Job 자체의 실행 결과가 아니라 이 계산값을 사용한다).
+
+```text
+하나 이상 failure   → failure  (❌ CI 실패)
+failure 없고 하나 이상 cancelled → cancelled (⚠️ CI 취소)
+failure/cancelled 없고 하나 이상 skipped → skipped (ℹ️ CI 일부 건너뜀)
+모두 success        → success (✅ CI 성공)
+```
+
+이 우선순위 로직은 `jq` 없이 Sample 값으로 로컬에서 단위 검증했다(성공/실패/취소/Skip 조합 모두 의도한 값을 반환).
+
+### Discord Payload
+
+- 형식: Discord Embed 1개
+- 포함 Field: Repository, Event, Branch, Commit(앞 7자리), Actor, Overall Result, Wrapper Validation, Quality, Unit Test, Integration Test, Build, Docker Validation, (PR Event일 때만) Pull Request 번호/URL
+- `url`: GitHub Actions Run URL(`${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`)
+- `allowed_mentions.parse`를 빈 배열로 고정해 Actor/Branch 등 외부 입력이 `@everyone`/`@here`/Mention으로 해석되지 않게 한다.
+- Branch, Actor, PR 정보 등 외부 입력은 Shell 문자열 결합이 아니라 `jq --arg`(Untrusted Input을 JSON 문자열로 안전하게 Escape)로만 Payload에 들어간다.
+- PR 제목, Commit Message, Test Log, Stack Trace는 포함하지 않는다.
+- Secret, Webhook URL, 환경 변수 값, DB/Redis/MinIO Credential, Authorization Header, Request Body는 포함하지 않는다.
+
+`pull_request` Event에서는 `github.head_ref`(실제 Source Branch 이름)를 사용한다. `github.ref_name`은 PR Event에서 `123/merge` 형태의 Merge Ref이므로 사용하지 않는다.
+
+### Payload 생성과 전송 분리
+
+Job은 두 Step으로 나뉜다.
+
+1. `Build Discord payload` — Secret을 전혀 참조하지 않고 `/tmp/discord-payload.json`을 생성한다. `jq empty`로 유효한 JSON인지 자체 검증한다. 이 Step만으로 Payload 형식을 Secret 없이도 검증할 수 있다(로컬 검증 결과는 아래 참고).
+2. `Send Discord notification` — `secrets.DISCORD_CI_WEBHOOK_URL`을 이 Step의 Environment Variable로만 받아 `curl`로 POST한다. Webhook URL은 어떤 명령에도 echo/출력하지 않는다.
+
+### Secret이 없을 때(Fork PR, Dependabot PR, 미등록)
+
+`DISCORD_WEBHOOK_URL` 환경 변수가 비어 있으면 전송 Step이 다음을 수행하고 **Job을 성공으로 종료**한다.
+
+- `::notice::` 수준의 GitHub Actions 안내 메시지 출력(Secret 이름만 언급, 값 없음)
+- Job Step Summary에 Skip 사유 기록
+- CI의 필수 Job 결과에는 어떤 영향도 주지 않음
+
+### 알림 실패 정책(Non-blocking)
+
+Discord 전송이 HTTP 오류(300 이상 Status) 또는 Curl 자체 오류로 실패해도 `notify-discord` Job은 `exit 0`으로 종료한다.
+
+- `::warning::`으로 GitHub Actions에 실패를 표시(완전히 조용히 무시하지 않음)
+- Job Step Summary에 실패 사실과 HTTP Status 기록
+- `notify-discord`는 Required Status Check가 아니므로 CI의 필수 Job(Wrapper Validation ~ Docker Validation)과 Merge 가능 여부에 영향을 주지 않음
+- Connect Timeout 10초, 전체 Timeout 20초. 무한 Retry를 수행하지 않음(1회 시도)
+
+### 보안
+
+- Third-party Discord Action을 사용하지 않는다. `bash` + `curl` + `jq`(GitHub-hosted `ubuntu-latest`에 기본 설치)만 사용한다.
+- `pull_request_target`을 사용하지 않는다. `notify-discord`는 일반 `pull_request` Event의 Job 중 하나로만 존재하며, Fork PR에서는 Secret이 전달되지 않아 위 "Secret이 없을 때" 정책에 따라 자동으로 Skip된다.
+- Job/Workflow 권한을 추가로 확장하지 않는다(기존 `contents: read` 그대로).
+- `set -x`, `echo "$DISCORD_WEBHOOK_URL"`, `env`, `printenv`를 Script에 사용하지 않는다.
+
+### 로컬 검증 결과 (Secret 불필요)
+
+Webhook Secret 없이 다음을 로컬에서 실제로 검증했다(`winget install jqlang.jq`로 `jq 1.8.2` 설치 후 실행).
+
+- Workflow YAML: `python -c "import yaml; yaml.safe_load(...)"` 통과, `notify-discord` Job의 `needs`(6개 Job 전체), `if: always()` 확인
+- 전체 결과 계산 우선순위: `success`/한 `failure`/`failure`+`cancelled` 동시 발생/`cancelled`만/`skipped`만/`cancelled`+`skipped` 동시 발생 6가지 조합 모두 의도한 값 반환 확인
+- Payload 생성(성공 Sample, `pull_request` Event, PR Field 포함): 유효한 JSON, Embed 1개, Field 13개(PR 포함), `allowed_mentions.parse` 빈 배열 확인
+- Payload 생성(실패 Sample, `push` Event, PR 없음): 유효한 JSON, Field 12개(PR 미포함), 제목 "❌ CI 실패" 확인
+- Sample 값에 실제 Secret이나 노출된 Webhook URL을 사용하지 않았다.
+
+### 실제 GitHub Actions 검증 제한
+
+이번 반영 시점에는 `gh secret list` 결과가 비어 있어 `DISCORD_CI_WEBHOOK_URL`이 아직 등록되지 않았다. 따라서 이 PR의 실제 Workflow Run에서는 `notify-discord` Job이 "Secret이 없을 때" 경로(안전한 Skip)로 실행되는 것까지만 실제로 확인할 수 있다. Secret을 등록한 뒤 실제 Discord 전송(Success/Failure 각각)과 메시지 수신 여부는 후속으로 확인이 필요하다.
