@@ -7,13 +7,13 @@ Spring Modulith 도입은 즉시 MSA로 분리한다는 뜻이 아니다. 현재
 ## 현재 상태
 
 - Root Package: `team.inreok.getiserver`
-- 이 Package 바로 아래에는 `GetiServerApplication`(Application 진입점)과 기술 기반 Package `web`(PR 9, 공통 Web/API 기반)이 있다. 아직 도메인 Package는 없다.
-- `ApplicationModules.of(GetiServerApplication::class.java)`로 탐지되는 Application Module은 현재 **1개**(`web`)다. 이는 실제 측정 결과이며, Module을 만들기 위해 가짜 Package나 Marker Class를 추가하지 않았다 — `web`은 PR 9에서 실제로 필요해진 공통 Web 기반 Class(성공/오류 응답, 전역 예외 처리, CORS)를 담는다.
+- 이 Package 바로 아래에는 `GetiServerApplication`(Application 진입점)과 기술 기반 Package `global`(PR 9에서 `web`으로 시작해 PR 12에서 `global`로 재구성, 공통 Web/API/예외 기반)이 있다. 아직 도메인 Package는 없다.
+- `ApplicationModules.of(GetiServerApplication::class.java)`로 탐지되는 Application Module은 현재 **1개**(`global`)다. 이는 실제 측정 결과이며, Module을 만들기 위해 가짜 Package나 Marker Class를 추가하지 않았다 — `global`은 실제로 필요해진 공통 기반 Class(성공/오류 응답, 전역 예외 처리, 공통 예외 기반, requestId, CORS)를 담는다. `error`(오류 계약)와 `web`(HTTP 응답/설정)로 하위 Package를 나눴지만 둘 다 `global`의 Direct Subpackage라 Spring Modulith Module 수에는 영향이 없다.
 - 도메인 Package가 추가되면 별도 설정 변경 없이 Root Package 바로 아래 Package가 자동으로 Application Module로 탐지된다(Spring Modulith 기본 탐지 전략, Direct Subpackage 기준).
 
 ## Package Tree
 
-실제 Production/Test Package 구조는 다음과 같다(2026-07-29 기준, Web/API 기반 구성 PR 시점).
+실제 Production/Test Package 구조는 다음과 같다(2026-07-30 기준, Global 전역 예외 처리 및 에러 응답 계약 정비 PR 시점).
 
 ```text
 team.inreok.getiserver                            (Root Package)
@@ -22,21 +22,26 @@ team.inreok.getiserver                            (Root Package)
 ├── ModularityTest.kt                             (Test, 구조 검증)
 ├── ModuleDocumentationTest.kt                     (Test, 문서 생성)
 ├── ApplicationProfileConfigurationTest.kt         (Test, Profile Config Data Binding 검증)
-└── web                                            (Production + Test, Application Module — 공통 Web/API 기반)
-    ├── ApiResponse.kt                            (Production, 공통 성공 응답)
-    ├── PageResponse.kt                           (Production, Pagination 응답)
-    ├── ErrorCode.kt                               (Production, Framework Error Code)
-    ├── ErrorResponse.kt                           (Production, 공통 오류 응답)
-    ├── GlobalExceptionHandler.kt                  (Production, 전역 예외 처리)
-    ├── CorsProperties.kt                          (Production, CORS ConfigurationProperties)
-    ├── WebCorsConfig.kt                           (Production, CORS 등록)
-    ├── WebPageableConfig.kt                       (Production, Pagination 최대 Size 강제)
-    ├── WebTestSupportController.kt                (Test 전용 Controller)
-    ├── GlobalExceptionHandlerTest.kt              (Test, 오류 응답 Contract 검증)
-    └── WebCorsConfigTest.kt                       (Test, CORS 허용/거부 검증)
+└── global                                         (Production + Test, Application Module — 공통 기반)
+    ├── error
+    │   ├── ErrorCode.kt                          (Production, Framework Error Code)
+    │   ├── ErrorResponse.kt                       (Production, 공통 오류 응답)
+    │   ├── BusinessException.kt                   (Production, Domain 예외 공통 기반)
+    │   ├── GlobalExceptionHandler.kt               (Production, 전역 예외 처리)
+    │   └── GlobalExceptionHandlerTest.kt           (Test, 오류 응답 Contract 검증)
+    └── web
+        ├── ApiResponse.kt                         (Production, 공통 성공 응답)
+        ├── PageResponse.kt                        (Production, Pagination 응답)
+        ├── CorsProperties.kt                       (Production, CORS ConfigurationProperties)
+        ├── WebCorsConfig.kt                        (Production, CORS 등록)
+        ├── WebPageableConfig.kt                    (Production, Pagination 최대 Size 강제)
+        ├── RequestIdFilter.kt                      (Production, requestId 생성/MDC 등록)
+        ├── WebTestSupportController.kt             (Test 전용 Controller)
+        ├── WebCorsConfigTest.kt                    (Test, CORS 허용/거부 검증)
+        └── RequestIdFilterTest.kt                  (Test, requestId 생성/재사용 검증)
 ```
 
-Root Package 바로 아래에는 `GetiServerApplication`(진입점, 이를 검증하는 Test 4개)과 `web`(공통 Web 기반) Package만 있다. `common`/`global`/`util`/`controller`/`service`/`repository` 같은 포괄 Package는 없다.
+Root Package 바로 아래에는 `GetiServerApplication`(진입점, 이를 검증하는 Test 4개)과 `global`(공통 기반) Package만 있다. `common`/`util`/`controller`/`service`/`repository` 같은 무제한·포괄 Package는 없다 — `global`은 `error`/`web` 두 개의 좁은 책임으로만 나뉘어 있고, 특정 Domain 로직은 담지 않는다.
 
 `GetiServerApplication`이 있는 Root Package는 Class 1개뿐인 평평한 구조를 유지한다. 실제 Domain Package가 생기기 전까지 이 구조를 임의로 재배치할 근거가 없다.
 
@@ -84,7 +89,8 @@ Custom Detection Strategy를 별도로 구현하지 않고 Spring Modulith 기�
 | `configuration` | Spring Framework Configuration Class, `@ConfigurationProperties` | 없음. Kotlin Class가 하나도 없다(Profile YAML 파일만 존재, [`configuration.md`](../development/configuration.md) 참고) |
 | `infrastructure` | 실제 외부 시스템 Adapter(PostgreSQL, Redis, MinIO 등과 통신하는 코드) | 없음. PostgreSQL/Redis 연결 설정과 Migration/Test 기반은 구성했지만([`persistence.md`](../development/persistence.md)) 실제 Domain Entity/Repository/Adapter Class는 아직 없다 |
 | `support` | 여러 Module이 실제로 공유하는 순수 기술 지원 코드(Clock Adapter, ID 생성기 등) | 없음. 공유가 필요한 코드 자체가 없다 |
-| `web` | 모든 Domain Controller가 공유하는 HTTP Web 기술 기반(공통 응답, 오류 처리, CORS 등) | 있음. PR 9에서 구성([`web-api.md`](../development/web-api.md) 참고) |
+| `global.web` | 모든 Domain Controller가 공유하는 HTTP Web 기술 기반(공통 응답, Pagination, CORS, requestId 등) | 있음. PR 9에서 `web`으로 구성, PR 12에서 `global.web`으로 재구성([`web-api.md`](../development/web-api.md) 참고) |
+| `global.error` | 모든 Domain이 공유하는 오류 계약(Error Code, 오류 응답, 전역 예외 처리, 공통 예외 기반) | 있음. PR 9에서 `web`으로 구성, PR 12에서 `global.error`로 재구성([`web-api.md`](../development/web-api.md) 참고) |
 
 `src/integrationTest/kotlin/team/inreok/getiserver/persistence/`에는 PostgreSQL/Redis Integration Test 전용 Entity/Repository(`PersistenceProbeEntity` 등, [`persistence.md`](../development/persistence.md) 참고)가 있다. 이는 `integrationTest`라는 별도 Gradle Source Set에만 존재하며 `main` Classpath에 포함되지 않으므로, `ApplicationModules.of(GetiServerApplication::class.java)` 탐지 대상이 아니고 Application Module로 세지 않는다. 위 표의 `infrastructure` Package(Production Adapter)와는 다른 목적이다.
 
@@ -93,11 +99,11 @@ Custom Detection Strategy를 별도로 구현하지 않고 Spring Modulith 기�
 - `configuration`: 첫 `@Configuration` Class 또는 `@ConfigurationProperties` Class가 추가될 때. `config`, `configs`, `properties` 등 다른 이름과 혼용하지 않고 `configuration`으로 통일한다([`configuration.md`](../development/configuration.md)와 동일한 용어).
 - `infrastructure`: 첫 외부 시스템 Adapter(예: PR 8의 Persistence Adapter)가 추가될 때. `infra`로 축약하지 않는다.
 - `support`: 두 개 이상의 Module이 실제로 같은 기술 코드를 공유해야 하는 근거가 생겼을 때. 특정 Domain 전용 코드(Entity, DTO, Validator, Exception)는 이유를 막론하고 넣지 않는다.
-- `web`: 모든(또는 대부분의) Domain Controller가 동일하게 따라야 하는 HTTP 계약(성공/오류 응답 형식, 전역 예외 처리, CORS 등)이 생겼을 때. 특정 Domain의 Controller나 요청/응답 DTO는 이유를 막론하고 넣지 않는다 — 이 Package는 여러 Domain이 공유하는 "형식과 변환 규칙"만 담고, 실제 API Endpoint(`@RequestMapping` 등)를 정의하지 않는다.
+- `global.web`/`global.error`: 모든(또는 대부분의) Domain Controller가 동일하게 따라야 하는 HTTP 계약(성공/오류 응답 형식, 전역 예외 처리, CORS, requestId 등)이 생겼을 때. 특정 Domain의 Controller나 요청/응답 DTO는 이유를 막론하고 넣지 않는다 — 이 Package는 여러 Domain이 공유하는 "형식과 변환 규칙"만 담고, 실제 API Endpoint(`@RequestMapping` 등)를 정의하지 않는다.
 
-Class가 한두 개뿐이라면 위 Package 아래에 다시 하위 Package(`configuration.properties` 등)를 만들지 않는다. 하위 Package는 같은 Package 안에서 관리하기 어려울 만큼 Class 수가 늘어났을 때 재검토한다. `web`은 PR 9 시점에 성공/오류 응답, 예외 처리, CORS를 합쳐 7개 내외의 Class를 갖지만 서로 강하게 연관된 하나의 책임(HTTP 계약)이라 판단해 하위 Package로 먼저 쪼개지 않았다.
+Class가 한두 개뿐이라면 위 Package 아래에 다시 하위 Package(`configuration.properties` 등)를 만들지 않는다. 하위 Package는 같은 Package 안에서 관리하기 어려울 만큼 Class 수가 늘어났을 때 재검토한다. `global`은 PR 9 시점에는 `web` 하나로 성공/오류 응답, 예외 처리, CORS를 합쳐 7개 내외의 Class를 뒀지만, PR 12에서 "오류 계약"(`error`)과 "HTTP 응답/설정"(`web`) 두 책임이 뚜렷이 구분돼 하위 Package로 나눴다. 두 Package 모두 `global`의 Direct Subpackage이므로 Spring Modulith가 인식하는 Module 자체는 여전히 `global` 1개다.
 
-Root Package(`team.inreok.getiserver`)는 Spring Modulith가 Direct Subpackage를 Module로 자동 탐지하므로, `configuration`/`infrastructure`/`support`/`web`을 Root Package 바로 아래에 추가하면 그 자체로 하나의 Application Module처럼 탐지된다. 이는 의도한 동작이다(기술 기반 코드를 하나의 논리적 경계로 보는 것). 실제로 `web` Package가 추가된 이후 `ApplicationModules.of(GetiServerApplication::class.java)`로 측정한 Application Module은 1개(`web`)다. 여러 Domain Module이 이 Package에 실제로 의존하게 되면 `ModularityTest` 결과에서 의존 관계로 나타나므로, 그 시점에 이 판단이 여전히 타당한지 다시 확인한다.
+Root Package(`team.inreok.getiserver`)는 Spring Modulith가 Direct Subpackage를 Module로 자동 탐지하므로, `configuration`/`infrastructure`/`support`/`global`을 Root Package 바로 아래에 추가하면 그 자체로 하나의 Application Module처럼 탐지된다. 이는 의도한 동작이다(기술 기반 코드를 하나의 논리적 경계로 보는 것). 실제로 `global` Package가 추가된 이후 `ApplicationModules.of(GetiServerApplication::class.java)`로 측정한 Application Module은 1개(`global`)다. 여러 Domain Module이 이 Package에 실제로 의존하게 되면 `ModularityTest` 결과에서 의존 관계로 나타나므로, 그 시점에 이 판단이 여전히 타당한지 다시 확인한다.
 
 ## 향후 Module을 추가할 때의 원칙
 
@@ -179,7 +185,7 @@ Root 수준의 controller / service / repository / entity / dto (기술 Layer를
 - 다른 Module의 내부 구현(Non-public) 접근
 - 명시적으로 선언한 허용 Dependency 위반
 
-현재는 Module이 1개(`web`)뿐이라 다른 Module과의 순환 의존성이나 경계 위반 자체가 발생할 수 없지만(자명하게 통과), `verify()`는 실제로 실행되어 `web` Package 내부 구조가 Spring Modulith 기준을 만족하는지 확인한다. Module이 2개 이상 되면 이 Test가 실제 경계 위반을 잡아낸다. 일반 전체 테스트 실행에도 포함된다.
+현재는 Module이 1개(`global`)뿐이라 다른 Module과의 순환 의존성이나 경계 위반 자체가 발생할 수 없지만(자명하게 통과), `verify()`는 실제로 실행되어 `global` Package(및 그 하위 `error`/`web`) 내부 구조가 Spring Modulith 기준을 만족하는지 확인한다. Module이 2개 이상 되면 이 Test가 실제 경계 위반을 잡아낸다. 일반 전체 테스트 실행에도 포함된다.
 
 ```bash
 ./gradlew test
@@ -195,10 +201,10 @@ Root 수준의 controller / service / repository / entity / dto (기술 Layer를
 
 ```text
 build/spring-modulith-docs/components.puml    전체 Module 관계 PlantUML
-build/spring-modulith-docs/module-web.adoc     `web` Module Canvas(Spring Component 목록)
+build/spring-modulith-docs/module-global.adoc  `global` Module Canvas(Spring Component 목록)
 ```
 
-`web` Module이 추가된 뒤 실제로 확인한 결과, Module Canvas(`module-web.adoc`)는 `web` Package의 실제 Spring Component(`CorsProperties`, `GlobalExceptionHandler`, `WebCorsConfig`)를 정확히 나열한다. 반면 `components.puml`은 Module이 1개(다른 Module과의 관계가 없음)인 상태에서는 여전히 Diagram 뼈대만 생성되고 실질적인 Box가 보이지 않는다(이 Class 목록은 `ApplicationModules.of(...)`로 직접 순회해 Module 이름 "web"과 개수 1을 실측으로 재확인했다). Module 간 관계가 생기는 시점(두 번째 Module 추가 이후)에 다시 확인한다. 이 Test는 일반 `test` 실행에 포함되며, 결과물은 `build/` 아래에만 생성되고 Git에 Commit하지 않는다(`.gitignore`의 기존 `build/` 규칙으로 충분하다).
+`web` Module이 PR 9에서 처음 추가된 뒤, PR 12에서 `global`로 재구성된 이후에도 실제로 확인한 결과, Module Canvas(`module-global.adoc`)는 `global` Package의 실제 Spring Component(`CorsProperties`, `GlobalExceptionHandler`, `WebCorsConfig`, `RequestIdFilter`)를 정확히 나열한다. 반면 `components.puml`은 Module이 1개(다른 Module과의 관계가 없음)인 상태에서는 여전히 Diagram 뼈대만 생성되고 실질적인 Box가 보이지 않는다(이 Class 목록은 `ApplicationModules.of(...)`로 직접 순회해 Module 이름 "global"과 개수 1을 실측으로 재확인했다). Module 간 관계가 생기는 시점(두 번째 Module 추가 이후)에 다시 확인한다. 이 Test는 일반 `test` 실행에 포함되며, 결과물은 `build/` 아래에만 생성되고 Git에 Commit하지 않는다(`.gitignore`의 기존 `build/` 규칙으로 충분하다).
 
 ## Runtime Verification
 

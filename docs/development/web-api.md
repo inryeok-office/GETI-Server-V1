@@ -4,17 +4,22 @@ GETI-Server는 실제 Domain API를 구현하기 전에, 모든 HTTP API가 동�
 
 ## Package 위치
 
-공통 Web 기반은 Root Package 바로 아래 `team.inreok.getiserver.web`에 있다. `configuration`/`infrastructure`/`support`([`modularity.md`](../architecture/modularity.md) 참고)와 동일하게 Spring Modulith가 자동 탐지하는 기술 기반 Application Module이다. 이 Package는 여러 Domain Controller가 공유하는 "형식과 변환 규칙"만 담고, 실제 API Endpoint(`@RequestMapping` 등)를 정의하지 않는다. 실제 Domain Controller와 요청/응답 DTO는 각 Domain Module 내부에 위치해야 한다.
+공통 Web/오류 기반은 Root Package 바로 아래 `team.inreok.getiserver.global`에 있다. `configuration`/`infrastructure`/`support`([`modularity.md`](../architecture/modularity.md) 참고)와 동일하게 Spring Modulith가 자동 탐지하는 기술 기반 Application Module이다. PR 9에서는 `web` Package 하나로 구성했으나, PR 12에서 사용자가 확정한 `{root}/domain`, `{root}/global` 최상위 구조에 맞춰 "오류 계약"(`global.error`)과 "HTTP 응답/설정"(`global.web`)으로 재구성했다. 이 Package는 여러 Domain Controller가 공유하는 "형식과 변환 규칙"만 담고, 실제 API Endpoint(`@RequestMapping` 등)를 정의하지 않는다. 실제 Domain Controller와 요청/응답 DTO는 각 Domain Module 내부에 위치해야 한다.
 
 ```text
-team.inreok.getiserver.web
-├── ApiResponse.kt            공통 성공 응답 Wrapper
-├── PageResponse.kt           Pagination 응답(PageMeta 포함)
-├── ErrorCode.kt               Framework Error Code
-├── ErrorResponse.kt           공통 오류 응답(FieldErrorResponse 포함)
-├── GlobalExceptionHandler.kt  전역 예외 처리
-├── CorsProperties.kt          CORS ConfigurationProperties
-└── WebCorsConfig.kt           CORS 등록(WebMvcConfigurer)
+team.inreok.getiserver.global
+├── error
+│   ├── ErrorCode.kt               Framework Error Code
+│   ├── ErrorResponse.kt           공통 오류 응답(FieldErrorResponse 포함)
+│   ├── BusinessException.kt       Domain 예외 공통 기반
+│   └── GlobalExceptionHandler.kt  전역 예외 처리
+└── web
+    ├── ApiResponse.kt             공통 성공 응답 Wrapper
+    ├── PageResponse.kt            Pagination 응답(PageMeta 포함)
+    ├── CorsProperties.kt          CORS ConfigurationProperties
+    ├── WebCorsConfig.kt           CORS 등록(WebMvcConfigurer)
+    ├── WebPageableConfig.kt       Pagination 최대 Size 강제
+    └── RequestIdFilter.kt         요청별 requestId 생성/MDC 등록
 ```
 
 ## Dependency
@@ -25,13 +30,14 @@ team.inreok.getiserver.web
 | `spring-boot-starter-validation` | `implementation` | Bean Validation(Hibernate Validator, `jakarta.validation`) |
 | `spring-boot-starter-actuator` | `implementation` | Health Endpoint |
 
-이 프로젝트는 Jackson 3.x(`tools.jackson`, PR 6에서 이미 `jackson-module-kotlin` 도입)를 사용한다. Jackson 3.x는 `WRITE_DATES_AS_TIMESTAMPS`가 기본적으로 비활성화되어 있어(Instant/LocalDate 등 `java.time` 타입을 ISO-8601로 직렬화) 별도 `ObjectMapper` Customizer 없이 [`날짜와 시간`](#날짜와-시간) 정책을 만족한다. 이는 [`GlobalExceptionHandlerTest`](../../src/test/kotlin/team/inreok/getiserver/web/GlobalExceptionHandlerTest.kt)의 `timestamp` Field 검증으로 실측 확인했다.
+이 프로젝트는 Jackson 3.x(`tools.jackson`, PR 6에서 이미 `jackson-module-kotlin` 도입)를 사용한다. Jackson 3.x는 `WRITE_DATES_AS_TIMESTAMPS`가 기본적으로 비활성화되어 있어(Instant/LocalDate 등 `java.time` 타입을 ISO-8601로 직렬화) 별도 `ObjectMapper` Customizer 없이 [`날짜와 시간`](#날짜와-시간) 정책을 만족한다. 이는 [`GlobalExceptionHandlerTest`](../../src/test/kotlin/team/inreok/getiserver/global/error/GlobalExceptionHandlerTest.kt)의 `timestamp` Field 검증으로 실측 확인했다.
 
 ## 성공 응답
 
 ```json
 {
-  "data": { "id": 1 }
+  "data": { "id": 1 },
+  "requestId": "3f6e9c2a-1c4b-4b8e-9c7a-1a2b3c4d5e6f"
 }
 ```
 
@@ -46,13 +52,14 @@ team.inreok.getiserver.web
   "status": 400,
   "path": "/api/v1/example",
   "timestamp": "2026-07-29T07:00:00.123Z",
+  "requestId": "3f6e9c2a-1c4b-4b8e-9c7a-1a2b3c4d5e6f",
   "fieldErrors": [
     { "field": "name", "reason": "name은 필수입니다." }
   ]
 }
 ```
 
-`rejectedValue`는 포함하지 않는다. 민감한 요청 값(Password, Token 등)이 Field Error에 그대로 노출될 위험이 있어 기본적으로 제외했다. `requestId`/`traceId`는 아직 요청 추적 Infra가 없어 가짜 값을 만들지 않고 보류했다(Observability PR에서 재검토).
+`rejectedValue`는 포함하지 않는다. 민감한 요청 값(Password, Token 등)이 Field Error에 그대로 노출될 위험이 있어 기본적으로 제외했다. `requestId`는 [`RequestIdFilter`](#requestid)가 생성하며, 성공/오류 응답 모두 같은 값을 담는다.
 
 ## Error Code
 
@@ -72,12 +79,25 @@ team.inreok.getiserver.web
 
 Domain Error Code(예: `USER_NOT_FOUND`)는 실제 Domain 기능 PR에서 해당 Domain Module 내부에 정의하고, 그 Domain의 Web Adapter(Controller 또는 전용 `@ExceptionHandler`)가 이 `ErrorResponse` 형식으로 변환한다.
 
+## 공통 예외 기반 (BusinessException)
+
+`BusinessException(errorCode, message)`은 Domain/Application 계층에서 발생하는 예외의 공통 기반이다. `global.error` Package는 특정 Domain을 알지 못하므로 이 Class 자체는 어떤 Domain 전용 예외도 미리 정의하지 않는다 — 실제 Domain 예외는 각 Domain Module 안에서 `BusinessException`을 상속해 정의하고, 해당 Domain의 `ErrorCode`(또는 `global.error.ErrorCode`의 기존 값)를 넘긴다.
+
+```kotlin
+class MemberNotFoundException(
+    memberId: Long,
+) : BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Member($memberId)를 찾을 수 없습니다.")
+```
+
+`GlobalExceptionHandler`는 `BusinessException`을 `ex.errorCode.status`로 응답하고, `ex.message`를 그대로 사용한다. 이 Message는 예외를 던지는 코드가 직접 작성한 안전한 사용자 노출용 문구이므로 [`내부 정보 미노출`](#내부-정보-미노출) 원칙(예상하지 못한 예외의 실제 `message`를 노출하지 않음)과 충돌하지 않는다.
+
 ## 전역 예외 처리
 
 `GlobalExceptionHandler`는 Spring MVC의 `ResponseEntityExceptionHandler`를 상속한다. 이 기반 Class는 Validation, Malformed JSON, 405/415, 404(`NoResourceFoundException`) 등 20종의 표준 MVC 예외를 이미 `handleException(...)`(`final`, `@ExceptionHandler`)으로 잡아 `handleExceptionInternal(...)`에 위임하도록 구현되어 있다(Spring Framework 7.0.8 실제 Bytecode로 확인). `GlobalExceptionHandler`는 이 위임 지점 하나만 재정의해 모든 표준 예외를 공통 `ErrorResponse`로 변환한다.
 
 `ResponseEntityExceptionHandler`가 다루지 않는 예외는 별도 `@ExceptionHandler`를 추가하고 동일한 `handleExceptionInternal`로 위임한다.
 
+- `BusinessException` → `ex.errorCode`(Domain/Application이 지정한 상태와 Message)
 - `BindException`(단독 사용 시) → `VALIDATION_FAILED`
 - `ConstraintViolationException`(`jakarta.validation`) → `VALIDATION_FAILED`
 - 그 외 모든 `Exception`(Fallback) → `INTERNAL_SERVER_ERROR`
@@ -92,7 +112,19 @@ Domain Error Code(예: `USER_NOT_FOUND`)는 실제 Domain 기능 PR에서 해당
 
 ### 내부 정보 미노출
 
-`handleExceptionInternal`은 항상 `ErrorCode.defaultMessage`(고정 문구)를 사용하고 예외의 실제 `message`를 Client 응답에 포함하지 않는다. Stack Trace, Exception Class 이름도 응답 Body에 없다. [`GlobalExceptionHandlerTest`](../../src/test/kotlin/team/inreok/getiserver/web/GlobalExceptionHandlerTest.kt)의 "예상하지 못한 오류는 500으로 처리되며 내부 정보를 노출하지 않는다" Test로 검증했다.
+`handleExceptionInternal`은 `BusinessException`을 제외하고 항상 `ErrorCode.defaultMessage`(고정 문구)를 사용하며, 예상하지 못한 예외의 실제 `message`는 Client 응답에 포함하지 않는다. `BusinessException`의 Message는 예외 자체가 아니라 그 Message를 직접 작성한 코드(우리 Application 코드)를 신뢰한 것이므로 예외로 둔다. Stack Trace, Exception Class 이름은 어떤 경우에도 응답 Body에 없다. [`GlobalExceptionHandlerTest`](../../src/test/kotlin/team/inreok/getiserver/global/error/GlobalExceptionHandlerTest.kt)의 "예상하지 못한 오류는 500으로 처리되며 내부 정보를 노출하지 않는다" Test로 검증했다.
+
+## RequestId
+
+[`RequestIdFilter`](../../src/main/kotlin/team/inreok/getiserver/global/web/RequestIdFilter.kt)(`OncePerRequestFilter`, `@Order(Ordered.HIGHEST_PRECEDENCE)`)가 모든 요청에서 가장 먼저 실행되어 `requestId`를 만든다.
+
+- Client가 `X-Request-Id` Header를 보냈다면 새로 만들지 않고 그대로 재사용한다(여러 Service에 걸친 요청을 하나의 requestId로 추적할 수 있게 함).
+- Client가 보내지 않았다면 `UUID.randomUUID()`로 새로 생성한다.
+- 생성한 값은 Response Header(`X-Request-Id`)에 그대로 반환하고, SLF4J MDC(`requestId` Key)에 등록해 요청 처리 중 발생하는 모든 Log에 남긴다(Log Pattern에 `%X{requestId}` 등을 추가하면 실제로 출력된다).
+- `ApiResponse`/`ErrorResponse`는 생성 시점에 MDC에서 값을 읽어 Body의 `requestId` Field로도 포함한다. 성공/오류 응답이 항상 같은 값을 가지므로 Client 로그와 서버 로그를 하나의 requestId로 연결할 수 있다.
+- Filter가 끝나면 `MDC.remove(...)`로 값을 제거해 Thread Pool 재사용 시 이전 요청의 requestId가 새 요청에 섞이지 않게 한다.
+
+새로운 분산 추적(Trace ID Propagation, OpenTelemetry 등) 시스템은 도입하지 않았다 — `requestId`는 이 저장소 안에서 로그와 응답을 연결하는 최소 식별자다. Micrometer Tracing/OpenTelemetry 도입 여부는 Observability 전용 PR에서 재검토한다.
 
 ## Pagination
 
@@ -173,10 +205,11 @@ Runtime Image(`eclipse-temurin:25.0.3_9-jre-alpine`)에는 `curl`이 없고 Alpi
 
 | Test | 대상 | 방식 |
 | --- | --- | --- |
-| [`GlobalExceptionHandlerTest`](../../src/test/kotlin/team/inreok/getiserver/web/GlobalExceptionHandlerTest.kt) | 성공/오류 응답, Pagination, Validation, Malformed JSON, 405, 415, Type Mismatch, 필수 Parameter 누락, 404, 500 | `@WebMvcTest` + `MockMvc` |
-| [`WebCorsConfigTest`](../../src/test/kotlin/team/inreok/getiserver/web/WebCorsConfigTest.kt) | CORS 허용/비허용 Origin Preflight | `@WebMvcTest` + `@TestPropertySource` |
+| [`GlobalExceptionHandlerTest`](../../src/test/kotlin/team/inreok/getiserver/global/error/GlobalExceptionHandlerTest.kt) | 성공/오류 응답, Pagination, Validation, Malformed JSON, 405, 415, Type Mismatch, 필수 Parameter 누락, 404, 500, BusinessException, requestId | `@WebMvcTest` + `MockMvc` |
+| [`WebCorsConfigTest`](../../src/test/kotlin/team/inreok/getiserver/global/web/WebCorsConfigTest.kt) | CORS 허용/비허용 Origin Preflight | `@WebMvcTest` + `@TestPropertySource` |
+| [`RequestIdFilterTest`](../../src/test/kotlin/team/inreok/getiserver/global/web/RequestIdFilterTest.kt) | requestId 생성, Client 값 재사용, 성공/오류 응답 모두 포함 | `@WebMvcTest` + `MockMvc` |
 
-두 Test 모두 `WebTestSupportController`(`src/test`에만 존재)를 대상으로 한다. Production Source에는 예시 Controller를 두지 않았다. `WebTestSupportController`와 두 Test Class는 모두 `src/test` Source Set에 있어 `main` Classpath에 포함되지 않고 Spring Modulith Production Module 탐지 대상이 아니다.
+세 Test 모두 `WebTestSupportController`(`src/test`에만 존재)를 대상으로 한다. Production Source에는 예시 Controller를 두지 않았다. `WebTestSupportController`와 Test Class들은 모두 `src/test` Source Set에 있어 `main` Classpath에 포함되지 않고 Spring Modulith Production Module 탐지 대상이 아니다.
 
 ## 검증 명령
 
@@ -185,7 +218,7 @@ Runtime Image(`eclipse-temurin:25.0.3_9-jre-alpine`)에는 `curl`이 없고 Alpi
 ./gradlew detekt
 ./gradlew test
 ./gradlew test --tests "*ModularityTest"
-./gradlew test --tests "*GlobalExceptionHandlerTest*" --tests "*WebCorsConfigTest*"
+./gradlew test --tests "*GlobalExceptionHandlerTest*" --tests "*WebCorsConfigTest*" --tests "*RequestIdFilterTest*"
 ./gradlew koverHtmlReport
 ./gradlew koverXmlReport
 ./gradlew check
@@ -200,6 +233,7 @@ Windows에서는 `.\gradlew.bat`를 사용한다.
 - Spring Security, OAuth, JWT, 인증/인가
 - 파일 업로드, WebSocket, SSE
 - OpenAPI(springdoc) 실제 도입(첫 Domain Controller PR에서 재검토)
-- Request ID/Trace ID, 전체 Observability
+- 분산 추적(Trace ID Propagation, OpenTelemetry, Micrometer Tracing), 전체 Observability(`requestId`는 이번 PR에서 구현)
 - REST Docs, Contract Test
 - GitHub Actions CI, CD
+- Notion API 명세서의 `success`/`meta` Wrapper 구조로의 전면 변경([`docs/audit/notion-repository-sync.md`](../audit/notion-repository-sync.md)의 `DECISION_REQUIRED` 참고, 이번 PR에서 임의로 결정하지 않음)

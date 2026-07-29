@@ -1,5 +1,7 @@
-package team.inreok.getiserver.web
+package team.inreok.getiserver.global.error
 
+import org.slf4j.MDC
+import team.inreok.getiserver.global.web.RequestIdFilter
 import java.time.Instant
 
 data class ErrorResponse(
@@ -8,6 +10,7 @@ data class ErrorResponse(
     val status: Int,
     val path: String,
     val timestamp: Instant,
+    val requestId: String?,
     val fieldErrors: List<FieldErrorResponse> = emptyList(),
 ) {
     companion object {
@@ -23,6 +26,7 @@ data class ErrorResponse(
                 status = errorCode.status.value(),
                 path = path,
                 timestamp = Instant.now(),
+                requestId = MDC.get(RequestIdFilter.REQUEST_ID_MDC_KEY),
                 fieldErrors = fieldErrors,
             )
     }
