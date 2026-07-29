@@ -129,6 +129,14 @@ Spring Data JPA + Flyway로 PostgreSQL에, Lettuce로 Redis에 연결합니다. 
 ./gradlew integrationTest   # Docker(Testcontainers) 필요
 ```
 
+## 공통 Web 및 API 기반
+
+모든 HTTP API가 공통 성공/오류 응답, 전역 예외 처리, Pagination, CORS 규칙을 따르도록 구성했습니다. 아직 실제 Domain API는 없습니다. 세부 형식과 정책은 [`docs/development/web-api.md`](./docs/development/web-api.md)를 따릅니다.
+
+```text
+Health: /actuator/health
+```
+
 ## Configuration과 실행
 
 공통 설정과 `local`/`test`/`prod` Profile을 분리하고, Secret은 저장소에 포함하지 않고 환경 변수로 관리합니다. Profile 전략, 환경 변수, `.env.example` 사용법은 [`docs/development/configuration.md`](./docs/development/configuration.md)를 따릅니다.

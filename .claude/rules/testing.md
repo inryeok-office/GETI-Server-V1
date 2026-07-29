@@ -101,6 +101,10 @@ Dependency 실패
 
 Docker(Testcontainers)가 필요한 PostgreSQL/Redis Persistence Integration Test는 `src/test`가 아니라 별도 Gradle Source Set/Task인 `src/integrationTest`(`./gradlew integrationTest`)에 작성한다. `test`/`check`/`build`는 Docker 없이 통과해야 하므로 이 Task는 그 안에 포함시키지 않는다. `src/test`(Unit/Slice Test)에 실제 PostgreSQL/Redis 연결을 전제로 하는 Test를 추가하지 않는다. 세부 구조와 예시는 [`docs/development/persistence.md`](../../docs/development/persistence.md)를 따른다.
 
+## Web Slice Test (`@WebMvcTest`)
+
+Controller와 전역 예외 처리(`GlobalExceptionHandler`) 등 Web 계층은 `@WebMvcTest` + `MockMvc`로 검증한다. 전체 Context가 필요하지 않다면 `@SpringBootTest`를 사용하지 않는다. Test 전용 Controller는 `src/test/kotlin`에만 두고 Production Source에 예시 Controller를 추가하지 않는다. 새 API를 구현하면 성공 응답, 오류 응답(Field 이름, HTTP Status, Error Code), 내부 정보 미노출을 함께 검증하는 오류 Contract Test를 작성한다. 세부 내용은 [`docs/development/web-api.md`](../../docs/development/web-api.md)를 따른다.
+
 ## 아직 도입되지 않은 도구
 
 다음 테스트 도구는 이 저장소에 아직 도입되지 않았다. 관련 작업이 아니라면 필수로 요구하거나 임의로 도입하지 않는다.

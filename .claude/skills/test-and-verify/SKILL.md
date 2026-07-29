@@ -37,10 +37,12 @@ GETI-Server에서 변경 사항을 검증할 때 참고하는 상세 기준이�
 ### API 변경
 
 - Request 처리
-- Response 형식
-- Validation
-- Status Code
+- Response 형식(`ApiResponse`/`PageResponse`, [`docs/development/web-api.md`](../../../docs/development/web-api.md) 참고)
+- Validation과 Field Error 형식
+- Status Code와 Error Code
+- 오류 응답에 내부 정보(Exception Message, Stack Trace 등)가 노출되지 않는지
 - 기존 호출자와의 호환성
+- `@WebMvcTest` 기반 Web Slice Test와 오류 Contract Test 작성 여부
 
 ### DB 변경
 
@@ -58,6 +60,7 @@ GETI-Server에서 변경 사항을 검증할 때 참고하는 상세 기준이�
 - 영향 범위가 넓으면 전체 Test를 실행한다.
 - Kotlin 코드를 변경했다면 `./gradlew spotlessCheck`(포맷)와 `./gradlew detekt`(정적 분석)도 확인한다. 포맷 위반은 `./gradlew spotlessApply`로 정리한다.
 - Persistence(JPA/Flyway/Redis) 관련 변경이면 Docker가 있는 환경에서 `./gradlew integrationTest`도 실행한다. Docker를 사용할 수 없으면 실행하지 못했다고 명시한다(`test`/`check`/`build`는 Docker 없이도 통과해야 한다).
+- Web(Controller, 전역 예외 처리, CORS 등) 관련 변경이면 `@WebMvcTest` 기반 Test를 실행하고, Package를 옮기거나 새 Module(예: `web`)을 건드렸다면 `./gradlew test --tests "*ModularityTest"`도 함께 실행한다.
 - 마지막에 항상 `./gradlew clean test build`로 마무리한다. `check`에 `spotlessCheck`, `detekt`, `koverVerify`가 이미 포함되어 있어 별도로 반복 실행할 필요는 없다.
 - 커버리지 수치 확인이 필요하면 `./gradlew koverHtmlReport` 또는 `./gradlew koverXmlReport`를 별도로 실행한다(`check`에는 포함되지 않는다).
 - 이미 통과가 확인된 범위를 불필요하게 반복 실행하지 않는다.

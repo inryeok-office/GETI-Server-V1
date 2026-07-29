@@ -57,6 +57,13 @@
 - Datasource URL, Redis 접속 정보를 Log로 출력할 때 Password 등 Secret 성격 값이 함께 노출되지 않도록 주의한다.
 - Testcontainers는 각 Test 종료 시 자동으로 정리된다. 이 PC에 다른 프로젝트의 기존 Container/Volume이 있을 수 있으므로, Persistence 검증 목적으로 `docker compose down -v`나 임의의 Container 정리 명령을 실행할 때는 대상이 이 저장소가 생성한 리소스인지 먼저 확인한다.
 
+## Web / API
+
+- 오류 응답에 Exception Message, Stack Trace, Exception Class 이름, SQL, Database Connection 정보, Request Body 전체, Authorization Header, 내부 Package 경로를 포함하지 않는다([`docs/development/web-api.md`](../development/web-api.md)의 `GlobalExceptionHandler` 정책 참고).
+- CORS는 `allowedOrigins`에 Wildcard(`*`)와 `allowCredentials=true`를 함께 설정하지 않는다. 실제 Client Origin이 확정되지 않았다면 가짜 운영 Domain을 기본값으로 넣지 않고 빈 상태(CORS 비활성)로 둔다.
+- Actuator는 `health`만 웹에 노출하고 `env`/`beans`/`configprops`/`heapdump`/`threaddump`/`loggers`/`metrics` 등은 노출하지 않는다. Health Detail은 `show-details=never`를 유지한다(인증이 아직 없는 현재 단계에서는 특히 중요하다).
+- 4xx 오류는 Stack Trace 없이 WARN 이하로, 5xx 오류만 Stack Trace와 함께 ERROR로 기록한다.
+
 ## 보고 원칙
 
 - 보안과 관련된 가정(예: "이 값은 아직 실제 Secret 관리 체계가 없어 평문으로 두었다")을 발견하면 임의로 판단해 조용히 넘어가지 않고 완료 보고에 명시한다.

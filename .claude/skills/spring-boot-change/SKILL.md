@@ -58,6 +58,7 @@ GETI-Server의 Spring Boot/Kotlin 코드를 변경할 때 참고하는 상세 �
 - 관련 없는 Package 이동을 함께 하지 않는다.
 - 새 도메인 Package는 Root Package 바로 아래 독립된 Application Module로 만들고, 다른 Module의 내부 구현을 직접 참조하지 않는다 ([`docs/architecture/modularity.md`](../../../docs/architecture/modularity.md) 참고).
 - Entity/Repository는 Root Package 바로 아래 공용 `entity`/`repository` Package가 아니라 해당 Domain Module 안에 둔다. `spring.jpa.hibernate.ddl-auto`를 `create`/`create-drop`/`update`로 바꾸지 않는다. Docker(Testcontainers)가 필요한 Persistence Test는 `src/test`가 아니라 `src/integrationTest`에 작성한다 ([`docs/development/persistence.md`](../../../docs/development/persistence.md) 참고).
+- Controller와 요청/응답 DTO는 Root Package 바로 아래 공용 `controller`/`dto` Package가 아니라 해당 Domain Module 안에 둔다. 응답은 `ApiResponse`/`PageResponse`/`ErrorResponse`(`team.inreok.getiserver.web`)를 사용하고, JPA Entity·`Map<String, Any>`·`Page<T>`를 API에 직접 반환하지 않는다. 새 Error Code는 실제로 처리하는 오류에만 추가한다 ([`docs/development/web-api.md`](../../../docs/development/web-api.md) 참고).
 
 ## Architecture 제한
 
@@ -69,8 +70,7 @@ Controller-Service-Repository 고정 구조
 Hexagonal Architecture / Clean Architecture
 JPA Entity 공통 Base Class
 QueryDSL 구조
-공통 API Response 구조
-Global Exception Handler 구조
+OpenAPI(springdoc) 실제 도입
 Security Filter Chain 구조
 OAuth 및 JWT 구조
 ```
