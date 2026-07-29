@@ -120,6 +120,15 @@ docker compose up -d
 SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
 ```
 
+## Persistence (PostgreSQL / Redis)
+
+Spring Data JPA + Flyway로 PostgreSQL에, Lettuce로 Redis에 연결합니다. 연결 환경 변수, Migration/JPA 정책, Testcontainers 기반 Integration Test는 [`docs/development/persistence.md`](./docs/development/persistence.md)를 따릅니다.
+
+```bash
+./gradlew test              # Docker 불필요
+./gradlew integrationTest   # Docker(Testcontainers) 필요
+```
+
 ## Configuration과 실행
 
 공통 설정과 `local`/`test`/`prod` Profile을 분리하고, Secret은 저장소에 포함하지 않고 환경 변수로 관리합니다. Profile 전략, 환경 변수, `.env.example` 사용법은 [`docs/development/configuration.md`](./docs/development/configuration.md)를 따릅니다.

@@ -26,6 +26,11 @@ GETI-Server의 실제 환경(Spring Boot 4.1.0, Kotlin 2.3.21, Gradle 9.5.1 Kotl
 - Circular Dependency를 `@Lazy`로 무조건 우회하지 않는다.
 - Spring Context 실패를 Test 비활성화로 숨기지 않는다.
 - 새 Starter를 추가하기 전에 기존 Dependency로 가능한지 확인한다.
+- `spring.jpa.hibernate.ddl-auto`는 `validate` 또는 `none`만 사용한다(`create`/`create-drop`/`update` 금지). Schema는 Flyway Migration으로만 관리하고, 이미 병합된 Migration 파일은 수정하지 않고 새 버전을 추가한다.
+- `spring.jpa.open-in-view=false`를 유지하고 Controller에서 Transaction을 시작하지 않는다.
+- `spring.flyway.clean-disabled=true`를 임의로 되돌리지 않는다.
+- Redis는 우선 Spring Boot가 기본 제공하는 `StringRedisTemplate`을 사용한다. 실제 객체 직렬화가 필요해지기 전에는 Java 직렬화 기반 `RedisTemplate<String, Any>` 같은 범용 Bean을 미리 만들지 않는다.
+- Docker(Testcontainers)가 필요한 PostgreSQL/Redis Persistence Integration Test는 `src/test`가 아니라 `src/integrationTest`(`./gradlew integrationTest`)에 작성한다. 자세한 내용은 [`docs/development/persistence.md`](../../docs/development/persistence.md)를 따른다.
 
 ## 모듈 경계 (Spring Modulith)
 

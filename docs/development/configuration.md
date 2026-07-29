@@ -47,6 +47,8 @@ Profile을 지정하지 않으면 공통 설정만 적용된다(현재는 `local
 | --- | --- | --- | --- | --- | --- |
 | `SPRING_PROFILES_ACTIVE` | `spring.profiles.active` | 선택 | 전체 | 아니오 | 없음(미지정 시 공통 설정만 적용) |
 
+PostgreSQL/Redis 연결 환경 변수(`DATABASE_URL` 등)는 이 표에 중복하지 않고 [`persistence.md`](./persistence.md)에서 관리한다.
+
 `SERVER_PORT`(→ `server.port`)처럼 Spring Boot가 기본으로 지원하는 환경 변수는 [Relaxed Binding](https://docs.spring.io/spring-boot/reference/features/external-config.html)으로 이미 동작하므로 `application.yaml`에 `${SERVER_PORT:8080}` 형태로 다시 선언하지 않았다. 새 환경 변수가 필요해지면 이 표와 `.env.example`을 함께 갱신한다.
 
 ### Naming Convention
@@ -55,7 +57,7 @@ Profile을 지정하지 않으면 공통 설정만 적용된다(현재는 `local
 - `HOST`, `PORT`, `URL`, `TOKEN`, `SECRET`처럼 범용적인 이름 대신 서비스/설정 영역을 포함한 이름을 사용한다. 예: `EXTERNAL_API_BASE_URL`, `OAUTH_GOOGLE_CLIENT_SECRET`.
 - `PASSWORD`/`SECRET`/`TOKEN`/`PRIVATE_KEY`가 이름에 포함된 값은 Secret으로 취급한다(아래 참고).
 - `SPRING_PROFILES_ACTIVE`, `SERVER_PORT` 등 Spring Boot 표준 환경 변수는 재정의하지 않는다.
-- 현재 사용하지 않는 미래 인프라(DB, Redis, Kafka 등)의 환경 변수를 미리 만들지 않는다. 실제로 연결하는 PR에서 이 문서와 함께 추가한다.
+- 현재 사용하지 않는 미래 인프라(Kafka, Elasticsearch 등)의 환경 변수를 미리 만들지 않는다. 실제로 연결하는 PR에서 이 문서와 함께 추가한다. DB/Redis는 이미 연결되어 있으며 [`persistence.md`](./persistence.md)를 따른다.
 
 ## Secret 관리
 
@@ -63,7 +65,7 @@ Profile을 지정하지 않으면 공통 설정만 적용된다(현재는 `local
 - Secret은 `application*.yaml`, 문서, Source Code, Issue/PR 본문, Commit Message, `.env.example`에 실제 값으로 작성하지 않는다.
 - Secret이 필요한 설정은 값 없이 환경 변수 이름만 참조하도록 만들고(`${OAUTH_GOOGLE_CLIENT_SECRET}`), 안전하지 않은 기본값(`${OAUTH_GOOGLE_CLIENT_SECRET:change-me}` 등)을 제공하지 않는다. 현재는 이런 설정이 하나도 없다.
 - `.env`는 Spring Boot가 자동으로 읽는 파일이 아니다. 이 저장소 어떤 문서에도 그렇게 작성하지 않는다. `.env`는 개발자가 직접 셸에 export하거나 IDE Run Configuration에 옮겨 사용하는 개인 참고용 파일이며, `.gitignore`(`.env`, `.env.*`, `!.env.example`)로 Commit되지 않는다.
-- `.env.example`([Repository Root](../../.env.example))은 실제 값이 없는 Template이며, 현재 사용하는 환경 변수(`SPRING_PROFILES_ACTIVE`)만 포함한다.
+- `.env.example`([Repository Root](../../.env.example))은 실제 운영 Secret이 없는 Template이며, 현재 사용하는 환경 변수만 포함한다. `DATABASE_PASSWORD` 등 일부 값은 Local 전용 기본값을 그대로 보여주지만(Docker Compose 기본값과 동일), 운영 환경에서 재사용 가능한 실제 Secret이 아니다.
 - 운영 Secret은 향후 DevOps 담당자가 배포 환경(GitHub Environment, Secret Manager 등)에서 관리한다. 이번 PR은 그 대상이 될 환경 변수 이름 규칙만 제공한다.
 
 ## Type-safe Configuration (`@ConfigurationProperties`)

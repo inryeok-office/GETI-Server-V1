@@ -29,13 +29,17 @@ Kotlin Source의 포맷은 EditorConfig(`.editorconfig`)와 Spotless(ktlint)로,
 
 환경별로 달라지는 값은 공통 설정(`application.yaml`)에 넣지 않고 `local`/`test`/`prod` Profile 또는 환경 변수로 분리한다. Secret(Password, Token, Key 등)은 코드나 설정 파일에 실제 값으로 작성하지 않고 환경 변수로만 참조하며, 안전하지 않은 기본값을 제공하지 않는다. `.env`는 Spring Boot가 자동으로 읽는 파일이 아니다. Profile 전략, 환경 변수 Naming Convention, `@ConfigurationProperties` 도입 기준은 [`docs/development/configuration.md`](../development/configuration.md)를 따른다.
 
+## Persistence (JPA / Flyway / Redis)
+
+PostgreSQL(Spring Data JPA + Flyway)과 Redis(Lettuce) 연결 기반이 구성되어 있다. 새 Entity/Repository는 Root Package 바로 아래 공용 `entity`/`repository` Package가 아니라 해당 Domain Module Package 안에 둔다. Schema 변경은 Flyway Migration으로만 하고 `spring.jpa.hibernate.ddl-auto`를 `create`/`create-drop`/`update`로 바꾸지 않는다(`validate`/`none`만 사용). 이미 병합된 Migration 파일의 내용은 수정하지 않고 새 버전을 추가한다. `spring.jpa.open-in-view=false`를 유지하고 Controller에서 Transaction을 시작하지 않는다. Redis는 우선 Spring Boot가 기본 제공하는 `StringRedisTemplate`을 사용하고, 실제 객체 직렬화가 필요해지는 시점에 방식(JSON 등)을 판단한다. Docker(Testcontainers)가 필요한 Persistence Integration Test는 `test`/`check`/`build`가 아니라 별도 `integrationTest` Gradle Task로 작성한다. 세부 환경 변수, 정책 근거, Integration Test 구조는 [`docs/development/persistence.md`](../development/persistence.md)를 따른다.
+
 ## 아직 확정되지 않은 규칙
 
 다음 항목은 이 저장소에 아직 도입되지 않았다. 확정된 규칙인 것처럼 강제하거나 임의로 구현하지 않는다.
 
 ```text
 상세 Package Architecture (api/internal 등 Module 내부 하위 구조)
-JPA Entity 규칙
+JPA Entity 상세 설계(공통 Base Class, ID 생성 전략 표준 등)
 QueryDSL 규칙
 공통 API Response 구조
 Global Exception 구조

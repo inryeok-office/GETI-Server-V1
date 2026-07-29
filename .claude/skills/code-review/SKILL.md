@@ -93,4 +93,4 @@ GETI-Server 변경 사항을 검토할 때 참고하는 상세 기준이다. [`r
 
 ## 아직 확정되지 않은 기준
 
-이 저장소는 아직 도메인 로직, API, DB, Security가 구현되어 있지 않다. 관련 항목은 실제로 구현이 생겼을 때부터 적용하고, 존재하지 않는 구조를 문제로 지적하지 않는다.
+이 저장소는 아직 도메인 로직, API, Security가 구현되어 있지 않다. PostgreSQL/Redis 연결과 Migration/Test 기반([`docs/development/persistence.md`](../../../docs/development/persistence.md))은 구성되어 있지만 실제 Domain Entity/Repository는 아직 없다. 관련 항목은 실제로 구현이 생겼을 때부터 적용하고, 존재하지 않는 구조를 문제로 지적하지 않는다.
