@@ -13,13 +13,13 @@ updates:
           - "org.springframework*"
           - "org.jetbrains.kotlin*"
           - "tools.jackson*"
+          - "dev.detekt*"
       test-and-quality:
         patterns:
           - "org.junit*"
           - "org.testcontainers*"
           - "com.redis:testcontainers-redis"
           - "org.jetbrains.kotlinx:kover*"
-          - "dev.detekt*"
           - "com.diffplug.spotless*"
 
   - package-ecosystem: github-actions
