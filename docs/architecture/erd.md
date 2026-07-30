@@ -105,9 +105,10 @@ member_roles/member_job_preferences 복합키, job_ai_analyses 공유 PK
 refresh_tokens.token_hash UNIQUE
 jobs(source_name, external_job_id) Partial Unique Index(내부 공고는 여러 건 허용)
 recommendations/job_applications/portfolio_submissions UNIQUE 제약
-files.size_bytes, async_operations.progress_percent CHECK 제약
+files.size_bytes, async_operations.progress_percent, job_applications.attempt_number CHECK 제약
 member 삭제 시 member_roles/refresh_tokens CASCADE, files.uploader_member_id SET NULL
 JSONB(members.majors) 저장/조회
+다형적 참조 Column(files.owner_id, notifications.resource_id, async_operations.target_id, audit_logs.target_id)에 물리 FK가 없는지
 19개 Table 전체(company/job/ai/recommendation/application/program/portfolio/notification/inquiry/collector/operation/audit 포함)의 최소 저장·조회 경로
 ```
 

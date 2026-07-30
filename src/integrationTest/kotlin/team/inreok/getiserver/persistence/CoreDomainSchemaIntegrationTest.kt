@@ -518,6 +518,45 @@ class CoreDomainSchemaIntegrationTest
             }.isInstanceOf(DataIntegrityViolationException::class.java)
         }
 
+        @Test
+        fun `job_applications의 attempt_number는 1 이상이어야 한다`() {
+            val member = persistMember("attempt-subject")
+            val company = persistCompany()
+            val job = jobRepository.saveAndFlush(newJob(company.id!!))
+
+            assertThatThrownBy {
+                jobApplicationRepository.saveAndFlush(newJobApplication(job.id!!, member.id!!, 0))
+            }.isInstanceOf(DataIntegrityViolationException::class.java)
+        }
+
+        @Test
+        fun `다형적 참조 Column(files, notifications, async_operations, audit_logs)에는 물리 FK가 없다`() {
+            // files.owner_id, notifications.resource_id, async_operations.target_id, audit_logs.target_id는
+            // owner_type/resource_type/target_type과 함께 쓰이는 논리적 참조이며, 특정 Table을 가리키는
+            // 물리 FK 제약을 만들지 않는다(docs/architecture/erd.md의 "다형적 참조" 참고).
+            @Suppress("UNCHECKED_CAST")
+            val polymorphicForeignKeyCount =
+                entityManager
+                    .createNativeQuery(
+                        """
+                        SELECT count(*)
+                        FROM information_schema.key_column_usage kcu
+                        JOIN information_schema.table_constraints tc
+                          ON tc.constraint_name = kcu.constraint_name
+                         AND tc.table_schema = kcu.table_schema
+                        WHERE tc.constraint_type = 'FOREIGN KEY'
+                          AND (
+                            (kcu.table_name = 'files' AND kcu.column_name = 'owner_id')
+                            OR (kcu.table_name = 'notifications' AND kcu.column_name = 'resource_id')
+                            OR (kcu.table_name = 'async_operations' AND kcu.column_name = 'target_id')
+                            OR (kcu.table_name = 'audit_logs' AND kcu.column_name = 'target_id')
+                          )
+                        """.trimIndent(),
+                    ).singleResult as Number
+
+            assertThat(polymorphicForeignKeyCount.toInt()).isEqualTo(0)
+        }
+
         private fun persistMember(subject: String): Member =
             memberRepository.saveAndFlush(
                 Member(oauthProvider = OAuthProvider.DG, oauthSubject = subject, email = "$subject@example.com"),
