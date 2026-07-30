@@ -1,0 +1,73 @@
+name: "♻️ Refactor"
+description: "외부 동작 변경 없이 코드 구조를 개선하는 작업에 사용합니다."
+title: "[REFACTOR] "
+labels:
+  - "♻️ refactor"
+  - "📋 backlog"
+body:
+  - type: textarea
+    id: background
+    attributes:
+      label: 작업 배경
+      description: 이 작업이 왜 필요한지 작성해 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-problem
+    attributes:
+      label: 현재 문제
+      description: 현재 코드 구조에서 어떤 점이 아쉬운지 작성해 주세요.
+    validations:
+      required: false
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 작업 범위
+      description: 이번 작업에서 다룰 범위를 작성해 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: 세부 작업
+      description: 진행할 작업을 체크리스트로 작성해 주세요.
+      placeholder: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: 완료 조건
+      description: 작업이 완료되었다고 판단할 수 있는 기준을 작성해 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: 제외 범위
+      description: 이번 작업에서 다루지 않는 범위를 명확히 작성해 주세요.
+    validations:
+      required: false
+
+  - type: textarea
+    id: risk
+    attributes:
+      label: 영향 및 위험
+      description: 외부 동작이나 API가 실제로 변경되지 않는지, 다른 코드에 미치는 영향을 작성해 주세요.
+    validations:
+      required: false
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: 검증 방법
+      description: "어떻게 검증할 것인지 작성해 주세요. (예: 기존 테스트 통과, 수동 확인)"
+    validations:
+      required: true

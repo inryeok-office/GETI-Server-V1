@@ -1,0 +1,99 @@
+# 로컬 개발 전용 Docker Compose 구성이다. 운영 배포에 사용하지 않는다.
+#
+# 평소 개발:
+#   docker compose up -d          # PostgreSQL, Redis, MinIO만 실행
+#   ./gradlew bootRun             # Spring Boot는 Host에서 직접 실행 (또는 IntelliJ Run)
+#
+# 전체 Container 환경 검증이 필요할 때만:
+#   docker compose --profile app up -d --build
+
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-geti}
+      POSTGRES_USER: ${POSTGRES_USER:-geti}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-geti-local-only}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.8.1-alpine
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-geti-local}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-geti-local-minio}
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # 기본 `docker compose up -d`에는 포함되지 않는다. `--profile app`을 명시했을 때만 실행된다.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - app
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      SERVER_PORT: ${SERVER_PORT:-8080}
+      # Host(localhost)가 아닌 Compose Service 이름으로 접속한다.
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-geti}
+      DATABASE_USERNAME: ${POSTGRES_USER:-geti}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-geti-local-only}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    ports:
+      - "127.0.0.1:${SERVER_PORT:-8080}:8080"
+    healthcheck:
+      # Runtime Image(eclipse-temurin:jre-alpine)에 curl이 없어 Alpine 기본 제공 wget(BusyBox)을 사용한다.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${SERVER_PORT:-8080}/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

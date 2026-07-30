@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/geti}
+    username: ${DATABASE_USERNAME:geti}
+    password: ${DATABASE_PASSWORD:geti-local-only}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+logging:
+  level:
+    team.inreok.getiserver: DEBUG

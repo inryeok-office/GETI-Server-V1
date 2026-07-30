@@ -1,0 +1,101 @@
+---
+name: test-and-verify
+description: 변경 유형(문서, 설정, 로직, API, DB)에 맞는 테스트와 검증을 선택하고 결과를 정확하게 판정하는 기준을 다룬다.
+---
+
+# Test and Verify
+
+GETI-Server에서 변경 사항을 검증할 때 참고하는 상세 기준이다. [`implement`](../../commands/implement.md), [`fix-bug`](../../commands/fix-bug.md), [`verify`](../../commands/verify.md), [`prepare-pr`](../../commands/prepare-pr.md) Command가 이 Skill을 참조한다.
+
+## 변경 유형별 검증
+
+### 문서 변경
+
+- Markdown 문법과 Code Fence가 닫혀 있는지
+- 상대 링크 대상이 실제로 존재하는지
+- 파일명 대소문자가 일치하는지
+- Build에 영향이 없는지 (문서만 변경했어도 `clean test build`는 실행한다)
+
+### 설정 변경 (`build.gradle.kts`, `application.yaml` 등)
+
+- Parsing이 성공하는지
+- Profile에 영향이 있는지 (`local`/`test`/`prod` Profile 전략은 [`docs/development/configuration.md`](../../../docs/development/configuration.md) 참고)
+- 관련 Bean이 정상 생성되는지
+- Spring Context가 정상 로드되는지
+- Build 성공 여부
+
+### 비즈니스 로직 변경
+
+- 정상 경로
+- 경계값
+- 예외 경로
+- 권한이 관련되면 권한 분기
+- 데이터 정합성에 영향이 있는지
+
+이 저장소는 아직 비즈니스 로직이 없으므로, 관련 Issue가 생기면 이 기준을 적용한다.
+
+### API 변경
+
+- Request 처리
+- Response 형식(`ApiResponse`/`PageResponse`, [`docs/development/web-api.md`](../../../docs/development/web-api.md) 참고)
+- Validation과 Field Error 형식
+- Status Code와 Error Code
+- 오류 응답에 내부 정보(Exception Message, Stack Trace 등)가 노출되지 않는지
+- 기존 호출자와의 호환성
+- `@WebMvcTest` 기반 Web Slice Test와 오류 Contract Test 작성 여부
+
+### DB 변경
+
+- Migration (Flyway. 병합된 Migration 파일은 수정하지 않고 새 버전을 추가한다)
+- Schema (`ddl-auto=validate`/`none`만 사용, `create`/`create-drop`/`update` 금지)
+- Constraint
+- Rollback 가능성
+- Test에서 사용할 Database: `src/test`(Unit/Slice)는 `testRuntimeOnly("com.h2database:h2")`로 외부 인프라 없이 실행하고, 실제 PostgreSQL/Redis 연결 검증은 `src/integrationTest`의 Testcontainers(`./gradlew integrationTest`, Docker 필요)로 한다
+
+세부 기준은 [`docs/development/persistence.md`](../../../docs/development/persistence.md)를 따른다. 이 저장소에는 아직 실제 GETI Domain Migration/Entity는 없으므로, 관련 Issue가 생기면 이 기준을 적용한다.
+
+## Test 선택
+
+- 가장 작은 관련 Test부터 실행한다 (`./gradlew test`).
+- 영향 범위가 넓으면 전체 Test를 실행한다.
+- Kotlin 코드를 변경했다면 `./gradlew spotlessCheck`(포맷)와 `./gradlew detekt`(정적 분석)도 확인한다. 포맷 위반은 `./gradlew spotlessApply`로 정리한다.
+- Persistence(JPA/Flyway/Redis) 관련 변경이면 Docker가 있는 환경에서 `./gradlew integrationTest`도 실행한다. Docker를 사용할 수 없으면 실행하지 못했다고 명시한다(`test`/`check`/`build`는 Docker 없이도 통과해야 한다).
+- Web(Controller, 전역 예외 처리, CORS 등) 관련 변경이면 `@WebMvcTest` 기반 Test를 실행하고, Package를 옮기거나 새 Module(예: `web`)을 건드렸다면 `./gradlew test --tests "*ModularityTest"`도 함께 실행한다.
+- 마지막에 항상 `./gradlew clean test build`로 마무리한다. `check`에 `spotlessCheck`, `detekt`, `koverVerify`가 이미 포함되어 있어 별도로 반복 실행할 필요는 없다.
+- 커버리지 수치 확인이 필요하면 `./gradlew koverHtmlReport` 또는 `./gradlew koverXmlReport`를 별도로 실행한다(`check`에는 포함되지 않는다).
+- 이미 통과가 확인된 범위를 불필요하게 반복 실행하지 않는다.
+- 실행하지 못한 검증은 숨기지 않고 명시한다.
+
+## 실패 분석
+
+- 로그의 첫 번째 실제 원인(Root Cause)을 확인한다. 연쇄적으로 발생한 후속 실패와 근본 실패를 구분한다.
+- 환경 문제(도구 미설치, 권한 등)와 코드 문제를 구분한다.
+- Stack Trace 일부만 보고 성급하게 결론 내리지 않는다.
+
+실패 유형 분류:
+
+```text
+컴파일 실패
+테스트 실패
+Spring Context 실패
+설정 실패
+Dependency 실패
+포맷 위반 (spotlessCheck)
+정적 분석 위반 (detekt)
+문서 또는 경로 실패
+외부 서비스 실패
+로컬 환경 실패
+권한 실패
+```
+
+## 완료 기준
+
+다음을 모두 만족해야 "완료"로 표현한다 ([`docs/ai/completion-policy.md`](../../../docs/ai/completion-policy.md) 참고).
+
+- 요구사항 충족
+- 관련 Test 성공
+- 전체 Build 성공
+- Diff 직접 검토
+- Secret 미포함 확인
+- GitHub Actions CI([`docs/development/ci.md`](../../../docs/development/ci.md))가 구성되어 있고 PR을 생성했다면, 로컬 검증뿐 아니라 실제 Workflow Run 성공을 `gh pr checks`로 확인
+- 실행하지 못한 검증 명시

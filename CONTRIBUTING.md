@@ -1,0 +1,158 @@
+# Contributing
+
+GETI-Server에 기여하는 방법을 안내한다. AI 개발 도구(Claude Code, Codex)의 공통 규칙은 [`AGENTS.md`](./AGENTS.md)와 [`docs/ai/README.md`](./docs/ai/README.md)를 따르며, 이 문서는 사람과 AI 모두에게 적용되는 협업 절차를 다룬다.
+
+## 브랜치 전략 (Git Flow)
+
+- `main`: 운영/배포 가능한 안정 버전이다. 직접 Push하지 않는다.
+- `develop`: 다음 개발 버전을 통합하는 기본 개발 Branch다. 직접 Push하지 않는다.
+- `main`, `develop`은 GitHub Branch Protection이 적용되어 있어 직접 Push와 강제 Push, Branch 삭제가 차단된다. Pull Request는 **작성자 본인이 아닌 다른 리뷰어의 승인 1건 이상**이 있어야 Merge할 수 있으며, 이 규칙은 Repository 관리자에게도 동일하게 적용된다(`enforce_admins`).
+- 작업 Branch는 `develop`에서 분기하며 아래 형식을 사용한다.
+
+  ```text
+  feature/{issue-number}-{short-description}
+  fix/{issue-number}-{short-description}
+  refactor/{issue-number}-{short-description}
+  chore/{issue-number}-{short-description}
+  docs/{issue-number}-{short-description}
+  hotfix/{issue-number}-{short-description}
+  ```
+
+  예: `chore/1-project-foundation`
+
+## 협업 절차
+
+1. 작업 전에 GitHub Issue를 먼저 생성한다.
+2. Issue 번호를 포함한 작업 Branch를 `develop` 기준으로 생성한다.
+3. 작업 후 `develop`을 대상으로 Pull Request를 생성한다.
+4. PR 본문에서 `Closes #{issue-number}` 형식으로 연관 Issue를 연결한다.
+5. Commit Message는 하나의 명확한 작업 단위로 작성한다.
+6. Draft Pull Request로 먼저 생성하고, 구현과 검증이 끝나 Review를 받을 준비가 되면 Ready for Review로 전환한다.
+7. GitHub Actions(`CI` Workflow, [`docs/development/ci.md`](./docs/development/ci.md))가 PR마다 자동으로 실행된다. 결과는 `gh pr checks`로 확인한다.
+8. 다른 리뷰어의 승인 1건 이상을 받은 뒤 Merge한다. Merge는 저장소 관리자 또는 PR 작성자가 아닌 승인자가 수행한다.
+
+## Commit Convention
+
+모든 Commit Message는 Conventional Commits 형식을 사용하며, 작업 내용은 한글로 작성한다.
+
+```text
+<type>: <한글 작업 내용>
+```
+
+예시:
+
+```text
+feat: 채용 공고 북마크 기능 추가
+fix: 로그인 Token 재발급 오류 수정
+refactor: 사용자 권한 검증 로직 분리
+chore: 프로젝트 기본 설정 구성
+docs: Git Flow 협업 규칙 추가
+test: 공고 조회 통합 테스트 추가
+config: 로컬 실행 환경 설정 정리
+build: Gradle 빌드 설정 개선
+ci: GitHub Actions 빌드 워크플로 추가
+perf: 공고 검색 쿼리 성능 개선
+style: 코드 포맷 정리
+revert: 사용자 조회 변경 사항 되돌리기
+```
+
+기술명, Class명, Library명과 같은 고유명사는 영문 표기를 유지할 수 있다.
+
+```text
+build: QueryDSL 의존성 및 생성 경로 설정
+config: PostgreSQL 연결 환경변수 추가
+```
+
+허용 Type:
+
+| Type | 용도 |
+| --- | --- |
+| `feat` | 새로운 기능 추가 |
+| `fix` | 버그 수정 |
+| `refactor` | 기능 변화 없는 코드 구조 개선 |
+| `chore` | 일반 유지보수 및 기타 작업 |
+| `docs` | 문서 변경 |
+| `test` | 테스트 코드 및 테스트 환경 변경 |
+| `config` | 애플리케이션 및 개발 환경 설정 |
+| `build` | 빌드 시스템 및 의존성 변경 |
+| `ci` | CI/CD 설정 변경 |
+| `perf` | 성능 개선 |
+| `style` | 코드 동작에 영향 없는 스타일 변경 |
+| `revert` | 이전 Commit 되돌리기 |
+
+작성 규칙:
+
+- Type은 영문 소문자로, 뒤에 콜론과 공백을 붙여 작성한다.
+- 제목 설명은 한글로 작성하고, 끝에 마침표를 붙이지 않는다.
+- 한 Commit에는 하나의 논리적 변경만 담는다.
+- `수정`, `작업`, `변경`처럼 의미가 불분명한 단어만 사용하지 않고, 무엇을 왜 변경했는지 알아볼 수 있게 작성한다.
+- `WIP`, `update`, `수정함`, `최종`, `진짜 최종` 같은 Message는 사용하지 않는다.
+- Issue 종료는 Commit이 아닌 Pull Request 본문의 `Closes #번호`로 처리한다. 필요한 경우에만 Footer에 `Refs: #번호`를 추가한다.
+
+Merge 시 불필요한 Merge Commit을 줄이기 위해 Squash and Merge 또는 Rebase and Merge를 우선 검토한다. Squash Merge를 사용하는 경우 최종 Squash Commit도 한글 규칙을 따른다(예: `chore: 프로젝트 기본 및 협업 기반 설정 (#1)`).
+
+## 라벨 체계
+
+Issue와 Pull Request는 `{emoji} {label-name}` 형식의 Label을 사용한다. 작업 유형, 작업 상태, 우선순위, 작업 규모, 영향 영역, 특별 관리 분류로 구성되어 있으며 전체 목록은 저장소의 [Labels 페이지](../../labels)에서 확인할 수 있다.
+
+- 상태 Label(`📋 backlog` ~ `⛔ blocked`)은 Issue에만 적용한다.
+- 우선순위 Label은 Issue 하나당 하나만 사용한다.
+- 영향 영역(`area:`) Label은 Issue 하나에 여러 개를 적용할 수 있다.
+
+Issue 상태 흐름:
+
+```text
+📋 backlog → 📝 ready → 🚧 in progress → 👀 review → (Issue Close)
+                                   ↕
+                              ⛔ blocked
+```
+
+## Pull Request 체크리스트
+
+PR을 생성하기 전에 [`docs/development/quick-start.md`](./docs/development/quick-start.md)의 전체 검증 명령을 실행하고, [`.github/pull_request_template.md`](./.github/pull_request_template.md)의 항목을 실제로 확인한 것만 체크한다.
+
+- Base Branch는 `develop`이다.
+- 관련 Issue를 `Closes #{issue-number}`로 연결한다.
+- 새 환경 변수를 추가했다면 `.env.example`과 관련 문서를 함께 갱신한다.
+- Migration은 수정하지 않고 새 파일로 추가한다.
+- Secret, Token, Password를 코드/문서/PR 본문에 포함하지 않는다.
+
+## 기능 개발 절차 (Domain 기능)
+
+실제 Domain(Auth, Member, Job 등) 기능을 개발할 때는 다음 순서를 따른다.
+
+```text
+GETI Notion 기능명세서 확인
+→ API 계약 확인
+→ ERD 및 Domain 모델 확인
+→ Issue 생성
+→ Branch 생성
+→ Migration 작성
+→ Entity 작성
+→ Repository 작성
+→ Application Service 작성
+→ API(Controller, Request/Response DTO) 작성
+→ Test 작성
+→ 전체 검증
+→ Draft Pull Request 생성
+```
+
+- Notion(기능명세서, API 명세서, PRD)에 이미 확정된 필드, 권한, 상태 전이가 있는지 먼저 확인한다. Notion과 저장소 구현이 다르면 임의로 판단하지 않고 [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md)의 분류 기준(`CONTRACT_MISMATCH`/`DECISION_REQUIRED`)을 따른다.
+- 새 Domain은 Root Package(`team.inreok.getiserver`) 바로 아래 독립된 Package로 만들고, `domain`/`application`/`infrastructure`/`presentation` 4-Layer 내부 구조를 따른다. 세부 내용은 [`docs/architecture/modularity.md`](./docs/architecture/modularity.md)의 "Domain Module 내부 구조"를 따른다.
+- Migration은 [`docs/development/persistence.md`](./docs/development/persistence.md)의 Flyway 규칙을 따르고, `spring.jpa.hibernate.ddl-auto`는 `validate`만 사용한다.
+- API 응답과 예외 처리는 [`docs/development/web-api.md`](./docs/development/web-api.md)의 `ApiResponse`/`PageResponse`/`ErrorResponse`/`BusinessException` 계약을 따른다.
+- Package를 추가하거나 옮긴 뒤에는 `./gradlew test --tests "*ModularityTest"`로 구조 검증을 실행한다.
+- Web 계층을 추가하면 Web Slice Test(`@WebMvcTest`)와 오류 Contract Test를 함께 작성한다. 세부 기준은 [`docs/development/testing.md`](./docs/development/testing.md)를 따른다.
+
+## 코드 품질
+
+EditorConfig, Spotless(ktlint), detekt로 코드 스타일과 정적 분석을 관리한다. 자동 포맷 적용, 검사 명령, 도구별 설정은 [`docs/development/code-quality.md`](./docs/development/code-quality.md)를 따른다.
+
+```bash
+./gradlew spotlessApply
+./gradlew check
+```
+
+## AI 기반 개발
+
+Claude Code, Codex 등의 AI 개발 도구를 사용할 때는 [`AGENTS.md`](./AGENTS.md)와 [`docs/ai/README.md`](./docs/ai/README.md)의 규칙을 따른다. Claude Code 전용 설정은 [`CLAUDE.md`](./CLAUDE.md)와 `.claude/`(`rules/`, `commands/`, `skills/`)에, Codex 전용 설정은 `.codex/`(`policies/`, `prompts/`)에 있다.

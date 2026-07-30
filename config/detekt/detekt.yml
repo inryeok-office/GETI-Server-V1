@@ -1,0 +1,17 @@
+# detekt는 buildUponDefaultConfig = true로 동작하며, 이 파일은 기본 Config 위에
+# 실제로 필요한 항목만 덮어쓴다. 전체 기본 Config를 복사해 오지 않는다.
+
+empty-blocks:
+  # Spring Boot의 관용적인 ApplicationContext 스모크 테스트 패턴
+  # (예: `@Test fun contextLoads() {}`)은 의도적으로 빈 본문을 사용한다.
+  EmptyFunctionBlock:
+    active: true
+    excludes: ['**/test/**', '**/integrationTest/**']
+
+naming:
+  # 기본 Config는 Test Source의 Backtick 함수 이름(예: `` `유효한 요청이면 사용자를 생성한다`() ``)을
+  # src/test/**에서만 허용한다. PR 8에서 추가한 src/integrationTest/**도 동일한 Test Naming
+  # Convention을 쓰므로 같은 예외를 적용한다.
+  FunctionNaming:
+    active: true
+    excludes: ['**/test/**', '**/integrationTest/**']
