@@ -7,21 +7,18 @@ on:
 
 permissions:
   pull-requests: write
-  contents: write
 
 jobs:
   auto-merge:
-    name: Approve and Enable Auto-merge
+    name: Enable Auto-merge
+    # GitHub Actions(GITHUB_TOKEN)는 Pull Request를 승인(Approve)할 수 없다(GitHub 정책상 항상
+    # 거부됨: "GraphQL: GitHub Actions is not permitted to approve pull requests."). 그래서 이 Job은
+    # Auto-merge 예약만 하고, 필요한 리뷰 승인(develop의 Required Review 1건)은 사람이 별도로 진행한다.
+    # 승인과 CI(Required Status Check)가 모두 충족되면 GitHub가 자동으로 Merge한다.
     if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Approve pull request
-        run: gh pr review --approve "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Enable auto-merge
         run: gh pr merge --auto --squash "$PR_URL"
         env:
