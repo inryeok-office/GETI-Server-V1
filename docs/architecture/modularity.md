@@ -56,7 +56,7 @@ team.inreok.getiserver                            (Root Package)
         └── RequestIdFilterTest.kt                  (Test, requestId 생성/재사용 검증)
 ```
 
-Domain Persistence 기반 PR부터는 `domain` 아래에 15개 Domain Package가 있다. 각 Package는 동일한 형태를 반복한다(예시로 `member`만 전개, Enum이 없는 Domain은 `entity/type`도 없다).
+`domain` 아래에는 15개 Domain Package가 있다. 각 Package는 동일한 형태를 반복한다(예시로 `member`만 전개, Enum이 없는 Domain은 `entity/type`도 없다).
 
 ```text
 team.inreok.getiserver.domain
@@ -201,7 +201,7 @@ team.inreok.getiserver.DomainApplicationModuleDetectionStrategy   (src/test 전�
 
 Module 간 순환 의존성을 만들지 않고, 다른 Module의 내부 구현(비공개 Package)을 직접 참조하지 않는 것이 기본 원칙이다. 다른 Module에 공개해야 하는 타입만 공개 API 또는 Spring Modulith Named Interface로 노출한다.
 
-현재 유일한 예외는 `collector`(`JobCollectionRun.status`)가 `operation`의 `OperationStatus` Enum을 재사용하는 것이다. `job_collection_runs.status`와 `async_operations.status`가 ERD상 동일한 `operation_status` 값 집합을 쓰기 때문에([`erd.md`](./erd.md)의 "operation Module로 통합한 이유"와 대칭되는 이유로 `collector`를 별도 Domain으로 유지하는 대신 Enum만 공유), `domain.operation.entity.type` Package에 `@NamedInterface("type")`를 선언해 이 Package만 다른 Domain에 공개했다(`src/main/java/team/inreok/getiserver/domain/operation/entity/type/package-info.java`). `operation`의 다른 부분(`entity`의 `AsyncOperation`, `repository`)은 여전히 비공개다.
+현재 유일한 예외는 `collector`(`JobCollectionRun.status`)가 `operation`의 `OperationStatus` Enum을 재사용하는 것이다. `job_collection_runs.status`와 `async_operations.status`가 ERD상 동일한 `operation_status` 값 집합을 쓰기 때문에([`erd.md`](./erd.md)의 "collector가 operation의 Enum을 재사용하는 이유" 참고), `domain.operation.entity.type` Package에 `@NamedInterface("type")`를 선언해 이 Package만 다른 Domain에 공개했다(`src/main/java/team/inreok/getiserver/domain/operation/entity/type/package-info.java`). `operation`의 다른 부분(`entity`의 `AsyncOperation`, `repository`)은 여전히 비공개다.
 
 새로운 Domain 간 의존이 필요해지면 이 방식(Named Interface로 필요한 Package만 명시적으로 공개)을 그대로 따르고, 이 문서에 근거를 추가한다.
 
@@ -274,7 +274,7 @@ build/spring-modulith-docs/module-domain.member.adoc   domain.member Module Canv
 
 `@ApplicationModuleTest`는 특정 Module과 그 Module이 선언한 협력 Module만 골라 Spring Context를 구성하는 Slice Test다. 일반 `@SpringBootTest`가 전체 Context를 올리는 것과 달리, 검증 대상 Module의 경계 안에서만 통합 동작을 확인할 때 사용한다.
 
-15개 Domain Module이 추가됐지만 아직 각 Module 내부에 Spring Bean 협력(Service 등)이 없고, Persistence 검증은 여러 Module의 Table을 함께 다루는 `CoreDomainSchemaIntegrationTest`(`src/integrationTest`)가 담당하고 있어 `@ApplicationModuleTest`를 사용하는 빈 Test를 만들지 않았다. 실제 Module 내부에 Spring Bean 협력이 생기는 시점에 해당 Module Package 안에 Integration Test를 추가한다.
+15개 Domain Module이 있지만 아직 각 Module 내부에 Spring Bean 협력(Service 등)이 없고, Persistence 검증은 여러 Module의 Table을 함께 다루는 `CoreDomainSchemaIntegrationTest`(`src/integrationTest`)가 담당하고 있어 `@ApplicationModuleTest`를 사용하는 빈 Test를 만들지 않았다. 실제 Module 내부에 Spring Bean 협력이 생기는 시점에 해당 Module Package 안에 Integration Test를 추가한다.
 
 ## 아직 도입하지 않은 것
 

@@ -1,6 +1,6 @@
 # 코딩 컨벤션 (AI 작업 원칙)
 
-GETI-Server는 기반 구축(PR 1~10)을 마쳤고, 이후 최신 19개 Table ERD를 기준으로 `domain`/`global` 최상위 구조와 Domain별 Entity/Repository Persistence 기반을 구성했다(아래 "모듈 경계"와 "Domain Package 내부 구조" 참고). 이 문서는 현재 실제로 확정된 공통 원칙만 다룬다.
+GETI-Server는 기반 구축(PR 1~10)에 이어 최신 19개 Table ERD를 기준으로 `domain`/`global` 최상위 구조와 Domain별 Entity/Repository Persistence 기반을 갖추고 있다(아래 "모듈 경계"와 "Domain Package 내부 구조" 참고). 이 문서는 현재 실제로 확정된 공통 원칙만 다룬다.
 
 ## 공통 원칙
 
@@ -52,7 +52,7 @@ domain/{domain-name}/
 └── exception/
 ```
 
-실제 구현이 없는 `service`/`controller`/`dto`/`exception`은 미리 빈 Package로 만들지 않는다. `domain/application/infrastructure/presentation` 4-Layer DDD 구조는 더 이상 사용하지 않는다(과거 GETI Notion 컨벤션 초안이었으나 사용자가 이후 이 구조로 명시적으로 확정했다). 세부 내용은 [`docs/architecture/modularity.md`](../architecture/modularity.md)의 "Domain Package 내부 구조" Section을 따른다.
+실제 구현이 없는 `service`/`controller`/`dto`/`exception`은 미리 빈 Package로 만들지 않는다. `domain/application/infrastructure/presentation` 4-Layer 구조는 사용하지 않는다. 세부 내용은 [`docs/architecture/modularity.md`](../architecture/modularity.md)의 "Domain Package 내부 구조" Section을 따른다.
 
 ## 아직 확정되지 않은 규칙
 
