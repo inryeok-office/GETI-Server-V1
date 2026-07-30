@@ -7,7 +7,7 @@
 ## 프로젝트 개요
 
 - 프로젝트 이름: GETI-Server (Spring Boot Backend)
-- Kotlin(Gradle Kotlin DSL) 기반이며 Repository/AI Harness/Code Quality/Test/Spring Modulith/Configuration/Docker/Persistence/공통 Web·API/CI 기반을 모두 갖춘 **기반 구축 완료 단계**다(PR 1~10, [`docs/audit/foundation-audit.md`](./docs/audit/foundation-audit.md) 참고). 실제 Domain(Auth, Member, Job 등) 기능은 아직 구현되어 있지 않다.
+- Kotlin(Gradle Kotlin DSL) 기반이며 Repository/AI Harness/Code Quality/Test/Spring Modulith/Configuration/Docker/Persistence/공통 Web·API/CI 기반을 모두 갖춘 **기반 구축 완료 단계**다(PR 1~10, [`docs/audit/foundation-audit.md`](./docs/audit/foundation-audit.md) 참고). 이후 최신 최소 19개 Table ERD를 기준으로 한 **Domain Persistence 기반**(JPA Entity, Repository, Flyway Migration)을 구성했다([`docs/architecture/erd.md`](./docs/architecture/erd.md) 참고). Use Case(Service), Controller, OAuth Flow 등 실제 Domain 기능(Auth, Member, Job 등)은 아직 구현되어 있지 않다.
 - 확인되지 않은 기능이나 Architecture를 추측해서 구현하지 않는다. 항상 Issue와 명세, 그리고 실제 Domain 기능이면 GETI Notion(기능명세서, API 명세서, PRD)을 기준으로 작업하고, 작업 전 기존 코드와 테스트를 먼저 분석한다. Notion과 저장소가 다르면 [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md)의 분류 기준을 따른다.
 
 ## 규칙 우선순위

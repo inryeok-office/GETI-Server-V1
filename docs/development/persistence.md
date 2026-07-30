@@ -47,15 +47,16 @@ Redis Client는 Spring Boot 기본값인 Lettuce를 그대로 사용하며 별�
 ## Flyway (Migration)
 
 - `spring.flyway.clean-disabled=true`를 `application.yaml`(공통 설정)에 명시했다. 모든 환경에서 `flyway clean`(전체 Schema 삭제) 실행을 차단한다.
-- 이번 PR은 실제 GETI Domain Migration을 추가하지 않는다. `src/main/resources/db/migration/`에는 아직 Migration 파일이 없다.
-- `src/integrationTest/resources/db/migration/V1__create_persistence_probe.sql`은 Persistence Integration Test 전용 Migration이며(`persistence_probe` 임시 Table), 실제 Domain Migration이 아니다. `integrationTest` Source Set에만 존재해 Production Classpath에 포함되지 않는다.
-- Migration 파일은 한 번 병합되면 내용을 수정하지 않고 새 버전으로 추가한다(Flyway의 Checksum 검증 원칙). 이 원칙은 실제 Domain Migration이 추가되는 시점부터 적용된다.
+- `src/main/resources/db/migration/V2__create_core_domain_schema.sql`이 실제 GETI Domain의 첫 Migration이다. 최신 최소 19개 Table ERD([`erd.md`](../architecture/erd.md) 참고)를 Table/PK/FK/UNIQUE/CHECK/Index까지 반영한다. `V1`이 아니라 `V2`로 시작하는 이유도 같은 문서와 파일 상단 주석에 있다(`integrationTest` 전용 `V1__create_persistence_probe.sql`과의 classpath Version 충돌 회피).
+- `src/integrationTest/resources/db/migration/V1__create_persistence_probe.sql`은 Persistence Integration Test 전용 Migration이며(`persistence_probe` 임시 Table), 실제 Domain Migration이 아니다. `integrationTest` Source Set에만 존재해 Production Classpath에 포함되지 않는다. `integrationTest` 실행 시에는 main과 integrationTest의 `db/migration` Resource가 같은 classpath 위치로 합쳐지므로, `persistence_probe` Table도 Domain Schema와 함께 같은 Testcontainers DB에 생성된다.
+- Migration 파일은 한 번 병합되면 내용을 수정하지 않고 새 버전으로 추가한다(Flyway의 Checksum 검증 원칙). `V2__create_core_domain_schema.sql`이 병합된 이후에는 이 원칙이 그대로 적용된다.
 
 ## JPA / Hibernate 정책
 
 - `spring.jpa.hibernate.ddl-auto=validate`를 공통 설정에 명시했다. `create`/`create-drop`/`update`는 어떤 Profile에서도 사용하지 않는다. Schema 변경은 Flyway Migration만으로 수행한다.
 - `spring.jpa.open-in-view=false`를 공통 설정에 명시했다(Spring Boot 기본값은 `true`). Transaction 경계 밖에서 Lazy Loading이 일어나는 것을 막는다.
-- 이번 PR은 실제 Domain Entity를 추가하지 않아 `ddl-auto=validate`가 검증할 대상이 없다(빈 Schema에 대한 검증). `PostgresPersistenceIntegrationTest`가 Flyway로 만든 `persistence_probe` Table과 매핑된 Entity로 실제 Validate/저장/조회 동작을 확인했다.
+- 19개 Table에 대응하는 Entity가 모두 `ddl-auto=validate` 대상이다. `CoreDomainSchemaIntegrationTest`(`src/integrationTest`)가 Flyway로 만든 실제 Schema를 대상으로 Validate·저장·조회·제약조건 동작을 확인한다. `PostgresPersistenceIntegrationTest`는 여전히 `persistence_probe` Table 하나만으로 Flyway+Hibernate 연동 자체를 검증하는 별개의 기술 Smoke Test로 유지된다.
+- `src/test`의 `GetiServerApplicationTests`(`@SpringBootTest` Application Context Smoke Test)는 PostgreSQL 전용 Migration(`jsonb`, Partial Unique Index 등)을 H2로 검증하지 않기 위해 그 Test Class에서만 `spring.flyway.enabled=false`, `spring.jpa.hibernate.ddl-auto=none`으로 재정의한다. 실제 Schema/Migration 검증은 Testcontainers 기반 `integrationTest`가 담당한다.
 - Entity/Repository는 각 Domain Module Package 안에 둔다. Root Package 바로 아래 공용 `entity`/`repository` Package를 만들지 않는다([`modularity.md`](../architecture/modularity.md) 참고).
 - Controller에서 Transaction을 시작하지 않는다. `@Transactional`은 Service(또는 그에 준하는 Application 계층) 경계에서 사용한다.
 
@@ -125,8 +126,8 @@ Windows에서는 `.\gradlew.bat`를 사용한다.
 
 ## 이번 범위가 아닌 것
 
-- 실제 GETI Domain Entity, Repository, Migration
+- Use Case Service, Controller 등 Application/Presentation Layer([`erd.md`](../architecture/erd.md)의 "이번 범위와 제외 범위" 참고)
 - QueryDSL, Cache 전략(예: `@Cacheable`), Redis 기반 Session/Rate Limit 등 구체적인 활용 코드
 - MinIO, Kafka, Elasticsearch 연동
-- Spring Security, 인증/인가
+- Spring Security, 인증/인가, 실제 OAuth Flow
 - CI/CD에서의 `integrationTest` 실행(별도 CI 도입 PR에서 역할 분리를 재검토한다. 로컬에서는 개발자가 필요할 때 직접 `./gradlew integrationTest`를 실행한다)

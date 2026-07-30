@@ -9,7 +9,7 @@ GETI 서비스의 Backend Server 저장소다. 처음 이 저장소를 Clone했�
 
 ## 현재 개발 상태
 
-이 저장소는 실제 Domain(Auth, Member, Job 등) 기능을 아직 구현하지 않은 **기반 구축(Foundation) 완료 단계**다. Repository 구조, AI 개발 하네스, 코드 품질, 테스트, Spring Modulith, Configuration, Docker, Persistence, 공통 Web/API, CI, 전역 예외 처리까지 구성되어 있으며, 다음 단계부터 실제 Domain 기능 개발을 시작한다. 전체 감사 결과는 [`docs/audit/foundation-audit.md`](./docs/audit/foundation-audit.md)를, GETI Notion 요구사항과 저장소 구현의 대조 결과는 [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md)를 따른다.
+이 저장소는 Repository 구조, AI 개발 하네스, 코드 품질, 테스트, Spring Modulith, Configuration, Docker, Persistence, 공통 Web/API, CI, 전역 예외 처리까지 갖춘 **기반 구축(Foundation) 완료 단계**를 지나, 최신 최소 19개 Table ERD([`docs/architecture/erd.md`](./docs/architecture/erd.md))를 기준으로 한 **Domain Persistence 기반**(JPA Entity, Spring Data Repository, Flyway Migration)을 구성했다. Use Case(Service), Controller, OAuth Flow, 실제 CRUD API는 아직 구현하지 않았다. 전체 감사 결과는 [`docs/audit/foundation-audit.md`](./docs/audit/foundation-audit.md)를, GETI Notion 요구사항과 저장소 구현의 대조 결과는 [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md)를 따른다.
 
 ## 실제 기술 스택
 
@@ -34,10 +34,10 @@ GETI 서비스의 Backend Server 저장소다. 처음 이 저장소를 Clone했�
 
 ## Architecture
 
-- Root Package: `team.inreok.getiserver`
-- `domain`: 실제 비즈니스 기능을 담는 Package. 각 Domain은 Root Package 바로 아래 독립된 Package(Spring Modulith Application Module)로 구성한다. 아직 실제 Domain Package는 없다.
+- Root Package: `team.inreok.getiserver`. 최상위 Production Package는 `domain`과 `global` 두 종류만 사용한다.
+- 실제 비즈니스 기능을 담는 15개 Domain Package(`domain.member`, `auth`, `file`, `company`, `job`, `ai`, `recommendation`, `application`, `program`, `portfolio`, `notification`, `inquiry`, `collector`, `operation`, `audit`)가 `domain` 아래 독립된 Spring Modulith Application Module로 구성되어 있다(최신 19개 Table ERD, [`docs/architecture/erd.md`](./docs/architecture/erd.md)).
 - `global`: 여러 Domain이 공유하는 기술 기반(`global.web`의 공통 성공 응답/Pagination/CORS/requestId, `global.error`의 오류 응답/전역 예외 처리)만 담는다. 특정 Domain 로직을 두지 않는다.
-- Domain Module을 처음 만들 때는 `domain`/`application`/`infrastructure`/`presentation` 4-Layer 내부 구조(GETI Notion BE 컨벤션 확정)를 따른다.
+- Domain Package 내부는 필요한 책임만 만든다(`entity`(+`entity/type`), `repository`, `service`, `controller`, `dto`, `exception`). 현재는 Service/Controller가 없어 각 Domain이 `entity`/`repository`만 채운 상태다.
 
 세부 Package Tree, Module 탐지 전략, 만들지 않는 Package 목록은 [`docs/architecture/modularity.md`](./docs/architecture/modularity.md)를 따른다. Domain 기능을 새로 개발하는 절차는 [`CONTRIBUTING.md`](./CONTRIBUTING.md)의 "기능 개발 절차"를 따른다.
 
@@ -133,6 +133,7 @@ Issue 생성부터 Draft Pull Request까지의 전체 협업 절차, Branch/Comm
 | [`docs/development/code-quality.md`](./docs/development/code-quality.md) | Spotless/ktlint/detekt |
 | [`docs/development/ci.md`](./docs/development/ci.md) | GitHub Actions CI, Repository Policy |
 | [`docs/architecture/modularity.md`](./docs/architecture/modularity.md) | Spring Modulith, Package Architecture, Domain Module 내부 구조 |
+| [`docs/architecture/erd.md`](./docs/architecture/erd.md) | 최신 최소 19개 Table ERD, Enum, FK 삭제 정책, 다형적 참조 |
 | [`docs/audit/foundation-audit.md`](./docs/audit/foundation-audit.md) | PR 1~11 기반 구축 전체 감사 결과 |
 | [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md) | GETI Notion과 저장소 대조, 결정 필요 항목 |
 | [`AGENTS.md`](./AGENTS.md), [`docs/ai/README.md`](./docs/ai/README.md) | AI 개발 도구 공통 규칙 |

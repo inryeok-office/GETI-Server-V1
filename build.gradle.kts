@@ -48,8 +48,15 @@ configurations["integrationTestImplementation"].extendsFrom(configurations.testI
 configurations["integrationTestRuntimeOnly"].extendsFrom(configurations.testRuntimeOnly.get())
 
 dependencies {
-    // Spring Modulith: Application Module 경계 검증(Production 미사용, Test 전용)
+    // Spring Modulith: Application Module 경계 검증(Test 전용, Production Runtime 미사용)
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
+
+    // Spring Modulith Named Interface(@NamedInterface) Annotation. domain.collector가 domain.operation의
+    // 공개 Type(OperationStatus)을 참조하기 위해 src/main/java의 package-info.java에서만 사용한다.
+    // compileOnly라 Runtime Classpath와 최종 Artifact에는 포함되지 않는다(ArchUnit 기반 구조 검증은
+    // Class 파일의 Annotation 메타데이터만 읽고, 이 검증은 spring-modulith-starter-test가 이미 있는
+    // src/test에서만 수행한다).
+    compileOnly("org.springframework.modulith:spring-modulith-api")
 
     // Spring Web / Validation / Actuator
     implementation("org.springframework.boot:spring-boot-starter-webmvc")

@@ -1,0 +1,3 @@
+spring:
+  modulith:
+    detection-strategy: team.inreok.getiserver.DomainApplicationModuleDetectionStrategy
