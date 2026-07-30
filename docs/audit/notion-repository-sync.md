@@ -158,7 +158,7 @@ Notion 내부에서도 Form이 별도 Domain인지 Application에 포함되는�
 
 1. **Pagination 최대 size=100 서버 강제** — `PageableHandlerMethodArgumentResolverCustomizer` Bean 추가(`team.inreok.getiserver.web`). Notion API 명세서 "목록 기본값: page=0, size=20, 최대 size=100"을 반영한다.
 2. **QueryDSL/ArchUnit/Mockito 문서 상태 갱신** — `docs/ai/coding-conventions.md`, `docs/ai/testing-policy.md`의 "아직 확정되지 않은 규칙/도구" 목록에서 세 항목을 제거하고 "Notion Tech Stack에서 확정, 실제 Dependency 추가는 필요 시점에"로 명시했다. **실제 Dependency는 추가하지 않았다**(사용할 구체적인 코드가 아직 없음).
-3. **Domain Module 내부 DDD Layer 원칙 문서화** — Notion 컨벤션의 domain/application/infrastructure/presentation 4-Layer 원칙을 `docs/architecture/modularity.md`에 "실제 Domain Module이 추가될 때 적용할 내부 구조"로 문서화했다. `docs/ai/coding-conventions.md`의 "아직 확정되지 않은 규칙"에서도 이 항목을 제거했다. **실제 Package는 생성하지 않았다.**
+3. **Domain Module 내부 DDD Layer 원칙 문서화** — Notion 컨벤션의 domain/application/infrastructure/presentation 4-Layer 원칙을 `docs/architecture/modularity.md`에 "실제 Domain Module이 추가될 때 적용할 내부 구조"로 문서화했다. `docs/ai/coding-conventions.md`의 "아직 확정되지 않은 규칙"에서도 이 항목을 제거했다. **실제 Package는 생성하지 않았다.** (**갱신**: Domain Persistence 기반 PR에서 사용자가 `domain/{domain-name}/entity`, `repository`, `service`, `controller`, `dto`, `exception` 구조로 명시적으로 재확정했다. 이 4-Layer DDD 원칙은 더 이상 사용하지 않는다. 현재 기준은 [`docs/architecture/modularity.md`](../architecture/modularity.md)를 따른다.)
 4. **`AGENTS.md`에 Source of Truth 우선순위 명시** — 저장소 문서 간 충돌 시 우선순위(사용자 지시 > 확정 제품 요구사항/API 계약 > 실제 Build/Test/Code > `AGENTS.md` > Architecture 문서 > `CLAUDE.md`/`.claude` > `docs/ai`/`docs/development` > Codex 정책 > Notion 초안 > 개인 취향)를 명시했다.
 
 ## 다음 단계 (사용자 결정 필요)

@@ -32,25 +32,24 @@ GETI-Server의 실제 환경(Spring Boot 4.1.0, Kotlin 2.3.21, Gradle 9.5.1 Kotl
 - `spring.flyway.clean-disabled=true`를 임의로 되돌리지 않는다.
 - Redis는 우선 Spring Boot가 기본 제공하는 `StringRedisTemplate`을 사용한다. 실제 객체 직렬화가 필요해지기 전에는 Java 직렬화 기반 `RedisTemplate<String, Any>` 같은 범용 Bean을 미리 만들지 않는다.
 - Docker(Testcontainers)가 필요한 PostgreSQL/Redis Persistence Integration Test는 `src/test`가 아니라 `src/integrationTest`(`./gradlew integrationTest`)에 작성한다. 자세한 내용은 [`docs/development/persistence.md`](../../docs/development/persistence.md)를 따른다.
-- 새 Controller와 요청/응답 DTO는 공통 Package(`team.inreok.getiserver.global.web`, `team.inreok.getiserver.global.error`)가 아니라 해당 Domain Module 내부에 둔다. Controller에 비즈니스 로직, Repository 직접 호출, Transaction 시작을 두지 않는다.
+- 새 Controller와 요청/응답 DTO는 공통 Package(`team.inreok.getiserver.global.web`, `team.inreok.getiserver.global.error`)가 아니라 해당 Domain Package(`team.inreok.getiserver.domain.{domain-name}`) 내부에 둔다. Controller에 비즈니스 로직, Repository 직접 호출, Transaction 시작을 두지 않는다.
 - API 응답은 `ApiResponse`/`PageResponse`(`team.inreok.getiserver.global.web`), `ErrorResponse`(`team.inreok.getiserver.global.error`)를 사용한다. JPA Entity를 응답으로 직접 반환하거나 `Map<String, Any>`를 응답으로 사용하거나 `Page<T>`를 그대로 반환하지 않는다.
 - 새 Error Code는 실제로 처리하는 오류에만 추가한다. Domain Error Code는 해당 Domain Module 내부에서 정의한다. Domain 예외는 `global.error.BusinessException`을 상속해 정의하고, 특정 Domain 예외를 `global` Package 안에 미리 만들지 않는다.
 - Exception Message, Stack Trace를 오류 응답에 그대로 노출하지 않는다(단, `BusinessException`의 Message는 우리 코드가 직접 작성한 안전한 문구이므로 예외). 자세한 내용은 [`docs/development/web-api.md`](../../docs/development/web-api.md)를 따른다.
 
 ## 모듈 경계 (Spring Modulith)
 
-Spring Modulith 기반이 구성되어 있다(`spring-modulith-starter-test`, `ModularityTest`). 새 도메인 Package는 Root Package 바로 아래 독립된 Module로 만들고, 다른 Module의 내부 구현을 직접 참조하지 않는다. Package 구조를 바꾸면 `./gradlew test --tests "*ModularityTest"`로 구조 검증을 실행한다. 세부 원칙은 [`docs/architecture/modularity.md`](../../docs/architecture/modularity.md)를 따른다.
+Spring Modulith 기반이 구성되어 있다(`spring-modulith-starter-test`, `ModularityTest`, `PackageArchitectureTest`). 최상위 Production Package는 `domain`과 `global` 두 종류만 사용하고, 새 도메인 Package는 `domain` 바로 아래 독립된 Module(`domain.{domain-name}`)로 만든다. Domain 내부는 `entity`(+`entity/type`), `repository`, `service`, `controller`, `dto`, `exception` 중 실제로 필요한 Package만 만든다. 다른 Domain의 내부 구현을 직접 참조하지 않는다(Named Interface로 명시적으로 공개한 Package는 예외, 현재 `domain.operation.entity.type`만 해당). Package 구조를 바꾸면 `./gradlew test --tests "*ModularityTest"`와 `./gradlew test --tests "*PackageArchitectureTest"`로 구조 검증을 실행한다. 세부 원칙은 [`docs/architecture/modularity.md`](../../docs/architecture/modularity.md)를 따른다.
 
 ## Architecture 제한
 
-아래 항목은 이 저장소에 아직 확정되지 않았다. 관련 Issue 없이 전역 규칙처럼 강제하거나 임의로 구현하지 않는다.
+Domain Package 내부 구조(`entity`/`repository`/`service`/`controller`/`dto`/`exception`)와 최상위 `domain`/`global` 분리는 사용자가 확정했다([`docs/architecture/modularity.md`](../../docs/architecture/modularity.md) 참고). 아래 항목은 여전히 이 저장소에 확정되지 않았다. 관련 Issue 없이 전역 규칙처럼 강제하거나 임의로 구현하지 않는다.
 
 ```text
-Module 내부 상세 Package 구조 (api/internal 등)
 Controller-Service-Repository 고정 구조
 Hexagonal Architecture
 Clean Architecture
-JPA Entity 공통 Base Class
+JPA Entity 공통 Base Class(global.persistence)
 QueryDSL 구조
 OpenAPI(springdoc) 실제 도입
 Security Filter Chain 구조
