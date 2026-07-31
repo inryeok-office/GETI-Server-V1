@@ -56,7 +56,7 @@ DECISION_REQUIRED     사용자 결정이 필요(대규모 변경 대상)
 | CI/CD | GitHub Actions · GHCR | GitHub Actions(CI만, Registry Push 없음) | IMPLEMENTATION_GAP | CD는 별도 PR | 이번 범위 아님(의도적 제외) |
 | Monitoring | Actuator · Micrometer · Prometheus · Grafana | Actuator(`health`만) | IMPLEMENTATION_GAP | Observability 전용 PR | 이번 범위 아님 |
 | Logging/Tracing | Loki · OpenTelemetry · Grafana Tempo | 미구현 | IMPLEMENTATION_GAP | Observability 전용 PR | 이번 범위 아님 |
-| API 공통 응답 | `{success, data, meta.requestId}` / `{success:false, error:{code,message,fieldErrors}, meta}` | `{data}` / `{code,message,status,path,timestamp,fieldErrors}` | **CONTRACT_MISMATCH** | 아래 상세 참고 | 사용자 결정 필요, 이번 PR 미변경 |
+| API 공통 응답 | `{success, data, meta.requestId}` / `{success:false, error:{code,message,fieldErrors}, meta}` | `{success, data, meta.requestId}` / `{success:false, error:{code,message,status,path,timestamp,fieldErrors}, meta}` | **RESOLVED** | 아래 상세 참고 | 사용자 결정에 따라 Notion 구조로 반영(아래 참고) |
 | Pagination | `page=0, size=20, 최대 size=100` | `page=0, size=20`(최대 제한 없었음) | IMPLEMENTATION_GAP | Notion 기준 채택 | **이번 PR에서 반영**(아래 참고) |
 | Git Branch | `feature/{n}-{domain}-{feature}`, `fix/`, `refactor/`, `chore/`, `release/vX.Y.Z`, `hotfix/` | `chore/{n}-{설명}`, `refactor/{n}-{설명}`(feature/fix/release/hotfix 미사용, 아직 기능 개발 전이라 자연스러움) | STALE_NOTION 가능성 | 아래 상세 참고 | 사용자 결정 필요 |
 | Issue/PR 제목 | `[Domain] 작업 내용` | `[TYPE] 작업 내용`(예: `[CHORE]`) | STALE_NOTION 가능성 | 아래 상세 참고 | 사용자 결정 필요 |
@@ -116,7 +116,14 @@ Notion API 명세서:
 
 **사용자 결정이 필요한 질문**: Notion 명세대로 `success`/`error`/`meta.requestId` 구조로 변경할지, 현재 구조를 유지하고 Notion 문서를 갱신할지. `requestId`는 아직 Trace/Correlation ID 인프라가 없어(Observability 범위, PR 9에서 의도적으로 보류) 어느 쪽을 택하든 실제 값을 채우려면 후속 작업이 필요하다.
 
-**PR 12 갱신**: `requestId`는 PR 12에서 구현했다(`RequestIdFilter`, MDC, Response Header `X-Request-Id`, 성공/오류 응답 Body의 `requestId` Field). 다만 Notion이 요구하는 `meta.requestId`처럼 `meta` 객체 하위에 중첩하지 않고 기존 응답 구조와 동일하게 최상위 Field로 추가했다 — `status`/`path`/`timestamp`처럼 이미 최상위에 있는 다른 Field와의 일관성을 우선했고, `meta` 객체를 새로 도입하는 것은 아래 `success`/`error`/`meta` Wrapper 구조 자체를 바꾸는 결정과 사실상 같아서 이번 PR에서 임의로 선행하지 않았다. `success`/`error`/`meta` Wrapper 구조로 바꿀지는 여전히 **DECISION_REQUIRED**로 남아 있다. Package 위치도 PR 12에서 `team.inreok.getiserver.web` → `team.inreok.getiserver.global.error`(오류)/`team.inreok.getiserver.global.web`(응답/설정)로 재구성했다(사용자가 확정한 `{root}/domain`, `{root}/global` 최상위 구조 반영).
+**PR 12 갱신**: `requestId`는 PR 12에서 구현했다(`RequestIdFilter`, MDC, Response Header `X-Request-Id`, 성공/오류 응답 Body의 `requestId` Field). 다만 Notion이 요구하는 `meta.requestId`처럼 `meta` 객체 하위에 중첩하지 않고 기존 응답 구조와 동일하게 최상위 Field로 추가했다 — `status`/`path`/`timestamp`처럼 이미 최상위에 있는 다른 Field와의 일관성을 우선했고, `meta` 객체를 새로 도입하는 것은 아래 `success`/`error`/`meta` Wrapper 구조 자체를 바꾸는 결정과 사실상 같아서 이번 PR에서 임의로 선행하지 않았다. Package 위치도 PR 12에서 `team.inreok.getiserver.web` → `team.inreok.getiserver.global.error`(오류)/`team.inreok.getiserver.global.web`(응답/설정)로 재구성했다(사용자가 확정한 `{root}/domain`, `{root}/global` 최상위 구조 반영).
+
+**2026-07-31 갱신 (RESOLVED)**: 사용자가 Member Domain API(`/api/v1/me/profile` 등) 구현을 요청하며 Notion의 `success`/`data`/`meta.requestId`, `success:false`/`error{code,message,fieldErrors}`/`meta.requestId` 구조를 "새로 업데이트된 Common"으로 제시했고, 전역 구조 마이그레이션을 명시적으로 선택했다(AskUserQuestion 확인). 이에 따라 `ApiResponse`/`ErrorResponse`/`GlobalExceptionHandler`를 Notion 구조로 변경했다.
+
+- `ApiResponse<T>`: `{ success: true, data, meta: { requestId } }`
+- `ErrorResponse`: `{ success: false, error: { code, message, status, path, timestamp, fieldErrors }, meta: { requestId } }`
+- `status`/`path`/`timestamp`는 Notion 명세에는 없지만 Log/Trace 연계에 유용해 `error` 객체 하위에 추가 Field로 유지했다(계약을 좁히지 않는 추가 정보이므로 Client 호환성에 영향 없음).
+- 기존 `GlobalExceptionHandlerTest`, `RequestIdFilterTest`, Member Controller Test의 관련 Assertion을 새 구조(`$.error.code`, `$.meta.requestId` 등)로 갱신했다. `docs/development/web-api.md`도 함께 갱신했다.
 
 ### 4. Git/Commit/Issue/PR Convention
 
@@ -164,7 +171,7 @@ Notion 내부에서도 Form이 별도 Domain인지 Application에 포함되는�
 ## 다음 단계 (사용자 결정 필요)
 
 1. Language(Kotlin 유지 vs Java 전환)와 Root Package(`team.inreok.getiserver` 유지 vs `com.geti`) 결정
-2. API 공통 응답 Contract(현재 구조 유지 vs Notion 구조 채택) 결정, 필요하면 별도 PR로 Contract Migration 진행
+2. ~~API 공통 응답 Contract(현재 구조 유지 vs Notion 구조 채택) 결정~~ — **2026-07-31 RESOLVED**, Notion 구조로 마이그레이션 완료(위 "3. API 공통 응답 Contract" 참고)
 3. Git/Commit/Issue/PR Convention(현재 한글 방식 유지 vs Notion 영문 방식 전환) 결정
 4. 위 결정 결과를 Notion 또는 저장소 중 실제 기준이 되는 쪽에 반영(Notion 수정은 사용자가 직접 수행하거나 별도 요청)
 5. Form Domain이 Application에 통합되는지 별도 Domain인지 Notion 내부 정리

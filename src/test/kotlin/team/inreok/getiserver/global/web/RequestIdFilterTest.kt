@@ -21,7 +21,7 @@ class RequestIdFilterTest
                 .perform(get("/test/web/success"))
                 .andExpect(status().isOk)
                 .andExpect(header().exists(RequestIdFilter.REQUEST_ID_HEADER))
-                .andExpect(jsonPath("$.requestId").isNotEmpty)
+                .andExpect(jsonPath("$.meta.requestId").isNotEmpty)
         }
 
         @Test
@@ -30,7 +30,7 @@ class RequestIdFilterTest
                 .perform(get("/test/web/success").header(RequestIdFilter.REQUEST_ID_HEADER, "test-request-id-1234"))
                 .andExpect(status().isOk)
                 .andExpect(header().string(RequestIdFilter.REQUEST_ID_HEADER, "test-request-id-1234"))
-                .andExpect(jsonPath("$.requestId").value("test-request-id-1234"))
+                .andExpect(jsonPath("$.meta.requestId").value("test-request-id-1234"))
         }
 
         @Test
@@ -39,6 +39,6 @@ class RequestIdFilterTest
                 .perform(get("/test/web/error").header(RequestIdFilter.REQUEST_ID_HEADER, "test-request-id-5678"))
                 .andExpect(status().isInternalServerError)
                 .andExpect(header().string(RequestIdFilter.REQUEST_ID_HEADER, "test-request-id-5678"))
-                .andExpect(jsonPath("$.requestId").value("test-request-id-5678"))
+                .andExpect(jsonPath("$.meta.requestId").value("test-request-id-5678"))
         }
     }

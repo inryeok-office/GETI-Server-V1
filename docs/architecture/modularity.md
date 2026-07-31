@@ -112,12 +112,17 @@ domain/{domain-name}/
 ├── entity/
 ├── repository/
 ├── service/
+│   └── impl/
 ├── controller/
 ├── dto/
 └── exception/
 ```
 
 아직 실제 구현이 없는 `service`/`controller`/`dto`/`exception`은 미리 빈 Package로 만들지 않는다. `presentation`/`application`/`infrastructure` 같은 확정되지 않은 추가 Layer로도 전환하지 않는다.
+
+### Service Interface/Impl 분리
+
+Member 도메인(PR 44)부터 `service` Package는 Interface만, 구현 Class는 `service/impl` Package에 둔다. `@Service`/`@Transactional`은 구현 Class에만 붙이고, Controller는 Interface 타입으로 의존을 주입받는다(구체 Class에 직접 의존하지 않음). Interface 이름과 구현 Class 이름은 `{Name}`/`{Name}Impl` 관례를 따른다(예: `MemberService`/`MemberServiceImpl`). 한 Interface에 구현 Class가 하나뿐이면 Spring이 Type 기반으로 자동 주입하므로 `@Qualifier` 등 추가 설정은 필요 없다. Service끼리 협력이 필요하면 서로의 Interface(구체 Impl이 아님)에 의존한다.
 
 Entity는 반드시 담당 Domain의 `entity` Package(복합 ID는 그 아래, Enum은 `entity/type`)에 두고, Repository는 반드시 담당 Domain의 `repository` Package에 둔다. 다음 Package 형태는 사용하지 않는다.
 

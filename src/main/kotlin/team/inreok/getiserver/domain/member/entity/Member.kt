@@ -73,14 +73,6 @@ class Member(
     var githubUrl: String? = null
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
-    var majors: String? = null
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
-    var skills: String? = null
-
-    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "desired_positions", columnDefinition = "jsonb")
     var desiredPositions: String? = null
 

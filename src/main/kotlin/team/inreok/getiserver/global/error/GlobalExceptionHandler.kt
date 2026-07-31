@@ -85,16 +85,16 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
     ): ErrorCode =
         when (ex) {
             is BusinessException -> ex.errorCode
-            is MethodArgumentNotValidException -> ErrorCode.VALIDATION_FAILED
-            is BindException -> ErrorCode.VALIDATION_FAILED
-            is ConstraintViolationException -> ErrorCode.VALIDATION_FAILED
-            is HttpMessageNotReadableException -> ErrorCode.MALFORMED_JSON
-            is MissingServletRequestParameterException -> ErrorCode.MISSING_REQUEST_PARAMETER
-            is TypeMismatchException -> ErrorCode.TYPE_MISMATCH
-            is HttpRequestMethodNotSupportedException -> ErrorCode.METHOD_NOT_ALLOWED
-            is HttpMediaTypeNotSupportedException -> ErrorCode.UNSUPPORTED_MEDIA_TYPE
-            is NoResourceFoundException -> ErrorCode.RESOURCE_NOT_FOUND
-            else -> ErrorCode.fromStatus(status)
+            is MethodArgumentNotValidException -> CommonErrorCode.VALIDATION_FAILED
+            is BindException -> CommonErrorCode.VALIDATION_FAILED
+            is ConstraintViolationException -> CommonErrorCode.VALIDATION_FAILED
+            is HttpMessageNotReadableException -> CommonErrorCode.MALFORMED_JSON
+            is MissingServletRequestParameterException -> CommonErrorCode.MISSING_REQUEST_PARAMETER
+            is TypeMismatchException -> CommonErrorCode.TYPE_MISMATCH
+            is HttpRequestMethodNotSupportedException -> CommonErrorCode.METHOD_NOT_ALLOWED
+            is HttpMediaTypeNotSupportedException -> CommonErrorCode.UNSUPPORTED_MEDIA_TYPE
+            is NoResourceFoundException -> CommonErrorCode.RESOURCE_NOT_FOUND
+            else -> CommonErrorCode.fromStatus(status)
         }
 
     private fun resolveMessage(
@@ -109,7 +109,7 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
                     FieldErrorResponse(
                         field = it.field,
                         reason =
-                            it.defaultMessage ?: ErrorCode.VALIDATION_FAILED.defaultMessage,
+                            it.defaultMessage ?: CommonErrorCode.VALIDATION_FAILED.defaultMessage,
                     )
                 }
             }
@@ -119,7 +119,7 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
                     FieldErrorResponse(
                         field = it.field,
                         reason =
-                            it.defaultMessage ?: ErrorCode.VALIDATION_FAILED.defaultMessage,
+                            it.defaultMessage ?: CommonErrorCode.VALIDATION_FAILED.defaultMessage,
                     )
                 }
             }
