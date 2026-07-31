@@ -10,9 +10,12 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import team.inreok.getiserver.domain.member.entity.Member
+import team.inreok.getiserver.domain.member.entity.MemberRole
+import team.inreok.getiserver.domain.member.entity.MemberRoleId
 import team.inreok.getiserver.domain.member.entity.type.DepartmentType
 import team.inreok.getiserver.domain.member.entity.type.MemberStatus
 import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
+import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.exception.MemberNotFoundException
 import team.inreok.getiserver.domain.member.exception.MemberProfileNotFoundException
 import team.inreok.getiserver.domain.member.exception.MemberProfileValidationException
@@ -55,6 +58,7 @@ class MemberServiceTest {
                 introduction = "안녕하세요"
             }
         given(memberRepository.findById(1L)).willReturn(Optional.of(member))
+        given(memberRoleRepository.findAllByIdMemberId(1L)).willReturn(studentRole(1L))
         given(memberSelectionQueryService.getMajorNames(1L)).willReturn(listOf("소프트웨어"))
         given(memberSelectionQueryService.getTechStackNames(1L)).willReturn(listOf("Kotlin", "Spring Boot"))
 
@@ -83,6 +87,7 @@ class MemberServiceTest {
                 profilePublic = true,
             ).apply { id = 2L }
         given(memberRepository.findById(2L)).willReturn(Optional.of(member))
+        given(memberRoleRepository.findAllByIdMemberId(2L)).willReturn(studentRole(2L))
         given(memberSelectionQueryService.getMajorNames(2L)).willReturn(emptyList())
         given(memberSelectionQueryService.getTechStackNames(2L)).willReturn(emptyList())
 
@@ -112,6 +117,7 @@ class MemberServiceTest {
                 introduction = "비공개 자기소개"
             }
         given(memberRepository.findById(8L)).willReturn(Optional.of(member))
+        given(memberRoleRepository.findAllByIdMemberId(8L)).willReturn(studentRole(8L))
 
         val result = service.getProfile(8L)
 
@@ -133,6 +139,24 @@ class MemberServiceTest {
     }
 
     @Test
+    fun `조회 대상이 STUDENT Role이 아니면 MemberNotFoundException을 던진다`() {
+        val member =
+            Member(
+                oauthProvider = OAuthProvider.GOOGLE,
+                oauthSubject = "subject-9",
+                email = "teacher9@example.com",
+                status = MemberStatus.ACTIVE,
+                profilePublic = true,
+            ).apply { id = 9L }
+        given(memberRepository.findById(9L)).willReturn(Optional.of(member))
+        given(memberRoleRepository.findAllByIdMemberId(9L))
+            .willReturn(listOf(MemberRole(MemberRoleId(9L, RoleType.TEACHER))))
+
+        assertThatThrownBy { service.getProfile(9L) }
+            .isInstanceOf(MemberNotFoundException::class.java)
+    }
+
+    @Test
     fun `요청에 포함된 Field만 수정하고 나머지는 유지한다`() {
         val member = newMember(3L).apply { phoneNumber = "010-0000-0000" }
         given(memberRepository.findById(3L)).willReturn(Optional.of(member))
@@ -142,6 +166,49 @@ class MemberServiceTest {
 
         assertThat(result.bio).isEqualTo("새 소개")
         assertThat(result.phone).isEqualTo("010-0000-0000")
+        verify(memberRepository).flush()
+    }
+
+    @Test
+    fun `PATCH Body에 알 수 없는 Field가 있으면 PROFILE_VALIDATION_FAILED 예외를 던진다`() {
+        val body = JsonMapper().readTree("""{"nickname":"별명"}""")
+
+        assertThatThrownBy { service.updateProfile(10L, body) }
+            .isInstanceOf(MemberProfileValidationException::class.java)
+        verify(memberRepository, never()).findById(10L)
+    }
+
+    @Test
+    fun `profileImageUrl을 요청에 포함하면 PROFILE_VALIDATION_FAILED 예외를 던진다`() {
+        val body = JsonMapper().readTree("""{"profileImageUrl":"https://example.com/a.png"}""")
+
+        assertThatThrownBy { service.updateProfile(11L, body) }
+            .isInstanceOf(MemberProfileValidationException::class.java)
+        verify(memberRepository, never()).findById(11L)
+    }
+
+    @Test
+    fun `학생은 isPublic을 false로 설정할 수 있다`() {
+        val member = newMember(12L)
+        given(memberRepository.findById(12L)).willReturn(Optional.of(member))
+        given(memberRoleRepository.findAllByIdMemberId(12L)).willReturn(studentRole(12L))
+        val body = JsonMapper().readTree("""{"isPublic":false}""")
+
+        val result = service.updateProfile(12L, body)
+
+        assertThat(result.isPublic).isFalse()
+    }
+
+    @Test
+    fun `교사-개발자는 isPublic을 false로 설정할 수 없다`() {
+        val member = newMember(13L)
+        given(memberRepository.findById(13L)).willReturn(Optional.of(member))
+        given(memberRoleRepository.findAllByIdMemberId(13L))
+            .willReturn(listOf(MemberRole(MemberRoleId(13L, RoleType.TEACHER))))
+        val body = JsonMapper().readTree("""{"isPublic":false}""")
+
+        assertThatThrownBy { service.updateProfile(13L, body) }
+            .isInstanceOf(MemberProfileValidationException::class.java)
     }
 
     @Test
@@ -194,6 +261,9 @@ class MemberServiceTest {
         assertThatThrownBy { service.updateProfile(999L, body) }
             .isInstanceOf(MemberProfileNotFoundException::class.java)
     }
+
+    private fun studentRole(memberId: Long): List<MemberRole> =
+        listOf(MemberRole(MemberRoleId(memberId, RoleType.STUDENT)))
 
     private fun newMember(memberId: Long): Member =
         Member(

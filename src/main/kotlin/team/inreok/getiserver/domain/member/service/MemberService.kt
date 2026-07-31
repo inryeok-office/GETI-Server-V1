@@ -7,6 +7,7 @@ import team.inreok.getiserver.domain.member.dto.MemberProfileUpdateResponse
 import team.inreok.getiserver.domain.member.dto.MyProfileResponse
 import team.inreok.getiserver.domain.member.entity.Member
 import team.inreok.getiserver.domain.member.entity.type.DepartmentType
+import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.exception.MemberNotFoundException
 import team.inreok.getiserver.domain.member.exception.MemberProfileNotFoundException
 import team.inreok.getiserver.domain.member.exception.MemberProfileValidationException
@@ -25,6 +26,10 @@ class MemberService(
     @Transactional(readOnly = true)
     fun getProfile(memberId: Long): MemberProfileResponse {
         val member = memberRepository.findById(memberId).orElseThrow { MemberNotFoundException(memberId) }
+        // 이 API는 학생 프로필 조회 용도이므로, 조회 대상이 STUDENT Role이 아니면(교사/개발자 등)
+        // 해당 프로필이 존재하지 않는 것과 동일하게 처리한다(코드 리뷰 Major 반영).
+        val roles = memberRoleRepository.findAllByIdMemberId(memberId).map { it.id.role }
+        if (RoleType.STUDENT !in roles) throw MemberNotFoundException(memberId)
         return toProfileResponse(member)
     }
 
@@ -59,6 +64,7 @@ class MemberService(
         memberId: Long,
         body: JsonNode,
     ): MemberProfileUpdateResponse {
+        validateUpdateRequest(body)
         val member = memberRepository.findById(memberId).orElseThrow { MemberProfileNotFoundException(memberId) }
         applyDepartment(member, body)
         if (body.has("phone")) member.phoneNumber = readNullableText(body, "phone", maxLength = 30)
@@ -66,10 +72,26 @@ class MemberService(
         if (body.has("githubUrl")) member.githubUrl = readNullableText(body, "githubUrl", maxLength = 500)
         applyDesiredJob(member, body)
         applyIsPublic(member, body)
+        // @UpdateTimestamp는 Flush 시점에 Entity의 updatedAt 값을 갱신한다. 명시적으로 Flush하지
+        // 않으면 응답의 updatedAt이 이번 수정 이전 값일 수 있어(코드 리뷰 Major 반영), 응답을
+        // 만들기 전에 강제로 Flush해 실제 갱신된 값을 반환한다.
+        memberRepository.flush()
+        return toUpdateResponse(member)
+    }
+
+    private fun validateUpdateRequest(body: JsonNode) {
+        val unknown = body.propertyNames().filterNot { it in ALLOWED_PROFILE_UPDATE_FIELDS }
+        if (unknown.isNotEmpty()) {
+            throw MemberProfileValidationException("알 수 없는 요청 Field입니다: ${unknown.joinToString()}")
+        }
         // profileImageUrl은 요청/응답 모두 명세에 있지만, 현재 Schema는 File 업로드 결과인
         // profile_image_file_id(Long)만 가지고 있어 문자열 URL을 저장할 Column이 없다. File
-        // Domain 연동 전까지는 값을 받아도 저장하지 않고 무시한다.
-        return toUpdateResponse(member)
+        // Domain 연동 전까지는 조용히 무시하지 않고 명확히 거부한다(코드 리뷰 Major 반영).
+        if (body.has("profileImageUrl")) {
+            throw MemberProfileValidationException(
+                "profileImageUrl은 아직 지원하지 않습니다. File 업로드 API 연동 이후 다시 시도해주세요.",
+            )
+        }
     }
 
     private fun applyDepartment(
@@ -108,24 +130,19 @@ class MemberService(
         if (!node.isBoolean) {
             throw MemberProfileValidationException("isPublic은 Boolean 값이어야 합니다.")
         }
-        member.profilePublic = node.asBoolean()
+        val isPublic = node.asBoolean()
+        if (!isPublic) requireNotPrivacyRestrictedRole(member)
+        member.profilePublic = isPublic
     }
 
-    private fun readNullableText(
-        body: JsonNode,
-        field: String,
-        maxLength: Int?,
-    ): String? {
-        val node = body.get(field)
-        if (node.isNull) return null
-        if (!node.isString) {
-            throw MemberProfileValidationException("$field 은 문자열이어야 합니다.")
+    // 교사(TEACHER)/개발자(DEVELOPER)는 학생이 문의·연락할 수 있어야 하므로 프로필을 비공개로
+    // 전환할 수 없다(코드 리뷰 Major 반영).
+    private fun requireNotPrivacyRestrictedRole(member: Member) {
+        val memberId = requireNotNull(member.id) { "저장된 Member는 id를 가져야 합니다." }
+        val roles = memberRoleRepository.findAllByIdMemberId(memberId).map { it.id.role }
+        if (roles.any { it == RoleType.TEACHER || it == RoleType.DEVELOPER }) {
+            throw MemberProfileValidationException("교사/개발자 회원은 프로필을 비공개로 설정할 수 없습니다.")
         }
-        val value = node.asString()
-        if (maxLength != null && value.length > maxLength) {
-            throw MemberProfileValidationException("$field 은 최대 ${maxLength}자까지 입력할 수 있습니다.")
-        }
-        return value
     }
 
     private fun toProfileResponse(member: Member): MemberProfileResponse {
@@ -166,4 +183,26 @@ class MemberService(
         if (json.isNullOrBlank()) return emptyList()
         return objectMapper.readValue(json, Array<String>::class.java).toList()
     }
+
+    companion object {
+        private val ALLOWED_PROFILE_UPDATE_FIELDS =
+            setOf("department", "phone", "desiredJob", "bio", "githubUrl", "isPublic", "profileImageUrl")
+    }
+}
+
+private fun readNullableText(
+    body: JsonNode,
+    field: String,
+    maxLength: Int?,
+): String? {
+    val node = body.get(field)
+    if (node.isNull) return null
+    if (!node.isString) {
+        throw MemberProfileValidationException("$field 은 문자열이어야 합니다.")
+    }
+    val value = node.asString()
+    if (maxLength != null && value.length > maxLength) {
+        throw MemberProfileValidationException("$field 은 최대 ${maxLength}자까지 입력할 수 있습니다.")
+    }
+    return value
 }

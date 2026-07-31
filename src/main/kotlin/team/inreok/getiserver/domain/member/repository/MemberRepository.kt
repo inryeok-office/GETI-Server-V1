@@ -8,7 +8,9 @@ import org.springframework.data.repository.query.Param
 import team.inreok.getiserver.domain.member.entity.Member
 import team.inreok.getiserver.domain.member.entity.type.AcademicStatus
 import team.inreok.getiserver.domain.member.entity.type.DepartmentType
+import team.inreok.getiserver.domain.member.entity.type.MemberStatus
 import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
+import team.inreok.getiserver.domain.member.entity.type.RoleType
 
 interface MemberRepository : JpaRepository<Member, Long> {
     fun findByEmail(email: String): Member?
@@ -19,11 +21,15 @@ interface MemberRepository : JpaRepository<Member, Long> {
     ): Member?
 
     // :name은 Service 계층에서 LIKE Wildcard(%, _)와 Escape 문자(\)를 미리 이스케이프해 전달한다
-    // (검색어에 %/_가 포함되어도 문자 그대로 매칭하기 위함, ESCAPE '\' 참고).
+    // (검색어에 %/_가 포함되어도 문자 그대로 매칭하기 위함, ESCAPE '\' 참고). :status/:role은
+    // "학생 이름 검색" API 목적에 맞게 Service 계층에서 항상 ACTIVE/STUDENT로 고정해 전달한다
+    // (교사/개발자, 승인 대기·탈퇴 등 상태의 회원은 검색 결과에서 제외, 코드 리뷰 Major 반영).
     @Query(
         """
         SELECT m FROM Member m
         WHERE LOWER(m.name) LIKE LOWER(CONCAT('%', :name, '%')) ESCAPE '\'
+          AND m.status = :status
+          AND EXISTS (SELECT 1 FROM MemberRole mr WHERE mr.id.memberId = m.id AND mr.id.role = :role)
           AND (:academicStatus IS NULL OR m.academicStatus = :academicStatus)
           AND (:cohort IS NULL OR m.cohort = :cohort)
           AND (:department IS NULL OR m.department = :department)
@@ -41,6 +47,8 @@ interface MemberRepository : JpaRepository<Member, Long> {
     )
     fun search(
         @Param("name") name: String,
+        @Param("status") status: MemberStatus,
+        @Param("role") role: RoleType,
         @Param("academicStatus") academicStatus: AcademicStatus?,
         @Param("cohort") cohort: Int?,
         @Param("department") department: DepartmentType?,
