@@ -38,5 +38,16 @@ CREATE TABLE member_tech_stacks (
         REFERENCES tech_stacks (id)
 );
 
+-- members.majors/members.skills는 V2에서 추가된 이후 이를 읽거나 쓰는 Service/Repository가
+-- 한 번도 존재하지 않았다(전체 코드베이스 확인 완료). 다만 로컬/개발 환경에서 수동으로 값이
+-- 들어갔을 가능성까지 배제할 수는 없으므로, 실제로 남아있는 데이터가 있으면 자동 삭제 대신
+-- Migration 자체를 실패시켜 데이터 유실을 막는다.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM members WHERE majors IS NOT NULL OR skills IS NOT NULL) THEN
+        RAISE EXCEPTION 'members.majors 또는 members.skills에 남아있는 데이터가 있어 Migration을 중단합니다. Backfill 후 다시 실행하세요.';
+    END IF;
+END $$;
+
 ALTER TABLE members DROP COLUMN majors;
 ALTER TABLE members DROP COLUMN skills;

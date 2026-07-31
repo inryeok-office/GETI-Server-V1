@@ -130,18 +130,21 @@ class MemberService(
 
     private fun toProfileResponse(member: Member): MemberProfileResponse {
         val memberId = requireNotNull(member.id) { "저장된 Member는 id를 가져야 합니다." }
+        val isPublic = member.profilePublic
+        // isPublic=false인 비공개 프로필은 profileRestricted=true만 표시하고, 전공/기술 스택/희망
+        // 직무/자기소개 같은 상세 Field는 다른 회원에게 노출하지 않는다(코드 리뷰 Blocker 반영).
         return MemberProfileResponse(
             memberId = memberId,
             name = member.name.orEmpty(),
             profileImageUrl = null,
             cohort = member.cohort,
             department = member.department,
-            majors = memberSelectionQueryService.getMajorNames(memberId),
-            techStacks = memberSelectionQueryService.getTechStackNames(memberId),
-            desiredJob = readStringList(member.desiredPositions).firstOrNull(),
-            bio = member.introduction,
-            isPublic = member.profilePublic,
-            profileRestricted = !member.profilePublic,
+            majors = if (isPublic) memberSelectionQueryService.getMajorNames(memberId) else emptyList(),
+            techStacks = if (isPublic) memberSelectionQueryService.getTechStackNames(memberId) else emptyList(),
+            desiredJob = if (isPublic) readStringList(member.desiredPositions).firstOrNull() else null,
+            bio = if (isPublic) member.introduction else null,
+            isPublic = isPublic,
+            profileRestricted = !isPublic,
         )
     }
 

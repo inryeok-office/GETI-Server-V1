@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import team.inreok.getiserver.domain.member.entity.Member
 import team.inreok.getiserver.domain.member.entity.type.DepartmentType
@@ -78,7 +80,7 @@ class MemberServiceTest {
                 oauthSubject = "subject-2",
                 email = "student2@example.com",
                 status = MemberStatus.ACTIVE,
-                profilePublic = false,
+                profilePublic = true,
             ).apply { id = 2L }
         given(memberRepository.findById(2L)).willReturn(Optional.of(member))
         given(memberSelectionQueryService.getMajorNames(2L)).willReturn(emptyList())
@@ -90,8 +92,36 @@ class MemberServiceTest {
         assertThat(result.techStacks).isEmpty()
         assertThat(result.desiredJob).isNull()
         assertThat(result.profileImageUrl).isNull()
-        assertThat(result.isPublic).isFalse()
+        assertThat(result.isPublic).isTrue()
+        assertThat(result.profileRestricted).isFalse()
+    }
+
+    @Test
+    fun `비공개 프로필은 실제 값이 있어도 전공-기술스택-희망직무-자기소개를 노출하지 않는다`() {
+        val member =
+            Member(
+                oauthProvider = OAuthProvider.GOOGLE,
+                oauthSubject = "subject-8",
+                email = "student8@example.com",
+                status = MemberStatus.ACTIVE,
+                profilePublic = false,
+            ).apply {
+                id = 8L
+                name = "홍길동"
+                desiredPositions = """["Backend Developer"]"""
+                introduction = "비공개 자기소개"
+            }
+        given(memberRepository.findById(8L)).willReturn(Optional.of(member))
+
+        val result = service.getProfile(8L)
+
+        assertThat(result.majors).isEmpty()
+        assertThat(result.techStacks).isEmpty()
+        assertThat(result.desiredJob).isNull()
+        assertThat(result.bio).isNull()
         assertThat(result.profileRestricted).isTrue()
+        verify(memberSelectionQueryService, never()).getMajorNames(8L)
+        verify(memberSelectionQueryService, never()).getTechStackNames(8L)
     }
 
     @Test
