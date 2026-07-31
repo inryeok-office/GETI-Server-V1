@@ -36,7 +36,7 @@ class MemberMajorServiceTest {
         given(memberRepository.existsById(1L)).willReturn(true)
         val backend = Major(name = "소프트웨어", active = true).apply { id = 10L }
         val ai = Major(name = "인공지능", active = true).apply { id = 20L }
-        given(majorRepository.findAllById(listOf(10L, 20L))).willReturn(listOf(backend, ai))
+        given(majorRepository.findAllByIdInAndActiveTrue(listOf(10L, 20L))).willReturn(listOf(backend, ai))
 
         val result = service.replaceAll(1L, listOf(10L, 20L))
 
@@ -62,7 +62,18 @@ class MemberMajorServiceTest {
     @Test
     fun `존재하지 않는 majorId가 있으면 MajorNotFoundException을 던진다`() {
         given(memberRepository.existsById(1L)).willReturn(true)
-        given(majorRepository.findAllById(listOf(10L, 20L))).willReturn(emptyList())
+        given(majorRepository.findAllByIdInAndActiveTrue(listOf(10L, 20L))).willReturn(emptyList())
+
+        assertThatThrownBy { service.replaceAll(1L, listOf(10L, 20L)) }
+            .isInstanceOf(MajorNotFoundException::class.java)
+    }
+
+    @Test
+    fun `비활성 전공이 있으면 MajorNotFoundException을 던진다`() {
+        given(memberRepository.existsById(1L)).willReturn(true)
+        val active = Major(name = "소프트웨어", active = true).apply { id = 10L }
+        // active=false인 major 20L은 findAllByIdInAndActiveTrue 결과에서 제외되어 반환된다.
+        given(majorRepository.findAllByIdInAndActiveTrue(listOf(10L, 20L))).willReturn(listOf(active))
 
         assertThatThrownBy { service.replaceAll(1L, listOf(10L, 20L)) }
             .isInstanceOf(MajorNotFoundException::class.java)

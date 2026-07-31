@@ -47,8 +47,10 @@ class MemberMajorServiceImpl(
         if (majorIds.size != majorIds.toSet().size) throw DuplicateMajorException()
     }
 
+    // 폐지(active=false)된 전공은 새로 선택할 수 없다(코드 리뷰 Minor 반영, 사용자 결정: 비활성 전공
+    // 선택 차단). active=false인 majorId는 존재하지 않는 것과 동일하게 MAJOR_NOT_FOUND로 처리된다.
     private fun findAllMajorsOrThrow(majorIds: List<Long>) =
-        majorRepository.findAllById(majorIds).also {
+        majorRepository.findAllByIdInAndActiveTrue(majorIds).also {
             if (it.size != majorIds.size) throw MajorNotFoundException(majorIds)
         }
 }
