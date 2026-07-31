@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import team.inreok.getiserver.global.error.BusinessException
-import team.inreok.getiserver.global.error.ErrorCode
+import team.inreok.getiserver.global.error.CommonErrorCode
 
 /**
  * 공통 Web 기반(성공/오류 응답, 전역 예외 처리, Pagination, CORS, requestId)을 검증하기 위한
@@ -37,7 +37,7 @@ class WebTestSupportController {
 
     @GetMapping("/test/web/business-error")
     fun businessError(): ApiResponse<Unit> =
-        throw BusinessException(ErrorCode.INVALID_REQUEST, "의도적으로 발생시킨 테스트 전용 Business 예외")
+        throw BusinessException(CommonErrorCode.INVALID_REQUEST, "의도적으로 발생시킨 테스트 전용 Business 예외")
 
     @GetMapping("/test/web/page")
     fun page(): PageResponse<String> = PageResponse.of(PageImpl(listOf("a", "b"), PageRequest.of(0, 2), 5))

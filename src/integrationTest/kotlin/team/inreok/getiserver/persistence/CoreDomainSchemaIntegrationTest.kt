@@ -163,14 +163,12 @@ class CoreDomainSchemaIntegrationTest
                     Member(oauthProvider = OAuthProvider.DG, oauthSubject = "sw-1", email = "sw1@example.com").apply {
                         department = DepartmentType.SW_DEVELOPMENT
                         academicStatus = AcademicStatus.WITHDRAWN
-                        majors = """["backend","ai"]"""
                     },
                 )
 
             val found = memberRepository.findById(member.id!!).orElseThrow()
             assertThat(found.department).isEqualTo(DepartmentType.SW_DEVELOPMENT)
             assertThat(found.academicStatus).isEqualTo(AcademicStatus.WITHDRAWN)
-            assertThat(found.majors).contains("backend")
         }
 
         @Test
