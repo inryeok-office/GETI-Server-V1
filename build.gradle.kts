@@ -25,7 +25,7 @@ repositories {
 
 dependencyManagement {
     imports {
-        mavenBom("org.springframework.modulith:spring-modulith-bom:1.4.1")
+        mavenBom("org.springframework.modulith:spring-modulith-bom:2.1.0")
         // Spring Boot Dependency Management가 spring-boot-dependencies POM 안에서
         // testcontainers-bom을 Import하지만, io.spring.dependency-management Plugin은
         // 이런 중첩 Import를 항상 전파하지 않는다(실측 결과 org.testcontainers:postgresql,
