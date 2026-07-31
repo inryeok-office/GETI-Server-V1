@@ -7,7 +7,11 @@ import org.springframework.boot.autoconfigure.ImportAutoConfiguration
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection
+import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
+import org.testcontainers.postgresql.PostgreSQLContainer
+import org.testcontainers.utility.DockerImageName
 import team.inreok.getiserver.domain.member.repository.MajorRepository
 import team.inreok.getiserver.domain.member.repository.TechStackRepository
 
@@ -37,5 +41,12 @@ class MemberSelectionMetadataIntegrationTest
         @Test
         fun `majors는 아직 Seed 데이터가 없다(알려진 Gap, 후속 Migration 필요)`() {
             assertThat(majorRepository.findAll()).isEmpty()
+        }
+
+        companion object {
+            @Container
+            @ServiceConnection
+            @JvmStatic
+            val postgres = PostgreSQLContainer(DockerImageName.parse("postgres:18.4-alpine"))
         }
     }

@@ -17,6 +17,7 @@ import team.inreok.getiserver.domain.member.repository.MajorRepository
 import team.inreok.getiserver.domain.member.repository.MemberMajorRepository
 import team.inreok.getiserver.domain.member.repository.MemberTechStackRepository
 import team.inreok.getiserver.domain.member.repository.TechStackRepository
+import team.inreok.getiserver.domain.member.service.impl.MemberSelectionQueryServiceImpl
 
 @ExtendWith(MockitoExtension::class)
 class MemberSelectionQueryServiceTest {
@@ -32,8 +33,8 @@ class MemberSelectionQueryServiceTest {
     @Mock
     private lateinit var techStackRepository: TechStackRepository
 
-    private val service by lazy {
-        MemberSelectionQueryService(
+    private val service: MemberSelectionQueryService by lazy {
+        MemberSelectionQueryServiceImpl(
             memberMajorRepository,
             majorRepository,
             memberTechStackRepository,

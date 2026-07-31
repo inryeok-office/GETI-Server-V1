@@ -14,6 +14,7 @@ import team.inreok.getiserver.domain.member.exception.TechStackNotFoundException
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.member.repository.MemberTechStackRepository
 import team.inreok.getiserver.domain.member.repository.TechStackRepository
+import team.inreok.getiserver.domain.member.service.impl.MemberTechStackSelectionServiceImpl
 
 @ExtendWith(MockitoExtension::class)
 class MemberTechStackSelectionServiceTest {
@@ -26,8 +27,8 @@ class MemberTechStackSelectionServiceTest {
     @Mock
     private lateinit var memberTechStackRepository: MemberTechStackRepository
 
-    private val service by lazy {
-        MemberTechStackSelectionService(memberRepository, techStackRepository, memberTechStackRepository)
+    private val service: MemberTechStackSelectionService by lazy {
+        MemberTechStackSelectionServiceImpl(memberRepository, techStackRepository, memberTechStackRepository)
     }
 
     @Test

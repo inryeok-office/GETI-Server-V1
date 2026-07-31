@@ -8,13 +8,14 @@ import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import team.inreok.getiserver.domain.member.entity.Major
 import team.inreok.getiserver.domain.member.repository.MajorRepository
+import team.inreok.getiserver.domain.member.service.impl.MajorServiceImpl
 
 @ExtendWith(MockitoExtension::class)
 class MajorServiceTest {
     @Mock
     private lateinit var majorRepository: MajorRepository
 
-    private val service by lazy { MajorService(majorRepository) }
+    private val service: MajorService by lazy { MajorServiceImpl(majorRepository) }
 
     @Test
     fun `activeOnly가 true이면 활성 전공만 조회한다`() {

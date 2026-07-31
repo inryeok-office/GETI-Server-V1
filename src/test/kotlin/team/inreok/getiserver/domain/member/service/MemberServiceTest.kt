@@ -21,6 +21,7 @@ import team.inreok.getiserver.domain.member.exception.MemberProfileNotFoundExcep
 import team.inreok.getiserver.domain.member.exception.MemberProfileValidationException
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.member.repository.MemberRoleRepository
+import team.inreok.getiserver.domain.member.service.impl.MemberServiceImpl
 import tools.jackson.databind.json.JsonMapper
 import java.time.LocalDateTime
 import java.util.Optional
@@ -36,8 +37,8 @@ class MemberServiceTest {
     @Mock
     private lateinit var memberSelectionQueryService: MemberSelectionQueryService
 
-    private val service by lazy {
-        MemberService(memberRepository, memberRoleRepository, memberSelectionQueryService, JsonMapper())
+    private val service: MemberService by lazy {
+        MemberServiceImpl(memberRepository, memberRoleRepository, memberSelectionQueryService, JsonMapper())
     }
 
     @Test

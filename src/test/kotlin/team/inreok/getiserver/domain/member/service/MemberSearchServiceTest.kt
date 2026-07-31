@@ -15,13 +15,14 @@ import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
 import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.exception.NameRequiredException
 import team.inreok.getiserver.domain.member.repository.MemberRepository
+import team.inreok.getiserver.domain.member.service.impl.MemberSearchServiceImpl
 
 @ExtendWith(MockitoExtension::class)
 class MemberSearchServiceTest {
     @Mock
     private lateinit var memberRepository: MemberRepository
 
-    private val service by lazy { MemberSearchService(memberRepository) }
+    private val service: MemberSearchService by lazy { MemberSearchServiceImpl(memberRepository) }
 
     @Test
     fun `이름으로 검색하면 검색 결과를 Page 형태로 반환한다`() {

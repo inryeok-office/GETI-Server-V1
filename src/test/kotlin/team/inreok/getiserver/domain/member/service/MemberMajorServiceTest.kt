@@ -14,6 +14,7 @@ import team.inreok.getiserver.domain.member.exception.MemberNotFoundException
 import team.inreok.getiserver.domain.member.repository.MajorRepository
 import team.inreok.getiserver.domain.member.repository.MemberMajorRepository
 import team.inreok.getiserver.domain.member.repository.MemberRepository
+import team.inreok.getiserver.domain.member.service.impl.MemberMajorServiceImpl
 
 @ExtendWith(MockitoExtension::class)
 class MemberMajorServiceTest {
@@ -26,7 +27,9 @@ class MemberMajorServiceTest {
     @Mock
     private lateinit var memberMajorRepository: MemberMajorRepository
 
-    private val service by lazy { MemberMajorService(memberRepository, majorRepository, memberMajorRepository) }
+    private val service: MemberMajorService by lazy {
+        MemberMajorServiceImpl(memberRepository, majorRepository, memberMajorRepository)
+    }
 
     @Test
     fun `전공 목록을 전체 교체하고 이름순으로 반환한다`() {
