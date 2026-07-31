@@ -12,6 +12,7 @@ import team.inreok.getiserver.domain.member.entity.type.DepartmentType
 import team.inreok.getiserver.domain.member.entity.type.MemberStatus
 import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
 import team.inreok.getiserver.domain.member.exception.MemberNotFoundException
+import team.inreok.getiserver.domain.member.exception.MemberProfileNotFoundException
 import team.inreok.getiserver.domain.member.exception.MemberProfileValidationException
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.member.repository.MemberRoleRepository
@@ -156,12 +157,12 @@ class MemberServiceTest {
     }
 
     @Test
-    fun `존재하지 않는 회원을 수정하면 MemberNotFoundException을 던진다`() {
+    fun `존재하지 않는 회원을 수정하면 MemberProfileNotFoundException을 던진다`() {
         given(memberRepository.findById(999L)).willReturn(Optional.empty())
         val body = JsonMapper().readTree("""{"bio":"x"}""")
 
         assertThatThrownBy { service.updateProfile(999L, body) }
-            .isInstanceOf(MemberNotFoundException::class.java)
+            .isInstanceOf(MemberProfileNotFoundException::class.java)
     }
 
     private fun newMember(memberId: Long): Member =

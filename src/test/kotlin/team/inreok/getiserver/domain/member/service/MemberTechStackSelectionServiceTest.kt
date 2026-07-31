@@ -58,4 +58,15 @@ class MemberTechStackSelectionServiceTest {
         assertThatThrownBy { service.replaceAll(1L, listOf(10L)) }
             .isInstanceOf(TechStackNotFoundException::class.java)
     }
+
+    @Test
+    fun `techStackIds에 중복이 있으면 제거하고 정상 처리한다`() {
+        given(memberRepository.existsById(1L)).willReturn(true)
+        val kotlin = TechStack(name = "Kotlin", category = TechStackCategory.BACKEND).apply { id = 10L }
+        given(techStackRepository.findAllById(listOf(10L))).willReturn(listOf(kotlin))
+
+        val result = service.replaceAll(1L, listOf(10L, 10L))
+
+        assertThat(result.techStacks).extracting("name").containsExactly("Kotlin")
+    }
 }

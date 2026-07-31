@@ -27,7 +27,16 @@ class MemberSearchService(
     ): MemberSearchResponse {
         if (name.isNullOrBlank()) throw NameRequiredException()
 
-        val page = memberRepository.search(name, academicStatus, cohort, department, majorId, techStackId, pageable)
+        val page =
+            memberRepository.search(
+                escapeLikePattern(name),
+                academicStatus,
+                cohort,
+                department,
+                majorId,
+                techStackId,
+                pageable,
+            )
         return MemberSearchResponse(
             content = page.content.map(::toItem),
             page = page.number,

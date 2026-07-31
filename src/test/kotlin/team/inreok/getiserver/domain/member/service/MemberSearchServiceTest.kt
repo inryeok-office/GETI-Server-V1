@@ -59,4 +59,15 @@ class MemberSearchServiceTest {
         assertThatThrownBy { service.search("   ", null, null, null, null, null, PageRequest.of(0, 20)) }
             .isInstanceOf(NameRequiredException::class.java)
     }
+
+    @Test
+    fun `검색어에 LIKE Wildcard가 있으면 이스케이프해서 Repository에 전달한다`() {
+        val pageable = PageRequest.of(0, 20)
+        given(memberRepository.search("100\\%", null, null, null, null, null, pageable))
+            .willReturn(PageImpl(emptyList(), pageable, 0))
+
+        val result = service.search("100%", null, null, null, null, null, pageable)
+
+        assertThat(result.content).isEmpty()
+    }
 }

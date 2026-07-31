@@ -18,7 +18,6 @@ import team.inreok.getiserver.domain.member.entity.type.AcademicStatus
 import team.inreok.getiserver.domain.member.entity.type.DepartmentType
 import team.inreok.getiserver.domain.member.entity.type.MemberStatus
 import team.inreok.getiserver.domain.member.entity.type.RoleType
-import team.inreok.getiserver.domain.member.exception.MemberNotFoundException
 import team.inreok.getiserver.domain.member.exception.MemberProfileNotFoundException
 import team.inreok.getiserver.domain.member.exception.MemberProfileValidationException
 import team.inreok.getiserver.domain.member.service.MemberService
@@ -117,10 +116,10 @@ class MemberProfileControllerTest
         }
 
         @Test
-        fun `존재하지 않는 회원이면 404 MEMBER_NOT_FOUND를 반환한다`() {
+        fun `존재하지 않는 회원이면 404 PROFILE_NOT_FOUND를 반환한다`() {
             val requestBody = """{"bio":"x"}"""
             given(memberService.updateProfile(999L, objectMapper.readTree(requestBody)))
-                .willThrow(MemberNotFoundException(999L))
+                .willThrow(MemberProfileNotFoundException(999L))
 
             mockMvc
                 .perform(
@@ -130,7 +129,7 @@ class MemberProfileControllerTest
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody),
                 ).andExpect(status().isNotFound)
-                .andExpect(jsonPath("$.error.code").value("MEMBER_NOT_FOUND"))
+                .andExpect(jsonPath("$.error.code").value("PROFILE_NOT_FOUND"))
         }
 
         @Test

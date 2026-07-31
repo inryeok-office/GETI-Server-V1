@@ -38,4 +38,14 @@ class TechStackServiceTest {
 
         assertThat(result.items).isEmpty()
     }
+
+    @Test
+    fun `검색어에 LIKE Wildcard가 있으면 이스케이프해서 Repository에 전달한다`() {
+        given(techStackRepository.search("C\\_\\_", null)).willReturn(emptyList())
+        val service = TechStackService(techStackRepository)
+
+        val result = service.search("C__", null)
+
+        assertThat(result.items).isEmpty()
+    }
 }

@@ -16,7 +16,7 @@ class TechStackService(
         query: String?,
         category: TechStackCategory?,
     ): TechStackListResponse {
-        val items = techStackRepository.search(query, category).map(TechStackResponse::from)
+        val items = techStackRepository.search(query?.let(::escapeLikePattern), category).map(TechStackResponse::from)
         return TechStackListResponse(items)
     }
 }

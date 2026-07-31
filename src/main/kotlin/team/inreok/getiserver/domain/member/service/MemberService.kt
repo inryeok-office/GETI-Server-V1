@@ -59,7 +59,7 @@ class MemberService(
         memberId: Long,
         body: JsonNode,
     ): MemberProfileUpdateResponse {
-        val member = memberRepository.findById(memberId).orElseThrow { MemberNotFoundException(memberId) }
+        val member = memberRepository.findById(memberId).orElseThrow { MemberProfileNotFoundException(memberId) }
         applyDepartment(member, body)
         if (body.has("phone")) member.phoneNumber = readNullableText(body, "phone", maxLength = 30)
         if (body.has("bio")) member.introduction = readNullableText(body, "bio", maxLength = 1000)

@@ -18,10 +18,12 @@ interface MemberRepository : JpaRepository<Member, Long> {
         oauthSubject: String,
     ): Member?
 
+    // :name은 Service 계층에서 LIKE Wildcard(%, _)와 Escape 문자(\)를 미리 이스케이프해 전달한다
+    // (검색어에 %/_가 포함되어도 문자 그대로 매칭하기 위함, ESCAPE '\' 참고).
     @Query(
         """
         SELECT m FROM Member m
-        WHERE LOWER(m.name) LIKE LOWER(CONCAT('%', :name, '%'))
+        WHERE LOWER(m.name) LIKE LOWER(CONCAT('%', :name, '%')) ESCAPE '\'
           AND (:academicStatus IS NULL OR m.academicStatus = :academicStatus)
           AND (:cohort IS NULL OR m.cohort = :cohort)
           AND (:department IS NULL OR m.department = :department)

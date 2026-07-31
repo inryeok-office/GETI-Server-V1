@@ -25,6 +25,9 @@ class MemberTechStackSelectionService(
     ): MemberTechStacksResponse {
         if (!memberRepository.existsById(memberId)) throw MemberNotFoundException(memberId)
 
+        // Major 전체 교체(PATCH /me/majors)는 중복 majorId를 DUPLICATE_MAJOR(409)로 거부하지만,
+        // 이 API의 명세에는 대응하는 중복 Error Code가 없어 여기서는 중복을 조용히 제거하고
+        // 정상 처리한다(두 API의 의도된 차이, 실수 아님).
         val distinctIds = techStackIds.distinct()
         val techStacks = techStackRepository.findAllById(distinctIds)
         if (techStacks.size != distinctIds.size) throw TechStackNotFoundException(distinctIds)
