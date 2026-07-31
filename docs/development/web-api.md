@@ -36,30 +36,34 @@ team.inreok.getiserver.global
 
 ```json
 {
+  "success": true,
   "data": { "id": 1 },
-  "requestId": "3f6e9c2a-1c4b-4b8e-9c7a-1a2b3c4d5e6f"
+  "meta": { "requestId": "3f6e9c2a-1c4b-4b8e-9c7a-1a2b3c4d5e6f" }
 }
 ```
 
-`ApiResponse<T>.of(data)`로 생성한다. `success`/`status`/`message` 같은 중복 필드는 넣지 않는다(HTTP Status로 이미 표현됨). HTTP 204 응답에는 Wrapper를 사용하지 않는다(Body가 없는 응답이므로 Controller가 `ResponseEntity<Void>` 등으로 직접 반환한다).
+`ApiResponse<T>.of(data)`로 생성한다. GETI Notion API 명세서의 `success`/`data`/`meta.requestId` Wrapper 구조를 따른다(2026-07-31, [`docs/audit/notion-repository-sync.md`](../audit/notion-repository-sync.md)의 "API 공통 응답 Contract" DECISION_REQUIRED를 사용자가 이 구조로 채택하기로 결정). HTTP 204 응답에는 Wrapper를 사용하지 않는다(Body가 없는 응답이므로 Controller가 `ResponseEntity<Void>` 등으로 직접 반환한다).
 
 ## 오류 응답
 
 ```json
 {
-  "code": "VALIDATION_FAILED",
-  "message": "요청 값 검증에 실패했습니다.",
-  "status": 400,
-  "path": "/api/v1/example",
-  "timestamp": "2026-07-29T07:00:00.123Z",
-  "requestId": "3f6e9c2a-1c4b-4b8e-9c7a-1a2b3c4d5e6f",
-  "fieldErrors": [
-    { "field": "name", "reason": "name은 필수입니다." }
-  ]
+  "success": false,
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "요청 값 검증에 실패했습니다.",
+    "status": 400,
+    "path": "/api/v1/example",
+    "timestamp": "2026-07-29T07:00:00.123Z",
+    "fieldErrors": [
+      { "field": "name", "reason": "name은 필수입니다." }
+    ]
+  },
+  "meta": { "requestId": "3f6e9c2a-1c4b-4b8e-9c7a-1a2b3c4d5e6f" }
 }
 ```
 
-`rejectedValue`는 포함하지 않는다. 민감한 요청 값(Password, Token 등)이 Field Error에 그대로 노출될 위험이 있어 기본적으로 제외했다. `requestId`는 [`RequestIdFilter`](#requestid)가 생성하며, 성공/오류 응답 모두 같은 값을 담는다.
+`rejectedValue`는 포함하지 않는다. 민감한 요청 값(Password, Token 등)이 Field Error에 그대로 노출될 위험이 있어 기본적으로 제외했다. `status`/`path`/`timestamp`는 Notion 명세에는 없지만 Log/Trace 연계에 유용해 `error` 객체 하위에 추가 Field로 유지했다(계약을 좁히지 않는 추가 정보). `requestId`는 [`RequestIdFilter`](#requestid)가 생성하며, 성공/오류 응답 모두 `meta.requestId`에 같은 값을 담는다.
 
 ## Error Code
 
@@ -121,7 +125,7 @@ class MemberNotFoundException(
 - Client가 `X-Request-Id` Header를 보냈다면 새로 만들지 않고 그대로 재사용한다(여러 Service에 걸친 요청을 하나의 requestId로 추적할 수 있게 함).
 - Client가 보내지 않았다면 `UUID.randomUUID()`로 새로 생성한다.
 - 생성한 값은 Response Header(`X-Request-Id`)에 그대로 반환하고, SLF4J MDC(`requestId` Key)에 등록해 요청 처리 중 발생하는 모든 Log에 남긴다(Log Pattern에 `%X{requestId}` 등을 추가하면 실제로 출력된다).
-- `ApiResponse`/`ErrorResponse`는 생성 시점에 MDC에서 값을 읽어 Body의 `requestId` Field로도 포함한다. 성공/오류 응답이 항상 같은 값을 가지므로 Client 로그와 서버 로그를 하나의 requestId로 연결할 수 있다.
+- `ApiResponse`/`ErrorResponse`는 생성 시점에 MDC에서 값을 읽어 Body의 `meta.requestId` Field로도 포함한다. 성공/오류 응답이 항상 같은 값을 가지므로 Client 로그와 서버 로그를 하나의 requestId로 연결할 수 있다.
 - Filter가 끝나면 `MDC.remove(...)`로 값을 제거해 Thread Pool 재사용 시 이전 요청의 requestId가 새 요청에 섞이지 않게 한다.
 
 새로운 분산 추적(Trace ID Propagation, OpenTelemetry 등) 시스템은 도입하지 않았다 — `requestId`는 이 저장소 안에서 로그와 응답을 연결하는 최소 식별자다. Micrometer Tracing/OpenTelemetry 도입 여부는 Observability 전용 PR에서 재검토한다.
@@ -145,6 +149,8 @@ Spring Data의 `Page<T>`를 API 응답으로 직접 반환하지 않는다. `Pag
 ```
 
 `page`는 Spring Data와 동일하게 0-based를 유지한다(내부 Repository 조회와 외부 API 응답 사이의 별도 변환이 없어 실수 위험이 적다). 최대 Page Size는 `WebPageableConfig`(`PageableHandlerMethodArgumentResolverCustomizer`)가 100으로 강제한다(GETI Notion API 명세서 "목록 기본값: page=0, size=20, 최대 size=100" 반영, [`docs/audit/notion-repository-sync.md`](../audit/notion-repository-sync.md) 참고). `size`가 100을 넘으면 Spring Data가 자동으로 100으로 잘라낸다. `@WebMvcTest`에서 이 Bean을 검증하려면 `@Import(WebPageableConfig::class)`가 필요하다 — `@WebMvcTest`는 `@Controller`/`@ControllerAdvice`/`WebMvcConfigurer` 등 특정 Stereotype만 자동 인식하고 일반 `@Configuration`은 인식하지 않기 때문이다(`GlobalExceptionHandlerTest`의 최대 Page Size Test로 실측 확인).
+
+`PageResponse`는 `ApiResponse`로 다시 감싸지 않고 위 예시처럼 그 자체를 응답 Body로 반환한다(`success` Field, `meta.requestId`가 없다). 실제 Member 도메인의 목록 API(예: `GET /api/v1/members`)는 아직 `PageResponse`를 사용하지 않고, `content`/`page`/`size`/`totalElements`/`totalPages`/`first`/`last` Field를 직접 담은 응답 DTO를 `ApiResponse`의 `data`로 반환한다(Notion API 명세서의 목록 응답 형식을 그대로 따름). 두 Pagination 표현 방식(`PageResponse`의 `data`/`meta.page`, Member 도메인 DTO의 평평한 Field)이 아직 하나로 통일되지 않았다는 점에 유의한다.
 
 ## 날짜와 시간
 
@@ -236,4 +242,3 @@ Windows에서는 `.\gradlew.bat`를 사용한다.
 - 분산 추적(Trace ID Propagation, OpenTelemetry, Micrometer Tracing), 전체 Observability(`requestId`는 이번 PR에서 구현)
 - REST Docs, Contract Test
 - GitHub Actions CI, CD
-- Notion API 명세서의 `success`/`meta` Wrapper 구조로의 전면 변경([`docs/audit/notion-repository-sync.md`](../audit/notion-repository-sync.md)의 `DECISION_REQUIRED` 참고, 이번 PR에서 임의로 결정하지 않음)

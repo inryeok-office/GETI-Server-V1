@@ -28,10 +28,11 @@ class GlobalExceptionHandlerTest
         private val mockMvc: MockMvc,
     ) {
         @Test
-        fun `성공 응답은 data Field에 결과를 담는다`() {
+        fun `성공 응답은 success true와 data Field에 결과를 담는다`() {
             mockMvc
                 .perform(get("/test/web/success"))
                 .andExpect(status().isOk)
+                .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.id").value("1"))
         }
 
@@ -65,12 +66,13 @@ class GlobalExceptionHandlerTest
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"name":""}"""),
                 ).andExpect(status().isBadRequest)
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.path").value("/test/web/validate"))
-                .andExpect(jsonPath("$.fieldErrors[0].field").value("name"))
-                .andExpect(jsonPath("$.fieldErrors[0].reason").value("name은 필수입니다."))
-                .andExpect(jsonPath("$.timestamp").value(matchesPattern(ISO_8601_PATTERN)))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error.status").value(400))
+                .andExpect(jsonPath("$.error.path").value("/test/web/validate"))
+                .andExpect(jsonPath("$.error.fieldErrors[0].field").value("name"))
+                .andExpect(jsonPath("$.error.fieldErrors[0].reason").value("name은 필수입니다."))
+                .andExpect(jsonPath("$.error.timestamp").value(matchesPattern(ISO_8601_PATTERN)))
         }
 
         @Test
@@ -81,7 +83,7 @@ class GlobalExceptionHandlerTest
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"name":"""),
                 ).andExpect(status().isBadRequest)
-                .andExpect(jsonPath("$.code").value("MALFORMED_JSON"))
+                .andExpect(jsonPath("$.error.code").value("MALFORMED_JSON"))
         }
 
         @Test
@@ -89,7 +91,7 @@ class GlobalExceptionHandlerTest
             mockMvc
                 .perform(delete("/test/web/success"))
                 .andExpect(status().isMethodNotAllowed)
-                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"))
+                .andExpect(jsonPath("$.error.code").value("METHOD_NOT_ALLOWED"))
         }
 
         @Test
@@ -100,7 +102,7 @@ class GlobalExceptionHandlerTest
                         .contentType(MediaType.TEXT_PLAIN)
                         .content("name=abc"),
                 ).andExpect(status().isUnsupportedMediaType)
-                .andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"))
+                .andExpect(jsonPath("$.error.code").value("UNSUPPORTED_MEDIA_TYPE"))
         }
 
         @Test
@@ -108,7 +110,7 @@ class GlobalExceptionHandlerTest
             mockMvc
                 .perform(get("/test/web/param").param("count", "not-a-number"))
                 .andExpect(status().isBadRequest)
-                .andExpect(jsonPath("$.code").value("TYPE_MISMATCH"))
+                .andExpect(jsonPath("$.error.code").value("TYPE_MISMATCH"))
         }
 
         @Test
@@ -116,7 +118,7 @@ class GlobalExceptionHandlerTest
             mockMvc
                 .perform(get("/test/web/param"))
                 .andExpect(status().isBadRequest)
-                .andExpect(jsonPath("$.code").value("MISSING_REQUEST_PARAMETER"))
+                .andExpect(jsonPath("$.error.code").value("MISSING_REQUEST_PARAMETER"))
         }
 
         @Test
@@ -124,7 +126,7 @@ class GlobalExceptionHandlerTest
             mockMvc
                 .perform(get("/test/web/does-not-exist"))
                 .andExpect(status().isNotFound)
-                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+                .andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"))
         }
 
         @Test
@@ -132,8 +134,8 @@ class GlobalExceptionHandlerTest
             mockMvc
                 .perform(get("/test/web/error"))
                 .andExpect(status().isInternalServerError)
-                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
-                .andExpect(jsonPath("$.message").value("서버 내부 오류가 발생했습니다."))
+                .andExpect(jsonPath("$.error.code").value("INTERNAL_SERVER_ERROR"))
+                .andExpect(jsonPath("$.error.message").value("서버 내부 오류가 발생했습니다."))
                 .andExpect(content().string(not(containsString("의도적으로 발생시킨"))))
                 .andExpect(content().string(not(containsString("IllegalStateException"))))
                 .andExpect(content().string(not(containsString("\tat "))))
@@ -144,8 +146,8 @@ class GlobalExceptionHandlerTest
             mockMvc
                 .perform(get("/test/web/business-error"))
                 .andExpect(status().isBadRequest)
-                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-                .andExpect(jsonPath("$.message").value("의도적으로 발생시킨 테스트 전용 Business 예외"))
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.error.message").value("의도적으로 발생시킨 테스트 전용 Business 예외"))
         }
 
         @Test
@@ -153,7 +155,7 @@ class GlobalExceptionHandlerTest
             mockMvc
                 .perform(get("/test/web/error"))
                 .andExpect(status().isInternalServerError)
-                .andExpect(jsonPath("$.requestId").isNotEmpty)
+                .andExpect(jsonPath("$.meta.requestId").isNotEmpty)
         }
 
         companion object {
