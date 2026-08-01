@@ -4,8 +4,11 @@ import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
-import org.springframework.http.HttpHeaders
+import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
@@ -16,8 +19,13 @@ import team.inreok.getiserver.domain.member.dto.TechStackResponse
 import team.inreok.getiserver.domain.member.entity.type.TechStackCategory
 import team.inreok.getiserver.domain.member.exception.TechStackNotFoundException
 import team.inreok.getiserver.domain.member.service.MemberTechStackSelectionService
+import team.inreok.getiserver.global.security.JwtTokenProvider
+import team.inreok.getiserver.global.security.SecurityConfig
 
+// SecurityConfig를 명시적으로 Import해 /api/v1/me/**가 실제로 인증을 요구하는지(401)까지 검증한다.
 @WebMvcTest(controllers = [MemberTechStackSelectionController::class])
+@Import(SecurityConfig::class)
+@EnableWebSecurity
 class MemberTechStackSelectionControllerTest
     @Autowired
     constructor(
@@ -25,6 +33,12 @@ class MemberTechStackSelectionControllerTest
     ) {
         @MockitoBean
         private lateinit var memberTechStackSelectionService: MemberTechStackSelectionService
+
+        @MockitoBean
+        private lateinit var jwtTokenProvider: JwtTokenProvider
+
+        private fun authOf(memberId: Long) =
+            authentication(UsernamePasswordAuthenticationToken(memberId, null, emptyList()))
 
         @Test
         fun `내 기술 스택을 교체하면 200과 함께 변경된 목록을 반환한다`() {
@@ -37,8 +51,7 @@ class MemberTechStackSelectionControllerTest
             mockMvc
                 .perform(
                     patch("/api/v1/me/tech-stacks")
-                        .param("memberId", "1")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                        .with(authOf(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"techStackIds":[10]}"""),
                 ).andExpect(status().isOk)
@@ -54,8 +67,7 @@ class MemberTechStackSelectionControllerTest
             mockMvc
                 .perform(
                     patch("/api/v1/me/tech-stacks")
-                        .param("memberId", "1")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                        .with(authOf(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"techStackIds":[999]}"""),
                 ).andExpect(status().isNotFound)
@@ -63,13 +75,13 @@ class MemberTechStackSelectionControllerTest
         }
 
         @Test
-        fun `Authorization Header가 없으면 400을 반환한다`() {
+        fun `인증되지 않은 요청은 401 UNAUTHORIZED를 반환한다`() {
             mockMvc
                 .perform(
                     patch("/api/v1/me/tech-stacks")
-                        .param("memberId", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"techStackIds":[]}"""),
-                ).andExpect(status().isBadRequest)
+                ).andExpect(status().isUnauthorized)
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"))
         }
     }

@@ -4,8 +4,11 @@ import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
-import org.springframework.http.HttpHeaders
+import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
@@ -16,8 +19,13 @@ import team.inreok.getiserver.domain.member.dto.MemberMajorsResponse
 import team.inreok.getiserver.domain.member.exception.DuplicateMajorException
 import team.inreok.getiserver.domain.member.exception.MajorNotFoundException
 import team.inreok.getiserver.domain.member.service.MemberMajorService
+import team.inreok.getiserver.global.security.JwtTokenProvider
+import team.inreok.getiserver.global.security.SecurityConfig
 
+// SecurityConfig를 명시적으로 Import해 /api/v1/me/**가 실제로 인증을 요구하는지(401)까지 검증한다.
 @WebMvcTest(controllers = [MemberMajorController::class])
+@Import(SecurityConfig::class)
+@EnableWebSecurity
 class MemberMajorControllerTest
     @Autowired
     constructor(
@@ -25,6 +33,12 @@ class MemberMajorControllerTest
     ) {
         @MockitoBean
         private lateinit var memberMajorService: MemberMajorService
+
+        @MockitoBean
+        private lateinit var jwtTokenProvider: JwtTokenProvider
+
+        private fun authOf(memberId: Long) =
+            authentication(UsernamePasswordAuthenticationToken(memberId, null, emptyList()))
 
         @Test
         fun `내 전공을 교체하면 200과 함께 변경된 목록을 반환한다`() {
@@ -40,8 +54,7 @@ class MemberMajorControllerTest
             mockMvc
                 .perform(
                     patch("/api/v1/me/majors")
-                        .param("memberId", "1")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                        .with(authOf(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"majorIds":[10,20]}"""),
                 ).andExpect(status().isOk)
@@ -56,8 +69,7 @@ class MemberMajorControllerTest
             mockMvc
                 .perform(
                     patch("/api/v1/me/majors")
-                        .param("memberId", "1")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                        .with(authOf(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"majorIds":[999]}"""),
                 ).andExpect(status().isNotFound)
@@ -71,8 +83,7 @@ class MemberMajorControllerTest
             mockMvc
                 .perform(
                     patch("/api/v1/me/majors")
-                        .param("memberId", "1")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                        .with(authOf(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"majorIds":[10,10]}"""),
                 ).andExpect(status().isConflict)
@@ -80,13 +91,13 @@ class MemberMajorControllerTest
         }
 
         @Test
-        fun `Authorization Header가 없으면 400을 반환한다`() {
+        fun `인증되지 않은 요청은 401 UNAUTHORIZED를 반환한다`() {
             mockMvc
                 .perform(
                     patch("/api/v1/me/majors")
-                        .param("memberId", "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"majorIds":[]}"""),
-                ).andExpect(status().isBadRequest)
+                ).andExpect(status().isUnauthorized)
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"))
         }
     }

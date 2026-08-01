@@ -18,11 +18,12 @@ import team.inreok.getiserver.global.error.ErrorResponse
 import tools.jackson.databind.ObjectMapper
 
 /**
- * Stateless JWT 인증 기반 Filter Chain이다. Member 등 이 PR 이전부터 있던 Domain의 Controller는
- * 아직 Spring Security와 연동되지 않아([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport]
- * 참고) 여기서 인증을 강제하면 기존 동작이 깨진다. 그래서 이번에 새로 추가하는 Auth 자체 Endpoint
- * (`/api/v1/auth/session`, `/api/v1/auth/logout`)만 인증을 요구하고, 그 외 모든 경로는 이전과 동일하게
- * permitAll로 둔다. 다른 Domain의 실제 인증 적용은 각 Domain PR에서 별도로 다룬다.
+ * Stateless JWT 인증 기반 Filter Chain이다. `/api/v1/auth/session`, `/api/v1/auth/logout`,
+ * `/api/v1/me/` 이하 모든 경로(Issue #50, 내 프로필/전공/기술스택)만 인증을 요구한다. 다른
+ * Domain(회원 검색, 전공/기술스택 메타데이터 조회 등)은 아직 Spring Security와 연동되지 않아
+ * ([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport] 참고)
+ * 여기서 인증을 강제하면 기존 동작이 깨지므로 permitAll로 둔다. 나머지 Domain의 실제 인증 적용은
+ * 각 Domain PR에서 별도로 다룬다.
  */
 @Configuration
 class SecurityConfig(
@@ -51,6 +52,7 @@ class SecurityConfig(
                 authorize(HttpMethod.OPTIONS, "/**", permitAll)
                 authorize("/api/v1/auth/session", authenticated)
                 authorize("/api/v1/auth/logout", authenticated)
+                authorize("/api/v1/me/**", authenticated)
                 authorize(anyRequest, permitAll)
             }
             exceptionHandling {
