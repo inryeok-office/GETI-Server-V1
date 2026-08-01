@@ -201,6 +201,7 @@ docs/development/quick-start.md         신규 개발자용 로컬 환경 구성
 docs/audit/foundation-audit.md          PR 1~10 전체 기반 Audit 결과
 docs/audit/notion-repository-sync.md    GETI Notion과 저장소 불일치 목록, DECISION_REQUIRED
 docs/audit/ai-scenario-audit.md         AI 개발 시나리오 Static Audit 결과
+docs/automation/claude-daily-audit-routine.md   Claude 일일 자동 점검 Routine 실행 기준과 최종 프롬프트
 ```
 
 Claude Code 전용 설정은 [`CLAUDE.md`](./CLAUDE.md)와 `.claude/`(`rules/`, `commands/`, `skills/`)에, Codex 전용 설정은 `.codex/`(`policies/`, `prompts/`)에 있다.
