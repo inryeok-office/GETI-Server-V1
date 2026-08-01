@@ -1,7 +1,6 @@
 package team.inreok.getiserver.domain.company.dto
 
 import io.swagger.v3.oas.annotations.media.Schema
-import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.company.entity.type.MouStatus
@@ -9,9 +8,14 @@ import java.time.LocalDate
 
 @Schema(description = "기업 등록 요청")
 data class CompanyCreateRequest(
-    @field:NotBlank(message = "기업명은 필수입니다.")
+    // 공백 검증을 @NotBlank로 하면 VALIDATION_FAILED가 반환되어 API 명세서가 규정한
+    // COMPANY_NAME_REQUIRED와 어긋난다. 빈 값 판정은 Service에서 수행한다(수정 요청과 동일한 경로).
     @field:Size(max = 255, message = "기업명은 255자를 넘을 수 없습니다.")
-    @param:Schema(description = "기업명(필수, 최대 255자)", example = "인력개발원", maxLength = 255)
+    @param:Schema(
+        description = "기업명(필수, 최대 255자). 공백만 있으면 COMPANY_NAME_REQUIRED로 거부한다.",
+        example = "인력개발원",
+        maxLength = 255,
+    )
     val name: String,
     @param:Schema(description = "기업 유형(필수)", example = "GENERAL")
     val companyType: CompanyType,

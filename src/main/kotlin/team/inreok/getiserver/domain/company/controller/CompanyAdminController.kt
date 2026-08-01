@@ -47,8 +47,8 @@ class CompanyAdminController(
         SwaggerApiResponse(
             responseCode = "400",
             description =
-                "기업명이 없거나 공백(COMPANY_NAME_REQUIRED), MOU 기간 역전(MOU_PERIOD_INVALID), " +
-                    "요청 값 형식 오류(VALIDATION_FAILED)",
+                "기업명이 공백(COMPANY_NAME_REQUIRED), MOU 기간 역전(MOU_PERIOD_INVALID), " +
+                    "길이 등 요청 값 형식 오류(VALIDATION_FAILED), 필수 Field 누락(MALFORMED_JSON)",
         ),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "403", description = "개발자 권한이 없음 (FORBIDDEN)"),

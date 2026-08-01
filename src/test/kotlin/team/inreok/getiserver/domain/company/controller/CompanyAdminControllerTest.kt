@@ -27,6 +27,7 @@ import team.inreok.getiserver.domain.company.dto.CompanyResponse
 import team.inreok.getiserver.domain.company.dto.CompanyUpdateRequest
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.company.entity.type.MouStatus
+import team.inreok.getiserver.domain.company.exception.CompanyNameRequiredException
 import team.inreok.getiserver.domain.company.exception.CompanyNotFoundException
 import team.inreok.getiserver.domain.company.exception.DuplicateCompanyException
 import team.inreok.getiserver.domain.company.exception.MouPeriodInvalidException
@@ -118,22 +119,27 @@ class CompanyAdminControllerTest
         }
 
         @Test
-        fun `기업명이 빈 문자열이면 400을 반환하고 Service를 호출하지 않는다`() {
+        fun `기업명이 공백이면 400 COMPANY_NAME_REQUIRED를 반환한다`() {
+            // 공백 판정은 Bean Validation이 아니라 Service가 수행하므로(API 명세서의 Error Code를
+            // 맞추기 위함) Controller 계층에서는 예외가 올바른 Error Code로 변환되는지만 검증한다.
+            given(companyService.create(anyCreateRequest()))
+                .willThrow(CompanyNameRequiredException())
+
             mockMvc
                 .perform(
                     post("/api/v1/admin/companies")
                         .with(authOf(1L, "DEVELOPER"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{ "name": "", "companyType": "GENERAL" }"""),
+                        .content("""{ "name": "   ", "companyType": "GENERAL" }"""),
                 ).andExpect(status().isBadRequest)
-
-            verify(companyService, never()).create(anyCreateRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("COMPANY_NAME_REQUIRED"))
         }
 
         @Test
         fun `이미 등록된 기업이면 409 DUPLICATE_COMPANY를 반환한다`() {
             given(companyService.create(anyCreateRequest()))
-                .willThrow(DuplicateCompanyException("인력개발원", CompanyType.GENERAL))
+                .willThrow(DuplicateCompanyException())
 
             mockMvc
                 .perform(
@@ -144,6 +150,8 @@ class CompanyAdminControllerTest
                 ).andExpect(status().isConflict)
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("DUPLICATE_COMPANY"))
+                // 요청 값(기업명·유형)을 오류 Message에 되돌려주지 않는다.
+                .andExpect(jsonPath("$.error.message").value("이미 등록된 기업입니다."))
         }
 
         @Test
