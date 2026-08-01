@@ -1,5 +1,7 @@
 package team.inreok.getiserver.domain.company.service.impl
 
+import org.hibernate.exception.ConstraintViolationException
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -31,7 +33,7 @@ class CompanyServiceImpl(
         if (name.isEmpty()) throw CompanyNameRequiredException()
         validateMouPeriod(request.mouStartDate, request.mouEndDate)
         if (companyRepository.existsByNameIgnoreCaseAndTypeAndDeletedAtIsNull(name, request.companyType)) {
-            throw DuplicateCompanyException(name, request.companyType)
+            throw DuplicateCompanyException()
         }
 
         val company =
@@ -51,7 +53,11 @@ class CompanyServiceImpl(
 
         // @CreationTimestamp/@UpdateTimestamp는 Flush 시점에 채워진다. 응답의 createdAt/updatedAt이
         // null로 나가지 않도록 저장과 동시에 Flush한다.
-        return CompanyResponse.from(companyRepository.saveAndFlush(company))
+        return try {
+            CompanyResponse.from(companyRepository.saveAndFlush(company))
+        } catch (ex: DataIntegrityViolationException) {
+            throwDuplicateOrRethrow(ex)
+        }
     }
 
     @Transactional(readOnly = true)
@@ -105,14 +111,18 @@ class CompanyServiceImpl(
             val name = newName ?: company.name
             val type = request.companyType ?: company.type
             if (companyRepository.existsByNameIgnoreCaseAndTypeAndDeletedAtIsNullAndIdNot(name, type, companyId)) {
-                throw DuplicateCompanyException(name, type)
+                throw DuplicateCompanyException()
             }
         }
 
         applyChanges(company, request, newName)
         // @UpdateTimestamp가 Flush 시점에 갱신되므로, 응답에 낡은 updatedAt이 담기지 않도록
         // 응답을 만들기 전에 Flush한다.
-        companyRepository.flush()
+        try {
+            companyRepository.flush()
+        } catch (ex: DataIntegrityViolationException) {
+            throwDuplicateOrRethrow(ex)
+        }
         return CompanyResponse.from(company)
     }
 
@@ -125,6 +135,19 @@ class CompanyServiceImpl(
 
     private fun findActive(companyId: Long): Company =
         companyRepository.findByIdAndDeletedAtIsNull(companyId) ?: throw CompanyNotFoundException(companyId)
+
+    /**
+     * 사전 중복 검사와 저장 사이의 경쟁 조건으로 Unique Index(`uk_companies_name_type_active`,
+     * V6 Migration)에 걸린 경우에만 [DuplicateCompanyException]으로 변환한다. 다른 제약 위반까지
+     * 중복으로 오인하면 원인을 감추게 되므로, 해당 Index가 아니면 원래 예외를 그대로 전달한다.
+     */
+    private fun throwDuplicateOrRethrow(ex: DataIntegrityViolationException): Nothing {
+        val constraintName = (ex.cause as? ConstraintViolationException)?.constraintName
+        val isNameTypeDuplicate =
+            constraintName?.equals(NAME_TYPE_UNIQUE_INDEX, ignoreCase = true) == true ||
+                ex.message?.contains(NAME_TYPE_UNIQUE_INDEX, ignoreCase = true) == true
+        throw if (isNameTypeDuplicate) DuplicateCompanyException() else ex
+    }
 
     // 전달된 Field만 반영한다. null Field는 여기서 아무 일도 하지 않으므로 기존 값이 유지된다.
     private fun applyChanges(
@@ -153,5 +176,10 @@ class CompanyServiceImpl(
         if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
             throw MouPeriodInvalidException()
         }
+    }
+
+    private companion object {
+        // V6__add_companies_name_type_unique_index.sql에서 생성하는 Index 이름
+        const val NAME_TYPE_UNIQUE_INDEX = "uk_companies_name_type_active"
     }
 }
