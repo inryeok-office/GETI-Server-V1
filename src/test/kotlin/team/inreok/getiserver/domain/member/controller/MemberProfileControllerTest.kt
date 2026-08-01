@@ -4,8 +4,11 @@ import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
-import org.springframework.http.HttpHeaders
+import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -21,10 +24,16 @@ import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.exception.MemberProfileNotFoundException
 import team.inreok.getiserver.domain.member.exception.MemberProfileValidationException
 import team.inreok.getiserver.domain.member.service.MemberService
+import team.inreok.getiserver.global.security.JwtTokenProvider
+import team.inreok.getiserver.global.security.SecurityConfig
 import tools.jackson.databind.json.JsonMapper
 import java.time.LocalDateTime
 
+// SecurityConfig를 명시적으로 Import해 /api/v1/me/**가 실제로 인증을 요구하는지(401)까지
+// 검증한다(WebPageableConfig와 동일하게 일반 @Configuration이라 @WebMvcTest가 자동 인식하지 않음).
 @WebMvcTest(controllers = [MemberProfileController::class])
+@Import(SecurityConfig::class)
+@EnableWebSecurity
 class MemberProfileControllerTest
     @Autowired
     constructor(
@@ -33,7 +42,16 @@ class MemberProfileControllerTest
         @MockitoBean
         private lateinit var memberService: MemberService
 
+        // SecurityConfig가 Bean으로 필요로 하지만, 이 Test는 JwtAuthenticationFilter의 실제 파싱 결과를
+        // 쓰지 않고 SecurityMockMvcRequestPostProcessors.authentication(...)으로 SecurityContext를
+        // 직접 채우므로 동작(Stubbing) 없이 존재만 하면 된다.
+        @MockitoBean
+        private lateinit var jwtTokenProvider: JwtTokenProvider
+
         private val objectMapper = JsonMapper()
+
+        private fun authOf(memberId: Long) =
+            authentication(UsernamePasswordAuthenticationToken(memberId, null, emptyList()))
 
         @Test
         fun `내 프로필을 조회하면 200과 함께 프로필을 반환한다`() {
@@ -59,11 +77,8 @@ class MemberProfileControllerTest
             )
 
             mockMvc
-                .perform(
-                    get("/api/v1/me/profile")
-                        .param("memberId", "1")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"),
-                ).andExpect(status().isOk)
+                .perform(get("/api/v1/me/profile").with(authOf(1L)))
+                .andExpect(status().isOk)
                 .andExpect(jsonPath("$.data.memberId").value(1))
                 .andExpect(jsonPath("$.data.email").value("student@example.com"))
                 .andExpect(jsonPath("$.data.roles[0]").value("STUDENT"))
@@ -72,15 +87,41 @@ class MemberProfileControllerTest
         }
 
         @Test
+        fun `Query Parameter로 다른 memberId를 보내도 인증된 본인 memberId로만 처리한다`() {
+            given(memberService.getMyProfile(1L)).willReturn(
+                MyProfileResponse(
+                    memberId = 1L,
+                    name = "홍길동",
+                    email = "student@example.com",
+                    roles = listOf(RoleType.STUDENT),
+                    status = MemberStatus.ACTIVE,
+                    academicStatus = AcademicStatus.ENROLLED,
+                    cohort = 3,
+                    department = DepartmentType.SW_DEVELOPMENT,
+                    phone = "010-0000-0000",
+                    profileImageUrl = null,
+                    desiredJob = "Backend Developer",
+                    bio = "안녕하세요",
+                    githubUrl = "https://github.com/example",
+                    isPublic = true,
+                    majors = listOf("소프트웨어"),
+                    techStacks = listOf("Kotlin"),
+                ),
+            )
+
+            mockMvc
+                .perform(get("/api/v1/me/profile").with(authOf(1L)).param("memberId", "999"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.memberId").value(1))
+        }
+
+        @Test
         fun `내 프로필이 없으면 404 PROFILE_NOT_FOUND를 반환한다`() {
             given(memberService.getMyProfile(999L)).willThrow(MemberProfileNotFoundException(999L))
 
             mockMvc
-                .perform(
-                    get("/api/v1/me/profile")
-                        .param("memberId", "999")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer test-token"),
-                ).andExpect(status().isNotFound)
+                .perform(get("/api/v1/me/profile").with(authOf(999L)))
+                .andExpect(status().isNotFound)
                 .andExpect(jsonPath("$.error.code").value("PROFILE_NOT_FOUND"))
         }
 
@@ -105,8 +146,7 @@ class MemberProfileControllerTest
             mockMvc
                 .perform(
                     patch("/api/v1/me/profile")
-                        .param("memberId", "1")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                        .with(authOf(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody),
                 ).andExpect(status().isOk)
@@ -124,8 +164,7 @@ class MemberProfileControllerTest
             mockMvc
                 .perform(
                     patch("/api/v1/me/profile")
-                        .param("memberId", "999")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                        .with(authOf(999L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody),
                 ).andExpect(status().isNotFound)
@@ -141,8 +180,7 @@ class MemberProfileControllerTest
             mockMvc
                 .perform(
                     patch("/api/v1/me/profile")
-                        .param("memberId", "1")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                        .with(authOf(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody),
                 ).andExpect(status().isBadRequest)
@@ -150,24 +188,21 @@ class MemberProfileControllerTest
         }
 
         @Test
-        fun `Authorization Header가 없으면 400을 반환한다`() {
+        fun `인증되지 않은 요청은 401 UNAUTHORIZED를 반환한다`() {
             mockMvc
-                .perform(
-                    patch("/api/v1/me/profile")
-                        .param("memberId", "1")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{"bio":"x"}"""),
-                ).andExpect(status().isBadRequest)
+                .perform(get("/api/v1/me/profile"))
+                .andExpect(status().isUnauthorized)
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"))
         }
 
         @Test
-        fun `memberId Query Parameter가 없으면 400을 반환한다`() {
+        fun `인증되지 않은 수정 요청도 401 UNAUTHORIZED를 반환한다`() {
             mockMvc
                 .perform(
                     patch("/api/v1/me/profile")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"bio":"x"}"""),
-                ).andExpect(status().isBadRequest)
+                ).andExpect(status().isUnauthorized)
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"))
         }
     }

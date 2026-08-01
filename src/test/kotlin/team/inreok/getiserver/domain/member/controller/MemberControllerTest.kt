@@ -4,8 +4,12 @@ import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
+import org.springframework.context.annotation.Import
 import org.springframework.data.domain.PageRequest
-import org.springframework.http.HttpHeaders
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -19,8 +23,13 @@ import team.inreok.getiserver.domain.member.exception.MemberNotFoundException
 import team.inreok.getiserver.domain.member.exception.NameRequiredException
 import team.inreok.getiserver.domain.member.service.MemberSearchService
 import team.inreok.getiserver.domain.member.service.MemberService
+import team.inreok.getiserver.global.security.JwtTokenProvider
+import team.inreok.getiserver.global.security.SecurityConfig
 
+// SecurityConfig를 명시적으로 Import해 /api/v1/members가 실제로 인증을 요구하는지(401)까지 검증한다.
 @WebMvcTest(controllers = [MemberController::class])
+@Import(SecurityConfig::class)
+@EnableWebSecurity
 class MemberControllerTest
     @Autowired
     constructor(
@@ -31,6 +40,20 @@ class MemberControllerTest
 
         @MockitoBean
         private lateinit var memberSearchService: MemberSearchService
+
+        @MockitoBean
+        private lateinit var jwtTokenProvider: JwtTokenProvider
+
+        private fun authOf(
+            memberId: Long,
+            vararg roles: String,
+        ) = authentication(
+            UsernamePasswordAuthenticationToken(
+                memberId,
+                null,
+                roles.map { SimpleGrantedAuthority("ROLE_$it") },
+            ),
+        )
 
         @Test
         fun `학생 프로필을 조회하면 200과 함께 프로필을 반환한다`() {
@@ -51,7 +74,7 @@ class MemberControllerTest
             )
 
             mockMvc
-                .perform(get("/api/v1/members/1").header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+                .perform(get("/api/v1/members/1").with(authOf(1L, "STUDENT")))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.data.memberId").value(1))
                 .andExpect(jsonPath("$.data.name").value("홍길동"))
@@ -69,24 +92,25 @@ class MemberControllerTest
             given(memberService.getProfile(999L)).willThrow(MemberNotFoundException(999L))
 
             mockMvc
-                .perform(get("/api/v1/members/999").header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+                .perform(get("/api/v1/members/999").with(authOf(1L, "STUDENT")))
                 .andExpect(status().isNotFound)
                 .andExpect(jsonPath("$.error.code").value("MEMBER_NOT_FOUND"))
         }
 
         @Test
-        fun `Authorization Header가 없으면 400을 반환한다`() {
+        fun `요청자가 STUDENT가 아니면 403 NOT_A_STUDENT를 반환한다`() {
             mockMvc
-                .perform(get("/api/v1/members/1"))
-                .andExpect(status().isBadRequest)
+                .perform(get("/api/v1/members/1").with(authOf(2L, "TEACHER")))
+                .andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.error.code").value("NOT_A_STUDENT"))
         }
 
         @Test
-        fun `Authorization Header가 빈 값이면 400을 반환한다`() {
+        fun `인증되지 않은 요청은 401 UNAUTHORIZED를 반환한다`() {
             mockMvc
-                .perform(get("/api/v1/members/1").header(HttpHeaders.AUTHORIZATION, ""))
-                .andExpect(status().isBadRequest)
-                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .perform(get("/api/v1/members/1"))
+                .andExpect(status().isUnauthorized)
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"))
         }
 
         @Test
@@ -118,7 +142,7 @@ class MemberControllerTest
             mockMvc
                 .perform(
                     get("/api/v1/members")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                        .with(authOf(1L, "STUDENT"))
                         .param("name", "홍길동"),
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.data.content.length()").value(1))
@@ -134,8 +158,16 @@ class MemberControllerTest
                 .willThrow(NameRequiredException())
 
             mockMvc
-                .perform(get("/api/v1/members").header(HttpHeaders.AUTHORIZATION, "Bearer test-token"))
+                .perform(get("/api/v1/members").with(authOf(1L, "STUDENT")))
                 .andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.error.code").value("NAME_REQUIRED"))
+        }
+
+        @Test
+        fun `검색도 인증되지 않으면 401 UNAUTHORIZED를 반환한다`() {
+            mockMvc
+                .perform(get("/api/v1/members").param("name", "홍길동"))
+                .andExpect(status().isUnauthorized)
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"))
         }
     }
