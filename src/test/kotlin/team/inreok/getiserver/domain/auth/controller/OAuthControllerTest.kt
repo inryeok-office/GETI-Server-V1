@@ -26,7 +26,7 @@ class OAuthControllerTest
         private lateinit var oAuthLoginService: OAuthLoginService
 
         @Test
-        fun `콜백 요청이 성공하면 200과 함께 Provider 사용자 식별값을 반환한다`() {
+        fun `Google 콜백이 성공하면 200과 함께 Provider 사용자 식별값을 반환한다`() {
             given(oAuthLoginService.exchangeCode("google", "auth-code", "state-value"))
                 .willReturn(OAuthUserInfo(subject = "google-subject-1", email = "teacher@example.com"))
 
@@ -38,13 +38,25 @@ class OAuthControllerTest
         }
 
         @Test
-        fun `지원하지 않는 Provider이면 400을 반환한다`() {
-            willThrow(UnsupportedOAuthProviderException("dg"))
-                .given(oAuthLoginService)
-                .exchangeCode("dg", "auth-code", "state-value")
+        fun `DG 콜백이 성공하면 200과 함께 Provider 사용자 식별값을 반환한다`() {
+            given(oAuthLoginService.exchangeCode("dg", "auth-code", "state-value"))
+                .willReturn(OAuthUserInfo(subject = "dg-subject-1", email = "student@dgsw.hs.kr"))
 
             mockMvc
                 .perform(get("/api/v1/auth/dg/callback").param("code", "auth-code").param("state", "state-value"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.subject").value("dg-subject-1"))
+                .andExpect(jsonPath("$.data.email").value("student@dgsw.hs.kr"))
+        }
+
+        @Test
+        fun `지원하지 않는 Provider이면 400을 반환한다`() {
+            willThrow(UnsupportedOAuthProviderException("kakao"))
+                .given(oAuthLoginService)
+                .exchangeCode("kakao", "auth-code", "state-value")
+
+            mockMvc
+                .perform(get("/api/v1/auth/kakao/callback").param("code", "auth-code").param("state", "state-value"))
                 .andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.error.code").value("UNSUPPORTED_OAUTH_PROVIDER"))
         }

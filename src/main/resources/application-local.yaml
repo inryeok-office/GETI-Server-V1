@@ -18,6 +18,13 @@ app:
       client-id: ${GOOGLE_CLIENT_ID:}
       client-secret: ${GOOGLE_CLIENT_SECRET:}
       redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/v1/auth/google/callback}
+    # DG(DataGSM) OAuth. local은 개발용 인증 서버(localhost:8081)를 기본값으로 쓴다.
+    dg:
+      client-id: ${DG_CLIENT_ID:}
+      client-secret: ${DG_CLIENT_SECRET:}
+      redirect-uri: ${DG_REDIRECT_URI:http://localhost:8080/api/v1/auth/dg/callback}
+      authorization-server: ${DG_AUTHORIZATION_SERVER:http://localhost:8081}
+      resource-server: ${DG_RESOURCE_SERVER:https://oauth.resource.datagsm.kr}
 
 logging:
   level:

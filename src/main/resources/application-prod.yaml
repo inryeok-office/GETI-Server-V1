@@ -17,3 +17,10 @@ app:
       client-id: ${GOOGLE_CLIENT_ID}
       client-secret: ${GOOGLE_CLIENT_SECRET}
       redirect-uri: ${GOOGLE_REDIRECT_URI}
+    # DG(DataGSM) OAuth. 서버 URL은 운영 기본값을 두되 환경 변수로 재정의할 수 있다.
+    dg:
+      client-id: ${DG_CLIENT_ID}
+      client-secret: ${DG_CLIENT_SECRET}
+      redirect-uri: ${DG_REDIRECT_URI}
+      authorization-server: ${DG_AUTHORIZATION_SERVER:https://oauth.authorization.datagsm.kr}
+      resource-server: ${DG_RESOURCE_SERVER:https://oauth.resource.datagsm.kr}
