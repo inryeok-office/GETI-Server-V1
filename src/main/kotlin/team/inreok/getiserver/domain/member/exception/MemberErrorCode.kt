@@ -14,6 +14,7 @@ enum class MemberErrorCode(
     DUPLICATE_MAJOR(HttpStatus.CONFLICT, "전공 목록에 중복된 값이 있습니다."),
     TECH_STACK_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 기술 스택을 찾을 수 없습니다."),
     NAME_REQUIRED(HttpStatus.BAD_REQUEST, "검색할 이름을 입력해야 합니다."),
+    NOT_A_STUDENT(HttpStatus.FORBIDDEN, "학생만 접근할 수 있습니다."),
     ;
 
     override val code: String get() = name
