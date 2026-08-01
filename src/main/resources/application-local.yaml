@@ -8,6 +8,17 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+# Local 전용 임시 Secret이다(운영에서 재사용 금지). 실제 값을 채운 .env는 Commit되지 않는다.
+# GOOGLE_CLIENT_ID/SECRET을 비워두면 Google 로그인 자체는 실패하지만 App은 정상 기동한다.
+app:
+  jwt:
+    secret: ${JWT_SECRET:local-development-only-jwt-secret-please-do-not-use-in-production}
+  oauth:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/v1/auth/google/callback}
+
 logging:
   level:
     team.inreok.getiserver: DEBUG

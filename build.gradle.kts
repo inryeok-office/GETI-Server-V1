@@ -63,6 +63,21 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
 
+    // Security: JWT 인증(Filter) + OAuth2 Client(Google/DG 로그인)
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
+
+    // Spring Boot 4.x는 RestClientAutoConfiguration을 spring-boot-autoconfigure가 아니라 이 별도
+    // 모듈로 분리했다. OAuthLoginServiceImpl이 주입받는 RestClient.Builder Bean은 이 Dependency가
+    // 있어야 자동 등록된다(없으면 Application Context 자체가 기동되지 않는다).
+    implementation("org.springframework.boot:spring-boot-restclient")
+
+    // JWT 발급/검증(jjwt). Jackson 3.x(tools.jackson) 기반인 프로젝트와 Jackson 2.x가 섞이지
+    // 않도록 jjwt-jackson 대신 jjwt-gson을 사용한다.
+    implementation("io.jsonwebtoken:jjwt-api:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-gson:0.13.0")
+
     // Persistence: PostgreSQL(JPA/Hibernate) + Flyway, Redis(Lettuce)
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
@@ -82,6 +97,7 @@ dependencies {
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testCompileOnly("org.projectlombok:lombok")
     testAnnotationProcessor("org.projectlombok:lombok")
