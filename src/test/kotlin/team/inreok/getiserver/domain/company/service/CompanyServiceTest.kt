@@ -41,8 +41,7 @@ class CompanyServiceTest {
 
     // Kotlin non-null 파라미터에 bare any()를 쓰면 null 반환으로 NPE가 나므로 Elvis로 기본값을
     // 채운다(TokenServiceImplTest의 anyLocalDateTime()과 동일한 방식).
-    private fun anyCompany(): Company =
-        any(Company::class.java) ?: Company(name = "", type = CompanyType.GENERAL)
+    private fun anyCompany(): Company = any(Company::class.java) ?: Company(name = "", type = CompanyType.GENERAL)
 
     // Repository의 중복 확인 메서드 이름이 길어 Stub 구문을 짧게 유지하기 위한 Helper다.
     private fun givenDuplicateCheck(
