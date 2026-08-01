@@ -13,7 +13,7 @@ GETI 서비스의 Backend Server 저장소다. 처음 이 저장소를 Clone했�
 
 ## 실제 기술 스택
 
-아래 표는 이 저장소에 실제로 적용된 기술만 담는다. GETI Notion Tech Stack에 계획되어 있지만 아직 저장소에 구현되지 않은 항목(Spring Security/OAuth/JWT, OpenAPI, QueryDSL, Elasticsearch, Kafka, Observability 스택 등)은 [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md)를 따르며, 이 표에는 포함하지 않는다.
+아래 표는 이 저장소에 실제로 적용된 기술만 담는다. GETI Notion Tech Stack에 계획되어 있지만 아직 저장소에 구현되지 않은 항목(Spring Security/OAuth/JWT, QueryDSL, Elasticsearch, Kafka, Observability 스택 등)은 [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md)를 따르며, 이 표에는 포함하지 않는다.
 
 | 구분 | 기술 | 비고 |
 | --- | --- | --- |
@@ -22,6 +22,7 @@ GETI 서비스의 Backend Server 저장소다. 처음 이 저장소를 Clone했�
 | Framework | Spring Boot 4.1.0 (Spring Framework 7.0.8) | |
 | Build | Gradle 9.5.1 (Kotlin DSL, Wrapper 포함) | |
 | Web | Spring MVC(Servlet), Bean Validation, Spring Boot Actuator(`health`만 노출) | [`docs/development/web-api.md`](./docs/development/web-api.md) |
+| API 문서 | Springdoc OpenAPI 3.0.3(Swagger UI, `local`만 활성화) | [`docs/ai/openapi-documentation.md`](./docs/ai/openapi-documentation.md) |
 | Persistence | Spring Data JPA + Hibernate, PostgreSQL 18, Flyway | [`docs/development/persistence.md`](./docs/development/persistence.md) |
 | Cache | Redis(Lettuce) | [`docs/development/persistence.md`](./docs/development/persistence.md) |
 | Object Storage | MinIO(Docker 인프라만 구성, Application Client 연동 없음) | [`docs/development/docker.md`](./docs/development/docker.md) |
@@ -109,11 +110,18 @@ Windows에서는 `.\gradlew.bat`를 사용한다. 테스트 유형별 정책과 
 
 ## API 문서
 
-공통 성공/오류 응답, Pagination, CORS, requestId, Health Endpoint 등 모든 HTTP API가 따르는 공통 기반은 [`docs/development/web-api.md`](./docs/development/web-api.md)에 문서화되어 있다. OpenAPI(springdoc)는 아직 도입하지 않았다(첫 실제 Domain Controller가 추가되는 시점에 재검토, 같은 문서 참고). 현재 실제로 노출되는 Endpoint는 다음과 같다.
+공통 성공/오류 응답, Pagination, CORS, requestId, Health Endpoint 등 모든 HTTP API가 따르는 공통 기반은 [`docs/development/web-api.md`](./docs/development/web-api.md)에 문서화되어 있다.
+
+현재 구현된 모든 API(Auth, Member 도메인)는 Springdoc OpenAPI + Swagger UI로 문서화되어 있다. `local` Profile로 실행한 뒤 아래 주소에서 확인한다(Production에서는 기본 비활성화).
 
 ```text
-GET /actuator/health
+Swagger UI:    http://localhost:8080/swagger-ui/index.html
+OpenAPI JSON:  http://localhost:8080/v3/api-docs
 ```
+
+JWT 인증이 필요한 API는 Swagger UI 우측 상단 **Authorize** 버튼에 `POST /api/v1/auth/{provider}/callback` 또는 `POST /api/v1/auth/token/refresh`로 발급받은 Access Token 값(`Bearer` 없이 Token 문자열만)을 입력하면 Swagger UI에서 바로 호출할 수 있다.
+
+새 API를 추가할 때 지켜야 하는 Swagger Annotation 규칙과 `OpenApiDocumentationTest`(누락 시 Build 실패) 검증 기준은 [`docs/ai/openapi-documentation.md`](./docs/ai/openapi-documentation.md)를 따른다.
 
 ## 개발 Workflow
 
@@ -129,6 +137,7 @@ Issue 생성부터 Draft Pull Request까지의 전체 협업 절차, Branch/Comm
 | [`docs/development/docker.md`](./docs/development/docker.md) | Docker Compose 실행법, 접속 정보, 문제 해결 |
 | [`docs/development/persistence.md`](./docs/development/persistence.md) | PostgreSQL/Redis 연결, Flyway, Testcontainers |
 | [`docs/development/web-api.md`](./docs/development/web-api.md) | 공통 응답, ErrorCode, 전역 예외 처리, requestId |
+| [`docs/ai/openapi-documentation.md`](./docs/ai/openapi-documentation.md) | Swagger/OpenAPI 문서화 필수 규칙과 자동 검증 |
 | [`docs/development/testing.md`](./docs/development/testing.md) | 테스트 유형, Kover 커버리지 |
 | [`docs/development/code-quality.md`](./docs/development/code-quality.md) | Spotless/ktlint/detekt |
 | [`docs/development/ci.md`](./docs/development/ci.md) | GitHub Actions CI, Repository Policy |

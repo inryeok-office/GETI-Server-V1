@@ -184,6 +184,8 @@ Windows에서는 `.\gradlew.bat`를 사용한다.
 
 기존 코드 스타일 유지, 불필요한 추상화 금지 등 코드 작성 원칙은 [`docs/ai/coding-conventions.md`](./docs/ai/coding-conventions.md)를 따른다.
 
+API 또는 Controller를 추가·변경하는 작업은 Swagger/OpenAPI 문서화와 자동 검증을 같은 PR에서 수행해야 하며, [`docs/ai/openapi-documentation.md`](./docs/ai/openapi-documentation.md) 규칙을 반드시 따른다.
+
 ## 세부 문서
 
 ```text
@@ -194,6 +196,7 @@ docs/ai/git-conventions.md      Git 및 한글 Commit 규칙
 docs/ai/testing-policy.md       테스트 및 검증 정책
 docs/ai/security-policy.md      보안 및 위험 작업 방지 정책
 docs/ai/completion-policy.md    완료 판단 및 결과 보고 정책
+docs/ai/openapi-documentation.md        Swagger/OpenAPI 문서화 필수 규칙과 자동 검증
 docs/development/quick-start.md         신규 개발자용 로컬 환경 구성 순서
 docs/audit/foundation-audit.md          PR 1~10 전체 기반 Audit 결과
 docs/audit/notion-repository-sync.md    GETI Notion과 저장소 불일치 목록, DECISION_REQUIRED

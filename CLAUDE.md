@@ -56,6 +56,7 @@ Claude Code는 `CLAUDE.md`만 자동으로 인식하고 `AGENTS.md`는 자동으
 - Force Push하지 않는다.
 - Secret, Token, Password, Private Key를 출력하거나 Commit하지 않는다.
 - 실행하지 않은 작업을 완료했다고 보고하지 않는다.
+- API 또는 Controller를 추가·변경하면 같은 작업 안에서 [`docs/ai/openapi-documentation.md`](./docs/ai/openapi-documentation.md)의 Swagger/OpenAPI 문서화 규칙을 함께 적용하고 `OpenApiDocumentationTest`를 통과시킨다.
 
 ## 프로젝트 명령
 
