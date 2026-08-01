@@ -4,8 +4,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
-import org.springframework.security.oauth2.core.AuthorizationGrantType
-import org.springframework.security.oauth2.core.oidc.OidcScopes
 import org.springframework.stereotype.Component
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.RestClient
@@ -31,7 +29,7 @@ class GoogleOAuthProviderClient(
     @Value("\${app.oauth.google.client-id:}") private val clientId: String,
     @Value("\${app.oauth.google.client-secret:}") private val clientSecret: String,
     @Value("\${app.oauth.google.redirect-uri:}") private val redirectUri: String,
-    @Value("\${app.oauth.google.scope:${OidcScopes.OPENID},email,profile}") private val scope: String,
+    @Value("\${app.oauth.google.scope:openid,email,profile}") private val scope: String,
     private val oAuthStateStore: OAuthStateStore,
     restClientBuilder: RestClient.Builder,
 ) : OAuthProviderClient {
@@ -84,7 +82,7 @@ class GoogleOAuthProviderClient(
     ): String {
         val body =
             LinkedMultiValueMap<String, String>().apply {
-                add("grant_type", AuthorizationGrantType.AUTHORIZATION_CODE.value)
+                add("grant_type", GRANT_TYPE_AUTHORIZATION_CODE)
                 add("code", code)
                 add("redirect_uri", redirectUri)
                 add("client_id", clientId)
@@ -142,6 +140,11 @@ class GoogleOAuthProviderClient(
         private const val AUTHORIZATION_URI = "https://accounts.google.com/o/oauth2/v2/auth"
         private const val TOKEN_URI = "https://oauth2.googleapis.com/token"
         private const val USER_INFO_URI = "https://openidconnect.googleapis.com/v1/userinfo"
+
+        // spring-security-oauth2-core의 상수(OidcScopes/AuthorizationGrantType) 대신 원시 문자열을
+        // 쓴다. 이 프로젝트는 Spring OAuth2 Client 자동 구성을 사용하지 않아 해당 Dependency를 두지
+        // 않기 위함이다(코드 리뷰 Minor 반영).
+        private const val GRANT_TYPE_AUTHORIZATION_CODE = "authorization_code"
         private const val ACCESS_TOKEN_FIELD = "access_token"
         private const val SUBJECT_FIELD = "sub"
         private const val EMAIL_FIELD = "email"

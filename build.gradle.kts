@@ -63,9 +63,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
 
-    // Security: JWT 인증(Filter) + OAuth2 Client(Google/DG 로그인)
+    // Security: JWT 인증(Filter Chain). OAuth Token 교환/UserInfo 조회는 RestClient로 직접 구현하고
+    // Spring OAuth2 Client 자동 구성(ClientRegistrationRepository 기반 Flow)은 쓰지 않으므로
+    // spring-boot-starter-oauth2-client는 두지 않는다(코드 리뷰 Minor 반영).
     implementation("org.springframework.boot:spring-boot-starter-security")
-    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
     // Spring Boot 4.x는 RestClientAutoConfiguration을 spring-boot-autoconfigure가 아니라 이 별도
     // 모듈로 분리했다. OAuthLoginServiceImpl이 주입받는 RestClient.Builder Bean은 이 Dependency가

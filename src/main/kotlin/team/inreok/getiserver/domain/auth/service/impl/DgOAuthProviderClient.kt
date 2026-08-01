@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
-import org.springframework.security.oauth2.core.AuthorizationGrantType
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import org.springframework.web.util.UriComponentsBuilder
@@ -81,7 +80,7 @@ class DgOAuthProviderClient(
         // DG Token Endpoint는 application/json Body를 받는다(spec: grant_type/code/client_id/redirect_uri/client_secret).
         val body =
             mapOf(
-                "grant_type" to AuthorizationGrantType.AUTHORIZATION_CODE.value,
+                "grant_type" to GRANT_TYPE_AUTHORIZATION_CODE,
                 "code" to code,
                 "client_id" to clientId,
                 "redirect_uri" to redirectUri,
@@ -127,6 +126,9 @@ class DgOAuthProviderClient(
     }
 
     companion object {
+        // spring-security-oauth2-core의 AuthorizationGrantType 대신 원시 문자열(Spring OAuth2 Client
+        // 자동 구성을 쓰지 않아 해당 Dependency 미사용, 코드 리뷰 Minor 반영).
+        private const val GRANT_TYPE_AUTHORIZATION_CODE = "authorization_code"
         private const val AUTHORIZE_PATH = "/v1/oauth/authorize"
         private const val TOKEN_PATH = "/v1/oauth/token"
         private const val USER_INFO_PATH = "/userinfo"
