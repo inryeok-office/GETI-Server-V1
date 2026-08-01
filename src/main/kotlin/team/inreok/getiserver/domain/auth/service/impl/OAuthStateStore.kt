@@ -20,13 +20,9 @@ class OAuthStateStore(
         stringRedisTemplate.opsForValue().set(key(state), value, STATE_TTL)
     }
 
-    // 저장된 값을 반환하고 즉시 삭제한다(1회용). 없으면(만료·위조) null.
-    fun consume(state: String): String? {
-        val key = key(state)
-        val value = stringRedisTemplate.opsForValue().get(key) ?: return null
-        stringRedisTemplate.delete(key)
-        return value
-    }
+    // 저장된 값을 반환하고 즉시 삭제한다(1회용). 없으면(만료·위조) null. 조회와 삭제를 한 명령
+    // (GETDEL, Redis 6.2+)으로 원자화해 동일 state의 동시 소비(이중 클릭·재시도)를 막는다(코드 리뷰 P2 반영).
+    fun consume(state: String): String? = stringRedisTemplate.opsForValue().getAndDelete(key(state))
 
     private fun key(state: String): String = "$STATE_KEY_PREFIX$state"
 
