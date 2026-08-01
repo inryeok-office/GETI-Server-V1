@@ -51,6 +51,13 @@ class SecurityConfig(
                 // CORS Preflight(OPTIONS)에는 Authorization Header가 없어 authenticated에 막힌다. CORS가
                 // 활성화되는 시점에 Cross-Origin의 /session·/logout이 막히지 않도록 먼저 허용한다(코드 리뷰 P2 반영).
                 authorize(HttpMethod.OPTIONS, "/**", permitAll)
+                // Swagger UI/OpenAPI JSON은 anyRequest(permitAll)에 의해서도 이미 허용되지만, 향후
+                // anyRequest 기본값이 바뀌어도 Swagger 접근이 조용히 막히지 않도록 명시적으로 선언한다
+                // (docs/ai/openapi-documentation.md 참고). Production에서는 springdoc 자체가
+                // application-prod.yaml에서 비활성화되어 이 경로가 애초에 존재하지 않는다.
+                authorize("/v3/api-docs/**", permitAll)
+                authorize("/swagger-ui/**", permitAll)
+                authorize("/swagger-ui.html", permitAll)
                 authorize("/api/v1/auth/session", authenticated)
                 authorize("/api/v1/auth/logout", authenticated)
                 authorize("/api/v1/me/**", authenticated)

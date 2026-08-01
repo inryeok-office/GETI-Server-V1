@@ -63,6 +63,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
 
+    // API 문서화(Swagger UI, OpenAPI 3). springdoc-openapi 3.0.3은 Spring Boot 4(Jakarta EE 9)를
+    // 공식 지원하는 Version이다(springdoc.org 확인). Production 노출 여부는 `springdoc.*`
+    // Property로 제어하고(application-prod.yaml), 별도 Downgrade나 Springfox는 도입하지 않는다.
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
+
     // Security: JWT 인증(Filter Chain). OAuth Token 교환/UserInfo 조회는 RestClient로 직접 구현하고
     // Spring OAuth2 Client 자동 구성(ClientRegistrationRepository 기반 Flow)은 쓰지 않으므로
     // spring-boot-starter-oauth2-client는 두지 않는다(코드 리뷰 Minor 반영).

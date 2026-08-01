@@ -31,3 +31,11 @@ management:
   endpoint:
     health:
       show-details: never
+
+# Swagger UI/OpenAPI JSON은 기본적으로 활성화한다(local, prod 이외 Profile 포함). Production에서는
+# application-prod.yaml이 false로 재정의해 운영 환경에 노출하지 않는다(docs/ai/openapi-documentation.md 참고).
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
