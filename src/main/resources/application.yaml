@@ -8,6 +8,21 @@ spring:
   flyway:
     clean-disabled: true
 
+# JWT Access/Refresh Token 만료 시간(초). Secret은 Profile별 실제 값이 필요해 여기(공통 설정)에는
+# 두지 않고 application-local.yaml/application-prod.yaml에서만 정의한다(datasource 설정과 동일한 방식).
+#
+# app.oauth.google.*는 의도적으로 spring.security.oauth2.client.registration.* 이름을 쓰지 않는다.
+# 그 이름을 쓰면 client-id가 비어 있어도 Spring Boot OAuth2 Client 자동 설정이 시작 시점에
+# ClientRegistration을 만들려다 실패해 App 기동 자체가 막힌다(Google 미설정 상태에서도 App은
+# 정상 기동해야 하므로). ClientRegistration은 OAuthLoginServiceImpl이 이 값으로 직접 만든다.
+app:
+  jwt:
+    access-token-expiration-seconds: 1800
+    refresh-token-expiration-seconds: 1209600
+  oauth:
+    google:
+      scope: openid,email,profile
+
 management:
   endpoints:
     web:
