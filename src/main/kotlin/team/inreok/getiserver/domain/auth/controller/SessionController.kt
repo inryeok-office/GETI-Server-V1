@@ -27,11 +27,15 @@ class SessionController(
         return ApiResponse.of(SessionResponse(memberId = memberId, roles = roles))
     }
 
+    // 인증된 호출자(memberId)를 함께 넘겨, 다른 사용자의 Refresh Token을 강제 폐기하지 못하도록
+    // Service 계층에서 소유권을 검증한다(코드 리뷰 Blocker 반영).
     @DeleteMapping("/logout")
     fun logout(
+        authentication: Authentication,
         @Valid @RequestBody request: LogoutRequest,
     ): ResponseEntity<Void> {
-        tokenService.logout(request.refreshToken)
+        val memberId = authentication.principal as Long
+        tokenService.logout(request.refreshToken, memberId)
         return ResponseEntity.noContent().build()
     }
 }

@@ -25,8 +25,13 @@ class TokenServiceImpl(
         refreshToken: String,
         deviceIdentifier: String?,
     ): IssuedTokens {
-        val existing = findActive(refreshToken)
-        existing.revokedAt = LocalDateTime.now()
+        val tokenHash = hash(refreshToken)
+        val existing = loadNotExpired(tokenHash)
+        // 원자적 폐기: 동시에 같은 Token으로 재발급하면 한 요청만 1행을 갱신하고 나머지는 0행이라
+        // 거부된다(탈취된 Refresh Token 재사용 탐지, 코드 리뷰 P1 반영).
+        if (refreshTokenRepository.revokeIfActive(tokenHash, LocalDateTime.now()) == 0) {
+            throw InvalidRefreshTokenException()
+        }
 
         val newAccessToken = jwtTokenProvider.createAccessToken(existing.memberId, emptyList())
         val newRefreshToken = issueRefreshToken(existing.memberId, deviceIdentifier ?: existing.deviceIdentifier)
@@ -38,16 +43,21 @@ class TokenServiceImpl(
     }
 
     @Transactional
-    override fun logout(refreshToken: String) {
-        val existing = findActive(refreshToken)
-        existing.revokedAt = LocalDateTime.now()
+    override fun logout(
+        refreshToken: String,
+        memberId: Long,
+    ) {
+        val tokenHash = hash(refreshToken)
+        val existing = refreshTokenRepository.findByTokenHash(tokenHash) ?: throw InvalidRefreshTokenException()
+        // 소유권 검증: 호출자가 이 Refresh Token의 소유자가 아니면 거부한다(코드 리뷰 Blocker 반영).
+        if (existing.memberId != memberId) throw InvalidRefreshTokenException()
+        // 이미 폐기됐어도(0행) 로그아웃은 멱등하게 성공으로 둔다. 폐기 자체는 원자적 UPDATE로 처리한다.
+        refreshTokenRepository.revokeIfActive(tokenHash, LocalDateTime.now())
     }
 
-    private fun findActive(rawToken: String): RefreshToken {
-        val found = refreshTokenRepository.findByTokenHash(hash(rawToken))
-        if (found == null || found.revokedAt != null || found.expiresAt.isBefore(LocalDateTime.now())) {
-            throw InvalidRefreshTokenException()
-        }
+    private fun loadNotExpired(tokenHash: String): RefreshToken {
+        val found = refreshTokenRepository.findByTokenHash(tokenHash) ?: throw InvalidRefreshTokenException()
+        if (found.expiresAt.isBefore(LocalDateTime.now())) throw InvalidRefreshTokenException()
         return found
     }
 
