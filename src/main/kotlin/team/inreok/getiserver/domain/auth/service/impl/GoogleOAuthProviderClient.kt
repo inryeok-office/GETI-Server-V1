@@ -118,7 +118,12 @@ class GoogleOAuthProviderClient(
 
         val subject = response?.get(SUBJECT_FIELD) as? String
         val email = response?.get(EMAIL_FIELD) as? String
-        if (subject == null || email == null) throw OAuthLoginFailedException("Google 로그인에 실패했습니다.")
+        // 검증되지 않은 이메일(email_verified != true)은 신뢰하지 않는다. 후속 Member 연동에서 이
+        // 이메일로 교직원 여부를 식별하므로 지금부터 검증된 이메일만 통과시킨다(코드 리뷰 P2 반영).
+        val emailVerified = response?.get(EMAIL_VERIFIED_FIELD) == true
+        if (subject == null || email == null || !emailVerified) {
+            throw OAuthLoginFailedException("Google 로그인에 실패했습니다.")
+        }
         return OAuthUserInfo(subject = subject, email = email)
     }
 
@@ -140,6 +145,7 @@ class GoogleOAuthProviderClient(
         private const val ACCESS_TOKEN_FIELD = "access_token"
         private const val SUBJECT_FIELD = "sub"
         private const val EMAIL_FIELD = "email"
+        private const val EMAIL_VERIFIED_FIELD = "email_verified"
         private const val TOKEN_BYTE_LENGTH = 32
     }
 }
