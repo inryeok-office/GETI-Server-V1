@@ -3,6 +3,7 @@ package team.inreok.getiserver.global.security
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
@@ -45,6 +46,9 @@ class SecurityConfig(
             httpBasic { disable() }
             formLogin { disable() }
             authorizeHttpRequests {
+                // CORS Preflight(OPTIONS)에는 Authorization Header가 없어 authenticated에 막힌다. CORS가
+                // 활성화되는 시점에 Cross-Origin의 /session·/logout이 막히지 않도록 먼저 허용한다(코드 리뷰 P2 반영).
+                authorize(HttpMethod.OPTIONS, "/**", permitAll)
                 authorize("/api/v1/auth/session", authenticated)
                 authorize("/api/v1/auth/logout", authenticated)
                 authorize(anyRequest, permitAll)
