@@ -145,6 +145,7 @@ Repository Interface는 `org.springframework.data.jpa.repository.JpaRepository`�
 | --- | --- | --- |
 | `global.error` | 모든 Domain이 공유하는 오류 계약(Error Code, 오류 응답, 전역 예외 처리, 공통 예외 기반) | 있음([`web-api.md`](../development/web-api.md) 참고) |
 | `global.web` | 모든 Domain Controller가 공유하는 HTTP Web 기술 기반(공통 응답, Pagination, CORS, requestId 등) | 있음([`web-api.md`](../development/web-api.md) 참고) |
+| `global.openapi` | 모든 Domain Controller가 공유하는 Springdoc OpenAPI 공통 설정(Info, JWT Bearer Security Scheme) | 있음([`docs/ai/openapi-documentation.md`](../ai/openapi-documentation.md) 참고) |
 | `global.config` | Spring Framework Configuration Class, `@ConfigurationProperties` | 없음. 실제 Class가 생기는 시점에 만든다 |
 | `global.response` | (검토 중) `global.web`과 책임이 겹친다 | 없음. `global.web`에 이미 `ApiResponse`/`PageResponse`가 있어 중복 Package를 만들지 않았다. 실제 필요가 명확해지면 `global.web`을 `global.response`로 재구성할지 별도로 판단한다 |
 | `global.security` | Spring Security 설정 | 없음. Spring Security 자체가 아직 도입되지 않았다 |

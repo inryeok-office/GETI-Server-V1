@@ -45,6 +45,7 @@
 | [`testing-policy.md`](./testing-policy.md) | 테스트 작성·유지·실행 기준과 검증 정책 |
 | [`security-policy.md`](./security-policy.md) | Secret 관리, 위험한 명령 제한 등 보안 정책 |
 | [`completion-policy.md`](./completion-policy.md) | 작업을 "완료"로 판단하는 기준과 보고 형식 |
+| [`openapi-documentation.md`](./openapi-documentation.md) | Swagger/OpenAPI 문서화 필수 규칙과 자동 검증(`OpenApiDocumentationTest`) |
 
 ## 규칙 우선순위
 

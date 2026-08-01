@@ -24,3 +24,10 @@ app:
       redirect-uri: ${DG_REDIRECT_URI}
       authorization-server: ${DG_AUTHORIZATION_SERVER:https://oauth.authorization.datagsm.kr}
       resource-server: ${DG_RESOURCE_SERVER:https://oauth.resource.datagsm.kr}
+
+# Swagger UI/OpenAPI JSON은 운영 환경에 노출하지 않는다(docs/ai/openapi-documentation.md 참고).
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

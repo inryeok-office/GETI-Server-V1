@@ -9,7 +9,7 @@ argument-hint: [구현할 내용에 대한 추가 설명 (선택)]
 
 ## 참조
 
-시작 전 [`AGENTS.md`](../../AGENTS.md), 현재 Issue, 관련 [`.claude/rules/`](../rules/)를 확인한다. 상세 기준은 [`spring-boot-change` Skill](../skills/spring-boot-change/SKILL.md)과 [`test-and-verify` Skill](../skills/test-and-verify/SKILL.md)을 따른다.
+시작 전 [`AGENTS.md`](../../AGENTS.md), 현재 Issue, 관련 [`.claude/rules/`](../rules/)를 확인한다. 상세 기준은 [`spring-boot-change` Skill](../skills/spring-boot-change/SKILL.md), [`test-and-verify` Skill](../skills/test-and-verify/SKILL.md)과 Controller 변경 시 [`docs/ai/openapi-documentation.md`](../../docs/ai/openapi-documentation.md)를 따른다.
 
 ## 수행 절차
 
@@ -19,13 +19,14 @@ argument-hint: [구현할 내용에 대한 추가 설명 (선택)]
 4. 영향 범위를 분석한다.
 5. 최소 변경 계획을 세운다. 범위가 크면 논리적 단계로 나눈다.
 6. 계획에 따라 구현한다.
-7. 관련 Test를 작성하거나 수정한다.
-8. 변경 범위에 해당하는 Test를 실행한다.
-9. Kotlin 코드를 변경했다면 `./gradlew spotlessApply`로 포맷을 정리하고 `./gradlew detekt`로 정적 분석을 확인한다.
-10. 전체 Test와 Build를 실행한다 (`check`에 `spotlessCheck`, `detekt`, `koverVerify`가 포함됨).
-11. `git diff --check`를 실행한다.
-12. Diff를 직접 리뷰한다.
-13. 결과를 보고한다.
+7. Controller Endpoint를 추가하거나 변경했다면 `docs/ai/openapi-documentation.md`의 Swagger Annotation 규칙을 적용한다.
+8. 관련 Test를 작성하거나 수정한다.
+9. 변경 범위에 해당하는 Test를 실행한다(Controller를 변경했다면 `OpenApiDocumentationTest` 포함).
+10. Kotlin 코드를 변경했다면 `./gradlew spotlessApply`로 포맷을 정리하고 `./gradlew detekt`로 정적 분석을 확인한다.
+11. 전체 Test와 Build를 실행한다 (`check`에 `spotlessCheck`, `detekt`, `koverVerify`가 포함됨).
+12. `git diff --check`를 실행한다.
+13. Diff를 직접 리뷰한다.
+14. 결과를 보고한다.
 
 Commit과 Push는 사용자가 명시적으로 요청한 경우에만 수행한다.
 

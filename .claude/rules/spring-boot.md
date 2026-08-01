@@ -35,6 +35,7 @@ GETI-Server의 실제 환경(Spring Boot 4.1.0, Kotlin 2.3.21, Gradle 9.5.1 Kotl
 - 새 Controller와 요청/응답 DTO는 공통 Package(`team.inreok.getiserver.global.web`, `team.inreok.getiserver.global.error`)가 아니라 해당 Domain Package(`team.inreok.getiserver.domain.{domain-name}`) 내부에 둔다. Controller에 비즈니스 로직, Repository 직접 호출, Transaction 시작을 두지 않는다.
 - API 응답은 `ApiResponse`/`PageResponse`(`team.inreok.getiserver.global.web`), `ErrorResponse`(`team.inreok.getiserver.global.error`)를 사용한다. JPA Entity를 응답으로 직접 반환하거나 `Map<String, Any>`를 응답으로 사용하거나 `Page<T>`를 그대로 반환하지 않는다.
 - 새 Error Code는 실제로 처리하는 오류에만 추가한다. Domain Error Code는 해당 Domain Module 내부에서 정의한다. Domain 예외는 `global.error.BusinessException`을 상속해 정의하고, 특정 Domain 예외를 `global` Package 안에 미리 만들지 않는다.
+- 새 Controller Endpoint를 추가하거나 기존 Endpoint를 변경하면 같은 작업에서 [`docs/ai/openapi-documentation.md`](../../docs/ai/openapi-documentation.md)의 Swagger Annotation 규칙을 적용하고 `OpenApiDocumentationTest`를 통과시킨다.
 - Exception Message, Stack Trace를 오류 응답에 그대로 노출하지 않는다(단, `BusinessException`의 Message는 우리 코드가 직접 작성한 안전한 문구이므로 예외). 자세한 내용은 [`docs/development/web-api.md`](../../docs/development/web-api.md)를 따른다.
 
 ## 모듈 경계 (Spring Modulith)
