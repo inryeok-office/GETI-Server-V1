@@ -147,6 +147,7 @@ Issue 생성부터 Draft Pull Request까지의 전체 협업 절차, Branch/Comm
 | [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md) | GETI Notion과 저장소 대조, 결정 필요 항목 |
 | [`AGENTS.md`](./AGENTS.md), [`docs/ai/README.md`](./docs/ai/README.md) | AI 개발 도구 공통 규칙 |
 | [`CLAUDE.md`](./CLAUDE.md), `.claude/` | Claude Code 전용 규칙, Command, Skill |
+| [`docs/automation/claude-daily-audit-routine.md`](./docs/automation/claude-daily-audit-routine.md) | Claude 일일 자동 점검 Routine 실행 기준과 최종 프롬프트 |
 | `.codex/` | Codex 전용 정책, Prompt Template |
 
 ## Troubleshooting
@@ -161,6 +162,7 @@ Issue 생성부터 Draft Pull Request까지의 전체 협업 절차, Branch/Comm
 | Package를 어디에 만들어야 하는지 | [`docs/architecture/modularity.md`](./docs/architecture/modularity.md) |
 | AI 도구(Claude Code, Codex) 사용 규칙 | [`AGENTS.md`](./AGENTS.md), [`docs/ai/README.md`](./docs/ai/README.md) |
 | Notion 요구사항과 저장소 구현이 다른 것 같을 때 | [`docs/audit/notion-repository-sync.md`](./docs/audit/notion-repository-sync.md) |
+| Claude 일일 자동 점검 Routine 설정/동작 기준 | [`docs/automation/claude-daily-audit-routine.md`](./docs/automation/claude-daily-audit-routine.md) |
 
 `docker compose down -v`는 로컬 PostgreSQL/Redis/MinIO 데이터를 모두 삭제하는 파괴적 명령이다. 의도적으로 로컬 환경을 초기화할 때만 실행한다.
 
