@@ -87,6 +87,35 @@ class MemberProfileControllerTest
         }
 
         @Test
+        fun `Query Parameter로 다른 memberId를 보내도 인증된 본인 memberId로만 처리한다`() {
+            given(memberService.getMyProfile(1L)).willReturn(
+                MyProfileResponse(
+                    memberId = 1L,
+                    name = "홍길동",
+                    email = "student@example.com",
+                    roles = listOf(RoleType.STUDENT),
+                    status = MemberStatus.ACTIVE,
+                    academicStatus = AcademicStatus.ENROLLED,
+                    cohort = 3,
+                    department = DepartmentType.SW_DEVELOPMENT,
+                    phone = "010-0000-0000",
+                    profileImageUrl = null,
+                    desiredJob = "Backend Developer",
+                    bio = "안녕하세요",
+                    githubUrl = "https://github.com/example",
+                    isPublic = true,
+                    majors = listOf("소프트웨어"),
+                    techStacks = listOf("Kotlin"),
+                ),
+            )
+
+            mockMvc
+                .perform(get("/api/v1/me/profile").with(authOf(1L)).param("memberId", "999"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.memberId").value(1))
+        }
+
+        @Test
         fun `내 프로필이 없으면 404 PROFILE_NOT_FOUND를 반환한다`() {
             given(memberService.getMyProfile(999L)).willThrow(MemberProfileNotFoundException(999L))
 

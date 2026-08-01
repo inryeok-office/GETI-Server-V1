@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
@@ -37,8 +38,12 @@ class MemberTechStackSelectionControllerTest
         @MockitoBean
         private lateinit var jwtTokenProvider: JwtTokenProvider
 
-        private fun authOf(memberId: Long) =
-            authentication(UsernamePasswordAuthenticationToken(memberId, null, emptyList()))
+        private fun authOf(
+            memberId: Long,
+            role: String = "STUDENT",
+        ) = authentication(
+            UsernamePasswordAuthenticationToken(memberId, null, listOf(SimpleGrantedAuthority("ROLE_$role"))),
+        )
 
         @Test
         fun `내 기술 스택을 교체하면 200과 함께 변경된 목록을 반환한다`() {
@@ -60,6 +65,25 @@ class MemberTechStackSelectionControllerTest
         }
 
         @Test
+        fun `Query Parameter로 다른 memberId를 보내도 인증된 본인 memberId로만 처리한다`() {
+            given(memberTechStackSelectionService.replaceAll(1L, listOf(10L))).willReturn(
+                MemberTechStacksResponse(
+                    listOf(TechStackResponse(techStackId = 10L, name = "Kotlin", category = TechStackCategory.BACKEND)),
+                ),
+            )
+
+            mockMvc
+                .perform(
+                    patch("/api/v1/me/tech-stacks")
+                        .with(authOf(1L))
+                        .param("memberId", "999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"techStackIds":[10]}"""),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.techStacks[0].techStackId").value(10))
+        }
+
+        @Test
         fun `존재하지 않는 기술 스택이면 404 TECH_STACK_NOT_FOUND를 반환한다`() {
             given(memberTechStackSelectionService.replaceAll(1L, listOf(999L)))
                 .willThrow(TechStackNotFoundException(listOf(999L)))
@@ -72,6 +96,18 @@ class MemberTechStackSelectionControllerTest
                         .content("""{"techStackIds":[999]}"""),
                 ).andExpect(status().isNotFound)
                 .andExpect(jsonPath("$.error.code").value("TECH_STACK_NOT_FOUND"))
+        }
+
+        @Test
+        fun `요청자가 STUDENT가 아니면 403 NOT_A_STUDENT를 반환한다`() {
+            mockMvc
+                .perform(
+                    patch("/api/v1/me/tech-stacks")
+                        .with(authOf(1L, role = "DEVELOPER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"techStackIds":[10]}"""),
+                ).andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.error.code").value("NOT_A_STUDENT"))
         }
 
         @Test
