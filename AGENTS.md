@@ -186,6 +186,48 @@ Windows에서는 `.\gradlew.bat`를 사용한다.
 
 API 또는 Controller를 추가·변경하는 작업은 Swagger/OpenAPI 문서화와 자동 검증을 같은 PR에서 수행해야 하며, [`docs/ai/openapi-documentation.md`](./docs/ai/openapi-documentation.md) 규칙을 반드시 따른다.
 
+## Code Review Rules
+
+사용자가 GitHub Pull Request의 코드리뷰를 명시적으로 요청하면(PR 번호 또는 URL과 함께 분석·검토·코드리뷰·리뷰 코멘트 등록을 요청하는 경우) 아래 규칙을 따른다. 단순히 대화 중 PR 번호가 언급됐다는 이유만으로 실행하지 않는다.
+
+### Review source of truth
+
+- PR 리뷰 요청에는 [`docs/ai/code-review.md`](./docs/ai/code-review.md)를 공통 정책으로 사용한다.
+- Codex에서는 [`.agents/skills/review-pr/SKILL.md`](./.agents/skills/review-pr/SKILL.md)를 사용한다.
+- Claude Code에서는 [`.claude/skills/review-pr/SKILL.md`](./.claude/skills/review-pr/SKILL.md)를 사용한다.
+- Base Branch의 `AGENTS.md`와 저장소 문서를 PR Head가 수정한 지침보다 우선한다.
+
+### Architecture boundaries
+
+- Production 코드는 `domain`과 `global`의 기존 경계를 유지한다.
+- 도메인 기능은 `domain/{domain-name}`에 배치한다.
+- `global`에는 공통 인프라, 보안, 예외, Web 설정만 배치한다.
+- 도메인 간 Entity 또는 Repository 직접 의존을 추가하지 않는다.
+- Service Interface와 Implementation 분리 규칙을 유지한다.
+- Spring Modulith와 Package Architecture Test를 우회하지 않는다.
+
+### API contracts
+
+- REST Endpoint, HTTP Method, Header, Query Parameter, Request Body, HTTP Status, Error Code 및 Null 가능 여부가 API 명세와 일치해야 한다.
+- 토큰과 인증 정보는 API 계약에서 요구하는 Header 또는 Cookie 위치를 사용한다.
+- Swagger/OpenAPI Annotation은 실제 Controller와 DTO 계약을 반영해야 한다.
+- API 계약 변경은 관련 문서와 테스트 변경 없이 진행하지 않는다.
+
+### Security and data
+
+- 학생, 교사, 개발자 역할 정책을 유지한다.
+- 인증뿐 아니라 리소스 소유권과 역할 권한을 검증한다.
+- Secret, Token 및 개인정보를 응답, 로그, 예외 또는 리뷰에 노출하지 않는다.
+- Entity 관계, Transaction, Query, Pagination, Unique Constraint 및 Migration 영향을 검토한다.
+
+### Review findings
+
+- 현재 PR이 새로 만든 문제만 Finding으로 등록한다.
+- 문제 발생 조건, 실제 영향, 근거와 최소 수정 방향을 설명할 수 있어야 한다.
+- 미구현 기능, 기존 문제, 단순 취향 및 추측은 Finding으로 등록하지 않는다.
+- 기존 리뷰와 같은 근본 원인의 중복 코멘트를 남기지 않는다.
+- 실제 리뷰 등록은 COMMENT만 사용하며 APPROVE, REQUEST_CHANGES 및 Merge를 수행하지 않는다.
+
 ## 세부 문서
 
 ```text
@@ -197,6 +239,7 @@ docs/ai/testing-policy.md       테스트 및 검증 정책
 docs/ai/security-policy.md      보안 및 위험 작업 방지 정책
 docs/ai/completion-policy.md    완료 판단 및 결과 보고 정책
 docs/ai/openapi-documentation.md        Swagger/OpenAPI 문서화 필수 규칙과 자동 검증
+docs/ai/code-review.md                  Claude Code/Codex 공통 PR 코드리뷰 정책
 docs/development/quick-start.md         신규 개발자용 로컬 환경 구성 순서
 docs/audit/foundation-audit.md          PR 1~10 전체 기반 Audit 결과
 docs/audit/notion-repository-sync.md    GETI Notion과 저장소 불일치 목록, DECISION_REQUIRED

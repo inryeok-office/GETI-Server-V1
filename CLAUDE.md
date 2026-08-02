@@ -119,8 +119,11 @@ Command를 실행하기 전에 관련 Skill을 먼저 참고한다. 어떤 Comma
 | [`test-and-verify`](./.claude/skills/test-and-verify/SKILL.md) | 변경 유형별 테스트/검증 기준과 실패 분석 |
 | [`code-review`](./.claude/skills/code-review/SKILL.md) | 기능/보안/성능/유지보수성 검토 기준 |
 | [`pull-request`](./.claude/skills/pull-request/SKILL.md) | Commit/Push/Draft PR 준비 기준 |
+| [`review-pr`](./.claude/skills/review-pr/SKILL.md) | GitHub PR 코드리뷰 요청 시 활성화(`/review-pr` 또는 자연어), GitHub에 인라인 Review 등록 |
 
 권장 흐름: `/start-issue` → `/implement` 또는 `/fix-bug` → `/verify` → `/review` → `/prepare-pr`
+
+`/review-pr`은 이미 GitHub에 올라간 PR을 사용자가 명시적으로 요청했을 때만 실행하는 별도 흐름이며, 위 순서에는 포함되지 않는다.
 
 ## 완료 보고
 

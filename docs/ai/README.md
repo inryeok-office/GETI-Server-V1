@@ -46,6 +46,7 @@
 | [`security-policy.md`](./security-policy.md) | Secret 관리, 위험한 명령 제한 등 보안 정책 |
 | [`completion-policy.md`](./completion-policy.md) | 작업을 "완료"로 판단하는 기준과 보고 형식 |
 | [`openapi-documentation.md`](./openapi-documentation.md) | Swagger/OpenAPI 문서화 필수 규칙과 자동 검증(`OpenApiDocumentationTest`) |
+| [`code-review.md`](./code-review.md) | Claude Code/Codex 공통 GitHub PR 코드리뷰 정책, 심각도, Finding 조건 |
 
 ## 규칙 우선순위
 
@@ -97,8 +98,11 @@ Claude Code는 저장소 Root의 [`CLAUDE.md`](../../CLAUDE.md)를 세션 시작
 | [`test-and-verify`](../../.claude/skills/test-and-verify/SKILL.md) | 변경 유형별 테스트/검증 기준 |
 | [`code-review`](../../.claude/skills/code-review/SKILL.md) | 코드 리뷰 검토 기준 |
 | [`pull-request`](../../.claude/skills/pull-request/SKILL.md) | Commit/Push/Draft PR 준비 기준 |
+| [`review-pr`](../../.claude/skills/review-pr/SKILL.md) | GitHub PR 코드리뷰 요청 시 `/review-pr` 또는 자연어로 활성화, GitHub에 인라인 Review 등록 |
 
 권장 흐름: `start-issue` → `implement` 또는 `fix-bug` → `verify` → `review` → `prepare-pr`
+
+`review-pr`은 위 순서에 포함되지 않는 별도 흐름이다. 로컬 작업 중의 `review`(코드 수정 전 Diff 검토)와 달리, 이미 GitHub에 올라간 PR을 대상으로 사용자가 명시적으로 요청했을 때만 실행한다.
 
 ### 현재까지 지원 확인 범위
 
@@ -116,6 +120,8 @@ Codex CLI는 저장소의 [`AGENTS.md`](../../AGENTS.md)를 **별도 설정 없�
 - [`.codex/policies/prompt-policy.md`](../../.codex/policies/prompt-policy.md) — Prompt 구성 요소, Placeholder 표기, 금지되는 Prompt 방식
 
 `.codex/prompts/`의 Prompt Template 6종(`start-issue`, `implement-feature`, `fix-bug`, `review-code`, `verify-changes`, `prepare-pr`)은 Claude Code의 `.claude/commands/`와 달리 **Codex가 자동으로 찾아서 등록하는 공식 기능이 아니다** (설치된 CLI 바이너리에서 관련 자동 등록 로직을 찾지 못했다). 내용을 복사하거나 `codex exec - < 파일` 형태로 표준 입력에 전달해서 사용하는 템플릿 모음으로 취급한다.
+
+[`.agents/skills/review-pr/SKILL.md`](../../.agents/skills/review-pr/SKILL.md)는 `.codex/prompts/`와 별개로 도입한 GitHub PR 코드리뷰 전용 Skill이다. `.codex/prompts/review-code.md`(로컬 Branch Diff 리뷰, 아직 Push하지 않은 변경 대상)와 달리 이미 GitHub에 올라간 PR을 대상으로 하며, 자연어 요청(`#45 PR에 코드리뷰좀 해줘` 등)이나 `$review-pr {번호 또는 URL}` 명시적 호출로 활성화한다. 상세 정책은 [`docs/ai/code-review.md`](./code-review.md)를 따른다.
 
 ### 사용자 전역 설정을 저장소에 포함하지 않는 이유
 
