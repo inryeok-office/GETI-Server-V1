@@ -468,8 +468,8 @@ class JobServiceTest {
 
         val response = service.searchPublic(null, null, null, false, JobSort.LATEST, PageRequest.of(0, 20))
 
-        assertThat(response.data).hasSize(3)
-        assertThat(response.meta.totalElements).isEqualTo(3)
+        assertThat(response.content).hasSize(3)
+        assertThat(response.totalElements).isEqualTo(3)
         verify(companyQuery, times(1)).findActiveSummaries(anyStatusIds())
         verify(companyQuery, never()).findActiveSummary(anyLong())
     }

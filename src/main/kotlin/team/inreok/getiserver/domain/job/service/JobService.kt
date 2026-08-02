@@ -3,13 +3,12 @@ package team.inreok.getiserver.domain.job.service
 import org.springframework.data.domain.Pageable
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
+import team.inreok.getiserver.domain.job.dto.JobSearchResponse
 import team.inreok.getiserver.domain.job.dto.JobSort
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
-import team.inreok.getiserver.domain.job.dto.JobSummaryResponse
 import team.inreok.getiserver.domain.job.dto.JobUpdateRequest
 import team.inreok.getiserver.domain.job.dto.PublicJobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
-import team.inreok.getiserver.global.web.PageResponse
 
 interface JobService {
     /** 공고를 등록하거나 임시저장한다. `status = PUBLISHED`면 게시 필수값을 모두 검증한다. */
@@ -47,5 +46,5 @@ interface JobService {
         openOnly: Boolean,
         sort: JobSort,
         pageable: Pageable,
-    ): PageResponse<JobSummaryResponse>
+    ): JobSearchResponse
 }

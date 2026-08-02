@@ -8,6 +8,7 @@ import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
+import team.inreok.getiserver.domain.job.dto.JobSearchResponse
 import team.inreok.getiserver.domain.job.dto.JobSort
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
 import team.inreok.getiserver.domain.job.dto.JobSummaryResponse
@@ -26,7 +27,6 @@ import team.inreok.getiserver.domain.job.service.JobService
 import team.inreok.getiserver.domain.job.service.toTitlePattern
 import team.inreok.getiserver.domain.job.service.validateCommon
 import team.inreok.getiserver.domain.job.service.validateForPublish
-import team.inreok.getiserver.global.web.PageResponse
 import java.time.LocalDateTime
 
 @Service
@@ -178,7 +178,7 @@ class JobServiceImpl(
         openOnly: Boolean,
         sort: JobSort,
         pageable: Pageable,
-    ): PageResponse<JobSummaryResponse> {
+    ): JobSearchResponse {
         // 검색어를 보내지 않은 경우와 공백만 보낸 경우를 모두 "제목 조건 없음"으로 취급한다.
         val titlePattern = toTitlePattern(query)
         val statuses = status?.let { listOf(it.jobStatus) } ?: PublicJobStatus.ALL_VISIBLE
@@ -199,7 +199,15 @@ class JobServiceImpl(
 
         // 항목마다 기업을 조회하면 N+1이 되므로 한 번에 가져온다.
         val companies = companyQuery.findActiveSummaries(page.content.map { it.companyId })
-        return PageResponse.of(page.map { JobSummaryResponse.from(it, companies[it.companyId]) })
+        return JobSearchResponse(
+            content = page.content.map { JobSummaryResponse.from(it, companies[it.companyId]) },
+            page = page.number,
+            size = page.size,
+            totalElements = page.totalElements,
+            totalPages = page.totalPages,
+            first = page.isFirst,
+            last = page.isLast,
+        )
     }
 
     private fun findNotDeleted(jobId: Long): Job =

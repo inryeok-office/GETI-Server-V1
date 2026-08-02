@@ -9,7 +9,6 @@ import org.mockito.BDDMockito.willThrow
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
 import org.springframework.context.annotation.Import
-import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
@@ -23,6 +22,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
+import team.inreok.getiserver.domain.job.dto.JobSearchResponse
 import team.inreok.getiserver.domain.job.dto.JobSort
 import team.inreok.getiserver.domain.job.dto.JobSummaryResponse
 import team.inreok.getiserver.domain.job.dto.PublicJobStatus
@@ -34,7 +34,6 @@ import team.inreok.getiserver.domain.job.exception.JobNotVisibleException
 import team.inreok.getiserver.domain.job.service.JobService
 import team.inreok.getiserver.global.security.JwtTokenProvider
 import team.inreok.getiserver.global.security.SecurityConfig
-import team.inreok.getiserver.global.web.PageResponse
 import java.time.LocalDateTime
 
 // SecurityConfig를 명시적으로 Import해 /api/v1/jobs가 실제로 인증을 요구하는지(401)까지 검증한다.
@@ -66,23 +65,23 @@ class JobControllerTest
         // --- 목록 ---
 
         @Test
-        fun `공개 목록을 조회하면 200과 공통 Page Wrapper를 반환한다`() {
+        fun `공개 목록을 조회하면 200과 Member·Company와 동일한 목록 응답을 반환한다`() {
             given(
                 jobService.searchPublic(any(), any(), any(), anyBoolean(), anySort(), anyPageable()),
-            ).willReturn(
-                PageResponse.of(PageImpl(listOf(summaryResponse()), PageRequest.of(0, 20), 1)),
-            )
+            ).willReturn(searchResponse())
 
             mockMvc
                 .perform(get("/api/v1/jobs").with(authOf(1L, "STUDENT")))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.data[0].jobId").value(1))
-                .andExpect(jsonPath("$.data.data[0].company.name").value("인력개발원"))
-                .andExpect(jsonPath("$.data.meta.page").value(0))
-                .andExpect(jsonPath("$.data.meta.size").value(20))
-                .andExpect(jsonPath("$.data.meta.totalElements").value(1))
-                .andExpect(jsonPath("$.data.meta.hasNext").value(false))
+                .andExpect(jsonPath("$.data.content[0].jobId").value(1))
+                .andExpect(jsonPath("$.data.content[0].company.name").value("인력개발원"))
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.size").value(20))
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.totalPages").value(1))
+                .andExpect(jsonPath("$.data.first").value(true))
+                .andExpect(jsonPath("$.data.last").value(true))
         }
 
         @Test
@@ -156,6 +155,17 @@ class JobControllerTest
         private fun anySort(): JobSort = any(JobSort::class.java) ?: JobSort.LATEST
 
         private fun anyPageable(): Pageable = any(Pageable::class.java) ?: PageRequest.of(0, 20)
+
+        private fun searchResponse() =
+            JobSearchResponse(
+                content = listOf(summaryResponse()),
+                page = 0,
+                size = 20,
+                totalElements = 1,
+                totalPages = 1,
+                first = true,
+                last = true,
+            )
 
         private fun summaryResponse() =
             JobSummaryResponse(

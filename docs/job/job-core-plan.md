@@ -39,7 +39,7 @@
 | 7 | 정렬 | `JobSort { LATEST, DEADLINE, VIEWS }`, 기본 `LATEST` | §14-4 |
 | 8 | 부분 수정 | nullable DTO. 값 비우기 미지원 | `:253` |
 | 9 | Company 연동 | `CompanyQuery` `@NamedInterface` 신규 | §6 |
-| 10 | 목록 응답 | `global.web.PageResponse` | `.claude/rules/spring-boot.md` |
+| 10 | 목록 응답 | `JobSearchResponse` (Member·Company와 동일한 평평한 구조) | PR #61 리뷰, `docs/development/web-api.md` |
 | 11 | 상태 전이 | 지시서 `:283-290` 그대로 | §14-5 |
 
 ---
@@ -123,6 +123,7 @@ domain/job/dto/JobUpdateRequest.kt
 domain/job/dto/JobStatusUpdateRequest.kt
 domain/job/dto/JobDetailResponse.kt
 domain/job/dto/JobSummaryResponse.kt
+domain/job/dto/JobSearchResponse.kt                 목록 응답 (Member·Company와 동일 구조)
 domain/job/dto/JobSort.kt                           API 정렬 Enum
 domain/job/dto/PublicJobStatus.kt                   공개 목록 status 필터 Enum
 domain/job/exception/JobErrorCode.kt
@@ -147,17 +148,20 @@ domain/job/repository/JobRepository.kt              수정 (searchPublic, increm
 
 **`LikePatternEscape.kt`는 `domain/company/service/LikePatternEscape.kt`의 복제다.** 원본이 `internal fun`이고 `domain.company.service`가 Named Interface로 공개되지 않아 Job이 import하면 `ModularityTest`가 실패한다. AGENTS.md "관련 없는 Refactoring 금지"에 따라 이번 PR에서 `global`로 승격하지 않고, 후속 정리 후보로 §13에 남긴다.
 
-### `global` (수정 2)
+### `global` (수정 1)
 
 ```text
 global/security/SecurityConfig.kt    /api/v1/admin/jobs, /api/v1/jobs 규칙 추가
-global/web/PageResponse.kt           @NamedInterface 추가 + @Schema 문서화
 ```
 
-> **구현 중 발견**: `PageResponse`에는 `@NamedInterface`가 없어 Domain Module에서 참조하면
-> `ModularityTest`가 실패했다(`ApiResponse`에는 있다). 규칙 문서가 지정한 `PageResponse`를
-> 실제로 쓸 수 없는 상태였고, Company가 자체 `CompanySearchResponse`를 만든 이유로 보인다.
-> `ApiResponse`와 동일하게 Class와 Companion에 `@NamedInterface`를 붙여 공개했다.
+> **구현 중 발견과 리뷰 반영**: 처음에는 `PageResponse`에 `@NamedInterface`가 없어 Domain
+> Module에서 참조하면 `ModularityTest`가 실패했고(`ApiResponse`에는 있다), `ApiResponse`와
+> 동일하게 Class와 Companion에 `@NamedInterface`를 붙여 공개했다. 그러나 PR #61 리뷰에서
+> `docs/development/web-api.md`가 "`PageResponse`는 `ApiResponse`로 다시 감싸지 않는다"고
+> 명시한 점, Member·Company 목록 API가 모두 평평한 `{Domain}SearchResponse`를 쓰는 점이
+> 지적되어 Job도 `JobSearchResponse`로 통일했다. 그 결과 `PageResponse`를 참조하는 Domain이
+> 없어져 `@NamedInterface` 추가를 되돌렸다. `PageResponse`를 전체 표준으로 채택할지는 Member·
+> Company·Job·Swagger·프론트 계약을 함께 정리하는 별도 Issue에서 판단한다(§13 후속 항목).
 
 ```kotlin
 // 더 구체적인 admin 경로를 먼저 선언한다 (기존 companies 규칙과 동일한 순서 규칙)
@@ -275,21 +279,21 @@ VIEWS     view_count DESC, id DESC
 
 Controller는 `Pageable`(최대 size 100)과 `JobSort`를 **따로** 받고, Service가 `PageRequest.of(pageable.pageNumber, pageable.pageSize, sortOf(jobSort))`로 재조립한다. **`Pageable`이 들고 온 `sort`는 무시한다** — 내부 Entity 필드명이 정렬 키로 새는 것을 막기 위해서다. Swagger `@Parameter` 설명에 이 사실을 명시한다.
 
-응답: `ApiResponse<PageResponse<JobSummaryResponse>>`
+응답: `ApiResponse<JobSearchResponse>`
 
 ```jsonc
 {
   "success": true,
   "data": {
-    "data": [ /* JobSummaryResponse[] */ ],
-    "meta": { "page": 0, "size": 20, "totalElements": 42,
-              "totalPages": 3, "hasNext": true, "hasPrevious": false }
+    "content": [ /* JobSummaryResponse[] */ ],
+    "page": 0, "size": 20, "totalElements": 42,
+    "totalPages": 3, "first": true, "last": false
   },
   "meta": { "requestId": "..." }
 }
 ```
 
-`data.data` 중첩은 `.claude/rules/spring-boot.md`가 지정한 `PageResponse`를 그대로 쓴 결과다. Company의 `CompanySearchResponse`와 필드 이름이 다르다는 점을 PR 본문에 적는다.
+Member의 `MemberSearchResponse`, Company의 `CompanySearchResponse`와 동일한 평평한 구조다. 처음에는 `.claude/rules/spring-boot.md`가 지정한 `PageResponse`를 그대로 써서 `ApiResponse<PageResponse<JobSummaryResponse>>`(`data.data` 중첩)로 구현했으나, PR #61 리뷰에서 `docs/development/web-api.md`의 "`PageResponse`는 `ApiResponse`로 다시 감싸지 않는다"와 어긋나고 최상위 `meta.requestId`와 Pagination `meta`가 동시에 존재한다는 지적을 받아 기존 두 도메인에 맞췄다.
 
 ### 5.6 `GET /api/v1/jobs/{jobId}` → 200
 
@@ -478,7 +482,7 @@ interface JobService {
     fun searchPublic(
         query: String?, postingType: PostingType?, status: PublicJobStatus?,
         openOnly: Boolean, sort: JobSort, pageable: Pageable,
-    ): PageResponse<JobSummaryResponse>
+    ): JobSearchResponse
 }
 ```
 
@@ -542,7 +546,7 @@ Controller에 `@Tag`, `@SecurityRequirement(name = BEARER_AUTH_SCHEME)`, 메서�
 `JobControllerTest`
 
 ```text
-목록 200 + PageResponse 구조(data.data / data.meta)
+목록 200 + JobSearchResponse 구조(data.content / data.page)
 목록 400  ?status=DRAFT      (TYPE_MISMATCH)
 목록 400  ?sort=BOGUS        (TYPE_MISMATCH)
 상세 200 + viewCount가 증가 후 값
@@ -638,7 +642,7 @@ aiAnalysis / aiRequestAccepted / canApply (AI·Application 도메인 이후)
 NOT_JOB_MANAGER 담당자 검증 + managerMemberId 입력
 PATCH 값 비우기 (미전달 vs 명시적 null 구분)
 escapeLikePattern을 global로 승격해 company/job 중복 제거
-PageResponse vs CompanySearchResponse 응답 형태 통일
+PageResponse를 전체 목록 API 표준으로 채택할지 판단 (Member·Company·Job·Swagger·프론트 계약 일괄 정리)
 Company 삭제 시 공개 공고 존재 여부 검증 (COMPANY_HAS_ACTIVE_JOBS)
 Company 상세의 openJobs
 ```

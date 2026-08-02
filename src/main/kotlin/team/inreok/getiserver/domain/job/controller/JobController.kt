@@ -12,14 +12,13 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
+import team.inreok.getiserver.domain.job.dto.JobSearchResponse
 import team.inreok.getiserver.domain.job.dto.JobSort
-import team.inreok.getiserver.domain.job.dto.JobSummaryResponse
 import team.inreok.getiserver.domain.job.dto.PublicJobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.job.service.JobService
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
 import team.inreok.getiserver.global.web.ApiResponse
-import team.inreok.getiserver.global.web.PageResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 
 @Tag(
@@ -82,7 +81,7 @@ class JobController(
         sort: JobSort,
         @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20, 최대 100). sort Parameter는 무시된다")
         pageable: Pageable,
-    ): ApiResponse<PageResponse<JobSummaryResponse>> =
+    ): ApiResponse<JobSearchResponse> =
         ApiResponse.of(jobService.searchPublic(query, postingType, status, openOnly, sort, pageable))
 
     @Operation(
