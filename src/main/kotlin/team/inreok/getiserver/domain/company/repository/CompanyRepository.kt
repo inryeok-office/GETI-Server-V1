@@ -1,6 +1,50 @@
 package team.inreok.getiserver.domain.company.repository
 
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import team.inreok.getiserver.domain.company.entity.Company
+import team.inreok.getiserver.domain.company.entity.type.CompanyType
+import team.inreok.getiserver.domain.company.entity.type.MouStatus
 
-interface CompanyRepository : JpaRepository<Company, Long>
+interface CompanyRepository : JpaRepository<Company, Long> {
+    // 삭제된 기업(deletedAt != null)은 조회 대상이 아니다. Soft Delete이므로 findById를 그대로
+    // 사용하면 삭제된 기업까지 조회되기 때문에 Service는 항상 이 메서드를 사용한다.
+    fun findByIdAndDeletedAtIsNull(id: Long): Company?
+
+    // 같은 이름과 유형의 미삭제 기업이 이미 있는지로 중복을 판정한다(Issue #56 확정 기준).
+    // 이름은 대소문자를 무시하고 비교하며, 앞뒤 공백은 Service에서 제거한 뒤 전달한다.
+    fun existsByNameIgnoreCaseAndTypeAndDeletedAtIsNull(
+        name: String,
+        type: CompanyType,
+    ): Boolean
+
+    // 수정 시에는 자기 자신을 중복으로 판정하지 않도록 대상 기업을 제외하고 확인한다.
+    fun existsByNameIgnoreCaseAndTypeAndDeletedAtIsNullAndIdNot(
+        name: String,
+        type: CompanyType,
+        id: Long,
+    ): Boolean
+
+    // :query는 Service 계층에서 LIKE Wildcard(%, _)와 Escape 문자(\)를 미리 이스케이프해 전달한다
+    // (domain.company.service.escapeLikePattern 참고). null이면 이름 조건을 적용하지 않는다.
+    @Query(
+        """
+        SELECT c FROM Company c
+        WHERE c.deletedAt IS NULL
+          AND (:query IS NULL OR LOWER(c.name) LIKE LOWER(CONCAT('%', :query, '%')) ESCAPE '\')
+          AND (:companyType IS NULL OR c.type = :companyType)
+          AND (:mouStatus IS NULL OR c.mouStatus = :mouStatus)
+          AND (:sourceName IS NULL OR c.source = :sourceName)
+        """,
+    )
+    fun search(
+        @Param("query") query: String?,
+        @Param("companyType") companyType: CompanyType?,
+        @Param("mouStatus") mouStatus: MouStatus?,
+        @Param("sourceName") sourceName: String?,
+        pageable: Pageable,
+    ): Page<Company>
+}

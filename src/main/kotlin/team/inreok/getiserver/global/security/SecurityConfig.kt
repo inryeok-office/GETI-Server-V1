@@ -20,7 +20,9 @@ import tools.jackson.databind.ObjectMapper
 /**
  * Stateless JWT 인증 기반 Filter Chain이다. `/api/v1/auth/session`, `/api/v1/auth/logout`,
  * `/api/v1/me/` 이하 모든 경로(Issue #50, 내 프로필/전공/기술스택), `/api/v1/members`(학생 이름
- * 검색·프로필 조회, Issue #50 후속)만 인증을 요구한다. 전공/기술스택 메타데이터 조회 등 다른
+ * 검색·프로필 조회, Issue #50 후속), `/api/v1/companies`(기업 조회, Issue #56)는 인증을 요구하고
+ * `/api/v1/admin/companies`(기업 등록·수정·삭제, Issue #56)는 DEVELOPER 역할까지 요구한다.
+ * 전공/기술스택 메타데이터 조회 등 다른
  * Domain은 아직 Spring Security와 연동되지 않아
  * ([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport] 참고)
  * 여기서 인증을 강제하면 기존 동작이 깨지므로 permitAll로 둔다. 나머지 Domain의 실제 인증 적용은
@@ -63,6 +65,13 @@ class SecurityConfig(
                 authorize("/api/v1/me/**", authenticated)
                 authorize("/api/v1/members", authenticated)
                 authorize("/api/v1/members/**", authenticated)
+                // 기업 관리(등록·수정·삭제)는 개발자만 접근한다. 더 구체적인 admin 경로를 먼저
+                // 선언해야 아래 조회 규칙에 가려지지 않는다(Issue #56, Notion API 명세서 권한).
+                authorize("/api/v1/admin/companies", hasRole("DEVELOPER"))
+                authorize("/api/v1/admin/companies/**", hasRole("DEVELOPER"))
+                // 기업 조회(목록·상세)는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
+                authorize("/api/v1/companies", authenticated)
+                authorize("/api/v1/companies/**", authenticated)
                 authorize(anyRequest, permitAll)
             }
             exceptionHandling {

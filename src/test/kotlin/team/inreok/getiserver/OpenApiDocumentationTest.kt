@@ -125,7 +125,7 @@ class OpenApiDocumentationTest {
     }
 
     @Test
-    fun `인증이 필요한 me, session, logout, members Endpoint는 Security Requirement를 선언한다`() {
+    fun `인증이 필요한 me, session, logout, members, companies, admin Endpoint는 Security Requirement를 선언한다`() {
         val paths = fetchOpenApiDocument().get("paths")
 
         forEachOperation(paths) { path, method, operation ->
@@ -184,7 +184,14 @@ class OpenApiDocumentationTest {
         // 포함되지 않음)라 문서화 대상이 아니다.
         private val EXCLUDED_PATH_PREFIXES = listOf("/v3/api-docs", "/swagger-ui", "/actuator", "/error", "/test/")
         private val AUTH_REQUIRED_PATH_PREFIXES =
-            listOf("/api/v1/me/", "/api/v1/auth/session", "/api/v1/auth/logout", "/api/v1/members")
+            listOf(
+                "/api/v1/me/",
+                "/api/v1/auth/session",
+                "/api/v1/auth/logout",
+                "/api/v1/members",
+                "/api/v1/companies",
+                "/api/v1/admin/",
+            )
 
         // 문서화 대상에서 제외할 실제 API Endpoint. 현재는 없다(비워둔 상태를 유지하는 것이 기본값).
         // 새 Endpoint를 의도적으로 Swagger에서 숨겨야 하면 "경로" to "숨기는 이유" 형태로 추가한다.
