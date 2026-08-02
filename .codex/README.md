@@ -119,6 +119,10 @@ codex review --uncommitted
 
 권장 흐름: `start-issue` → `implement-feature` 또는 `fix-bug` → `verify-changes` → `review-code` → `prepare-pr`
 
+## Skill
+
+`.codex/prompts/`와 별개로 [`.agents/skills/review-pr/SKILL.md`](../.agents/skills/review-pr/SKILL.md)가 있다. `review-code` Prompt(로컬 Branch Diff, 아직 Push하지 않은 변경 대상)와 달리 이미 GitHub에 올라간 Pull Request를 대상으로 하며, 사용자가 PR 번호나 URL과 함께 코드리뷰를 명시적으로 요청했을 때(`#45 PR에 코드리뷰좀 해줘`, `$review-pr 45` 등) 활성화한다. GitHub Codex Code Review(`@codex review`)가 활성화된 환경에서도 `AGENTS.md`의 `## Code Review Rules`와 [`docs/ai/code-review.md`](../docs/ai/code-review.md)를 기준으로 검토한다. 상세 검토 기준, 심각도, Finding 조건은 모두 `docs/ai/code-review.md`에 있다.
+
 ## 정책 문서
 
 | 정책 | 내용 |
