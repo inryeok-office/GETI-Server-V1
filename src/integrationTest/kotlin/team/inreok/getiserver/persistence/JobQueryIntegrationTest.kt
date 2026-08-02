@@ -13,6 +13,8 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
@@ -89,17 +91,30 @@ class JobQueryIntegrationTest
             persist(title = "100%_할인 공고")
             persist(title = "1000원 할인 공고")
 
-            // Escape하지 않으면 %와 _가 Wildcard로 해석되어 두 건 모두 매칭된다.
-            val result = search(query = "100\\%\\_할인")
+            // Service가 만드는 Pattern 형태를 그대로 넘긴다(escapeLikePattern은 Module 내부라 참조 불가).
+            val escaped = search(titlePattern = """%100\%\_할인%""")
+            assertThat(escaped.content.map { it.title }).containsExactly("100%_할인 공고")
 
-            assertThat(result.content.map { it.title }).containsExactly("100%_할인 공고")
+            // Escape하지 않으면 %와 _가 Wildcard로 해석되어 두 건 모두 매칭된다.
+            val notEscaped = search(titlePattern = "%100%_할인%")
+            assertThat(notEscaped.content).hasSize(2)
         }
 
         @Test
         fun `제목 검색은 대소문자를 무시한다`() {
             persist(title = "Backend Engineer")
 
-            assertThat(search(query = "backend").content).hasSize(1)
+            // Service는 Pattern을 소문자로 만들어 넘기고 Query가 LOWER(title)과 비교한다.
+            assertThat(search(titlePattern = "%backend%").content).hasSize(1)
+        }
+
+        @Test
+        fun `검색어가 없으면 제목 조건 없이 전체를 조회한다`() {
+            persist(title = "공고 A")
+            persist(title = "공고 B")
+
+            // titlePattern이 null일 때 Parameter 타입 추론이 깨지지 않는지 확인한다.
+            assertThat(search().content).hasSize(2)
         }
 
         @Test
@@ -194,7 +209,14 @@ class JobQueryIntegrationTest
             assertThat(ids).isSortedAccordingTo(compareByDescending { it })
         }
 
+        /**
+         * `@DataJpaTest`는 Test를 Transaction으로 감싸고 끝에 Rollback한다. 그 안에서 저장한
+         * 공고는 Commit되지 않아 다른 Thread의 Connection에서 보이지 않고, UPDATE가 0건을
+         * 갱신해 이 Test의 의미가 사라진다. 실제 동시 요청을 재현하려면 Test 자체가 Transaction
+         * 밖에서 돌아야 한다.
+         */
         @Test
+        @Transactional(propagation = Propagation.NOT_SUPPORTED)
         fun `조회수는 동시 요청에서도 증가분이 유실되지 않는다`() {
             val jobId = persist(title = "인기 공고").id!!
             val threads = 8
@@ -238,13 +260,13 @@ class JobQueryIntegrationTest
         }
 
         private fun search(
-            query: String? = null,
+            titlePattern: String? = null,
             postingType: PostingType? = null,
             openOnly: Boolean = false,
             sort: JobSort = JobSort.LATEST,
         ) = jobRepository.searchPublic(
             PublicJobStatus.ALL_VISIBLE,
-            query,
+            titlePattern,
             postingType,
             openOnly,
             now,

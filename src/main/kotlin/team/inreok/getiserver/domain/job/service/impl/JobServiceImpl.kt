@@ -23,7 +23,7 @@ import team.inreok.getiserver.domain.job.exception.JobStatusTransitionInvalidExc
 import team.inreok.getiserver.domain.job.exception.JobValidationFailedException
 import team.inreok.getiserver.domain.job.repository.JobRepository
 import team.inreok.getiserver.domain.job.service.JobService
-import team.inreok.getiserver.domain.job.service.escapeLikePattern
+import team.inreok.getiserver.domain.job.service.toTitlePattern
 import team.inreok.getiserver.domain.job.service.validateCommon
 import team.inreok.getiserver.domain.job.service.validateForPublish
 import team.inreok.getiserver.global.web.PageResponse
@@ -180,7 +180,7 @@ class JobServiceImpl(
         pageable: Pageable,
     ): PageResponse<JobSummaryResponse> {
         // 검색어를 보내지 않은 경우와 공백만 보낸 경우를 모두 "제목 조건 없음"으로 취급한다.
-        val escapedQuery = query?.trim()?.takeIf { it.isNotEmpty() }?.let(::escapeLikePattern)
+        val titlePattern = toTitlePattern(query)
         val statuses = status?.let { listOf(it.jobStatus) } ?: PublicJobStatus.ALL_VISIBLE
 
         // Pageable이 들고 온 sort는 무시하고 JobSort로만 정렬한다. Entity Field 이름이 그대로
@@ -190,7 +190,7 @@ class JobServiceImpl(
         val page =
             jobRepository.searchPublic(
                 statuses = statuses,
-                query = escapedQuery,
+                titlePattern = titlePattern,
                 postingType = postingType,
                 openOnly = openOnly,
                 now = LocalDateTime.now(),

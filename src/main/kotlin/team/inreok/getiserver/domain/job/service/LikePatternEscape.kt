@@ -11,3 +11,17 @@ internal fun escapeLikePattern(value: String): String =
         .replace("\\", "\\\\")
         .replace("%", "\\%")
         .replace("_", "\\_")
+
+/**
+ * 검색어를 부분 일치 LIKE Pattern으로 바꾼다. 비어 있거나 공백뿐이면 null을 반환해 "제목 조건
+ * 없음"을 뜻한다.
+ *
+ * Pattern 조립을 JPQL의 `CONCAT`이 아니라 여기서 하는 이유는 Repository의 Query 주석에 있다.
+ * Repository가 `LOWER(j.title)`과 비교하므로 Pattern도 소문자로 만들어 둔다(Escape 문자
+ * `\%`, `\_`, `\\`는 소문자화의 영향을 받지 않는다).
+ */
+internal fun toTitlePattern(query: String?): String? =
+    query
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { "%${escapeLikePattern(it)}%".lowercase() }

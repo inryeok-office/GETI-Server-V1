@@ -415,13 +415,23 @@ class JobServiceTest {
     }
 
     @Test
-    fun `검색어의 LIKE Wildcard를 Escape해 Repository에 전달한다`() {
+    fun `검색어의 LIKE Wildcard를 Escape하고 앞뒤 %를 붙여 Repository에 전달한다`() {
         givenEmptySearch()
 
         service.searchPublic("100%_할인", null, null, false, JobSort.LATEST, PageRequest.of(0, 20))
 
         verifySearch()
-        assertThat(queryCaptor.value).isEqualTo("100\\%\\_할인")
+        assertThat(queryCaptor.value).isEqualTo("%100\\%\\_할인%")
+    }
+
+    @Test
+    fun `검색어는 소문자 Pattern으로 변환해 대소문자를 구분하지 않는다`() {
+        givenEmptySearch()
+
+        service.searchPublic("BackEnd", null, null, false, JobSort.LATEST, PageRequest.of(0, 20))
+
+        verifySearch()
+        assertThat(queryCaptor.value).isEqualTo("%backend%")
     }
 
     @Test
