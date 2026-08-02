@@ -14,6 +14,10 @@ interface CompanyRepository : JpaRepository<Company, Long> {
     // 사용하면 삭제된 기업까지 조회되기 때문에 Service는 항상 이 메서드를 사용한다.
     fun findByIdAndDeletedAtIsNull(id: Long): Company?
 
+    // 다른 Domain이 여러 기업의 요약을 한 번에 조회할 때 사용한다(CompanyQuery.findActiveSummaries).
+    // 삭제된 기업은 결과에서 빠지므로 호출 측은 요청한 ID가 모두 돌아오지 않을 수 있다고 가정해야 한다.
+    fun findAllByIdInAndDeletedAtIsNull(ids: Collection<Long>): List<Company>
+
     // 같은 이름과 유형의 미삭제 기업이 이미 있는지로 중복을 판정한다(Issue #56 확정 기준).
     // 이름은 대소문자를 무시하고 비교하며, 앞뒤 공백은 Service에서 제거한 뒤 전달한다.
     fun existsByNameIgnoreCaseAndTypeAndDeletedAtIsNull(

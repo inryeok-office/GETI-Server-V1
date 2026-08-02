@@ -125,7 +125,7 @@ class OpenApiDocumentationTest {
     }
 
     @Test
-    fun `인증이 필요한 me, session, logout, members, companies, admin Endpoint는 Security Requirement를 선언한다`() {
+    fun `인증이 필요한 me, session, logout, members, companies, jobs, admin Endpoint는 Security Requirement를 선언한다`() {
         val paths = fetchOpenApiDocument().get("paths")
 
         forEachOperation(paths) { path, method, operation ->
@@ -190,6 +190,7 @@ class OpenApiDocumentationTest {
                 "/api/v1/auth/logout",
                 "/api/v1/members",
                 "/api/v1/companies",
+                "/api/v1/jobs",
                 "/api/v1/admin/",
             )
 
