@@ -22,15 +22,37 @@ app:
   oauth:
     google:
       scope: openid,email,profile
+  # /actuator/info의 "deployment" 필드(DeploymentInfoContributor)가 사용하는 배포 메타데이터다.
+  # CD가 Docker Build/Runtime 시점에 APP_VERSION/APP_GIT_SHA/APP_BUILD_TIME/APP_ENVIRONMENT를
+  # 주입한다(docs/development/cd.md 참고). version의 "0.0.1-SNAPSHOT" 기본값은 build.gradle.kts의
+  # 현재 project.version과 같은 값이며, 값이 없는 로컬 실행에서도 기동이 깨지지 않도록 한다.
+  deployment:
+    service: GETI-Server
+    version: ${APP_VERSION:0.0.1-SNAPSHOT}
+    git-sha: ${APP_GIT_SHA:unknown}
+    build-time: ${APP_BUILD_TIME:unknown}
+    environment: ${APP_ENVIRONMENT:local}
 
 management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,info
   endpoint:
     health:
       show-details: never
+      probes:
+        enabled: true
+      group:
+        # Liveness는 Process 생존 여부만 본다(PostgreSQL/Redis 등 외부 의존성 제외). Readiness는
+        # GETI 서버 운영에 필수적인 PostgreSQL(db)과 Redis만 검사 대상에 포함한다(Collector 외부
+        # API, Discord Webhook, MinIO Application Client는 포함하지 않음, docs/development/web-api.md의
+        # "Actuator / Health" 참고). Contributor 이름(livenessState/readinessState/db/redis)은 실제
+        # HealthContributorRegistry로 확인했다.
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db,redis
 
 # Swagger UI/OpenAPI JSON은 기본적으로 활성화한다(local, prod 이외 Profile 포함). Production에서는
 # application-prod.yaml이 false로 재정의해 운영 환경에 노출하지 않는다(docs/ai/openapi-documentation.md 참고).

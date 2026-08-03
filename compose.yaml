@@ -1,4 +1,4 @@
-# 로컬 개발 전용 Docker Compose 구성이다. 운영 배포에 사용하지 않는다.
+# 원래 로컬 개발 전용으로 만든 Docker Compose 구성이다.
 #
 # 평소 개발:
 #   docker compose up -d          # PostgreSQL, Redis, MinIO만 실행
@@ -6,6 +6,12 @@
 #
 # 전체 Container 환경 검증이 필요할 때만:
 #   docker compose --profile app up -d --build
+#
+# 실제로는 .github/workflows/cd.yml이 develop Branch 배포마다 EC2 서버에서 이 파일로 동일한
+# `docker compose --profile app up -d --build`를 실행한다(Registry Push 없이 서버에서 직접
+# Source Build, docs/development/docker.md의 "app Profile Dockerfile" 참고). 운영 전용
+# Image/Registry 전략(GHCR, ECR 등)은 아직 확정되지 않았다 — 이 Compose 구성이 임시로 그
+# 역할까지 겸하고 있다는 뜻이며, 이번 PR의 범위는 이 사실을 문서화하는 것까지다.
 
 services:
   postgres:
@@ -64,6 +70,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # /actuator/info의 deployment 필드(DeploymentInfoProperties)에 반영된다. CD가 실제 값을
+        # 전달하고, 로컬 `docker compose --profile app up --build`는 기본값을 그대로 쓴다
+        # (docs/development/cd.md 참고). APP_ENVIRONMENT도 여기서 함께 받는다 — CD가 `sudo docker
+        # compose ...` 명령 자체는 바꾸지 않고 `--build-arg`만으로 네 값을 모두 전달할 수 있게
+        # 하기 위함이다(sudoers가 docker 실행만 허용하는 환경에서도 안전).
+        APP_VERSION: ${APP_VERSION:-0.0.1-SNAPSHOT}
+        APP_GIT_SHA: ${APP_GIT_SHA:-unknown}
+        APP_BUILD_TIME: ${APP_BUILD_TIME:-unknown}
+        APP_ENVIRONMENT: ${APP_ENVIRONMENT:-local}
     profiles:
       - app
     environment:
@@ -78,8 +94,10 @@ services:
     ports:
       - "127.0.0.1:${SERVER_PORT:-8080}:8080"
     healthcheck:
-      # Runtime Image(eclipse-temurin:jre-alpine)에 curl이 없어 Alpine 기본 제공 wget(BusyBox)을 사용한다.
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${SERVER_PORT:-8080}/actuator/health"]
+      # 단순 Process 생존(/actuator/health)이 아니라 PostgreSQL/Redis까지 연결된 실제 요청
+      # 처리 준비 상태(Readiness)를 기준으로 판단한다. Runtime Image(eclipse-temurin:jre-alpine)에
+      # curl이 없어 Alpine 기본 제공 wget(BusyBox)을 사용한다.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${SERVER_PORT:-8080}/actuator/health/readiness"]
       interval: 10s
       timeout: 5s
       retries: 10
