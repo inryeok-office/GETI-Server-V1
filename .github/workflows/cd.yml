@@ -7,6 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: 서버 배포
         uses: appleboy/ssh-action@v1.0.0
@@ -14,10 +15,22 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          timeout: 60s
           command_timeout: 25m
           script: |
+            set -e
             cd ~/GETI-Server
-            git pull origin develop
+            git fetch origin develop
+            git reset --hard origin/develop
             sudo docker compose --profile app up -d --build
-            sleep 15
-            sudo docker compose exec app wget -qO- http://localhost:8080/actuator/health
+            for i in $(seq 1 24); do
+              sleep 5
+              if sudo docker compose exec -T app wget -qO- http://localhost:8080/actuator/health 2>/dev/null; then
+                echo "Health check passed"
+                exit 0
+              fi
+              echo "Waiting for app... ($i/24)"
+            done
+            echo "Health check failed after waiting"
+            sudo docker compose logs app --tail=50
+            exit 1
