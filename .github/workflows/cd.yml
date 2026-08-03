@@ -4,11 +4,116 @@ on:
   push:
     branches: [develop]
 
+permissions:
+  contents: read
+
+# 연속된 develop Push가 EC2에서 동시에 git reset/docker build를 실행해 서로 간섭하지 않도록
+# 한 번에 하나씩만 배포한다. 진행 중인 배포를 새 Push가 임의로 취소하면 Container가 절반만
+# Build된 상태로 남을 수 있어 cancel-in-progress는 사용하지 않는다(순서대로 대기).
+concurrency:
+  group: cd-deploy-develop
+  cancel-in-progress: false
+
 jobs:
+  notify-start:
+    name: Discord 배포 시작 알림
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Build Discord payload
+        id: payload
+        env:
+          REPOSITORY: ${{ github.repository }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -Eeuo pipefail
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          fields=$(jq -n \
+            --arg repo "$REPOSITORY" \
+            --arg env "develop" \
+            --arg branch "$BRANCH_NAME" \
+            --arg commit "$SHORT_SHA" \
+            --arg actor "$ACTOR" \
+            --arg workflow "$WORKFLOW_NAME" \
+            '[
+              {name: "Repository", value: $repo, inline: true},
+              {name: "Environment", value: $env, inline: true},
+              {name: "Branch", value: $branch, inline: true},
+              {name: "Commit", value: $commit, inline: true},
+              {name: "Actor", value: $actor, inline: true},
+              {name: "Workflow", value: $workflow, inline: true},
+              {name: "Status", value: "started", inline: true}
+            ]')
+
+          jq -n \
+            --arg title "🚀 CD 배포 시작" \
+            --argjson color 3447003 \
+            --argjson fields "$fields" \
+            --arg runUrl "$RUN_URL" \
+            --arg workflow "$WORKFLOW_NAME" \
+            --arg timestamp "$TIMESTAMP" \
+            '{
+              embeds: [
+                {
+                  title: $title,
+                  description: ($workflow + " 배포를 시작합니다"),
+                  color: $color,
+                  fields: $fields,
+                  url: $runUrl,
+                  timestamp: $timestamp
+                }
+              ],
+              allowed_mentions: { parse: [] }
+            }' > /tmp/discord-payload.json
+
+          jq empty /tmp/discord-payload.json
+
+      - name: Send Discord notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_CD_WEBHOOK_URL }}
+        run: |
+          set -Eeuo pipefail
+
+          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
+            echo "::notice::Discord CD 시작 알림을 Skip합니다(DISCORD_CD_WEBHOOK_URL Secret 없음)."
+            echo "### Discord 알림" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 결과: Skip (\`DISCORD_CD_WEBHOOK_URL\` Secret 없음)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          http_status=$(curl \
+            --silent --show-error --output /tmp/discord-response.json --write-out "%{http_code}" \
+            --connect-timeout 10 --max-time 20 \
+            --request POST --header "Content-Type: application/json" \
+            --data @/tmp/discord-payload.json \
+            "${DISCORD_WEBHOOK_URL}?wait=true") || http_status="curl_error"
+
+          if [ "$http_status" = "curl_error" ] || [ "$http_status" -ge 300 ]; then
+            echo "::warning::Discord CD 시작 알림 전송에 실패했습니다(HTTP ${http_status})."
+            echo "### Discord 알림" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 결과: 전송 실패 (HTTP ${http_status})" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "### Discord 알림" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 결과: 시작 알림 전송 성공" >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
+    name: 서버 배포
+    needs: notify-start
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # Readiness Check와 배포 SHA 검증을 SSH 세션 안에서 모두 수행한다(서버에 jq/Python 등
+      # 별도 도구가 있다고 가정하지 않기 위해, /actuator/info의 JSON을 직접 Parsing하지 않고
+      # 실행 중인 Container의 APP_GIT_SHA 환경변수를 직접 읽어 배포 대상 SHA와 비교한다).
+      # docs/development/cd.md 참고.
       - name: 서버 배포
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -22,15 +127,333 @@ jobs:
             cd ~/GETI-Server
             git fetch origin develop
             git reset --hard origin/develop
-            sudo docker compose --profile app up -d --build
+
+            DEPLOY_SHA=$(git rev-parse HEAD)
+            APP_BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            APP_VERSION=$(grep -m1 '^version = ' build.gradle.kts | sed -E 's/version = "([^"]+)"/\1/')
+
+            sudo env \
+              "APP_VERSION=${APP_VERSION}" \
+              "APP_GIT_SHA=${DEPLOY_SHA}" \
+              "APP_BUILD_TIME=${APP_BUILD_TIME}" \
+              "APP_ENVIRONMENT=develop" \
+              docker compose --profile app up -d --build
+
+            READY=false
             for i in $(seq 1 24); do
               sleep 5
-              if sudo docker compose exec -T app wget -qO- http://localhost:8080/actuator/health 2>/dev/null; then
-                echo "Health check passed"
-                exit 0
+              if sudo docker compose exec -T app wget -qO- http://localhost:8080/actuator/health/readiness 2>/dev/null; then
+                echo "Readiness check passed"
+                READY=true
+                break
               fi
-              echo "Waiting for app... ($i/24)"
+              echo "Waiting for app readiness... ($i/24)"
             done
-            echo "Health check failed after waiting"
-            sudo docker compose logs app --tail=50
-            exit 1
+
+            if [ "$READY" != "true" ]; then
+              echo "Readiness check failed after waiting"
+              sudo docker compose logs app --tail=50
+              exit 1
+            fi
+
+            if ! sudo docker compose exec -T app wget -qO- http://localhost:8080/actuator/info 2>/dev/null; then
+              echo "/actuator/info 호출에 실패했습니다"
+              sudo docker compose logs app --tail=50
+              exit 1
+            fi
+
+            RUNNING_SHA=$(sudo docker compose exec -T app printenv APP_GIT_SHA | tr -d '\r\n')
+
+            if [ -z "$RUNNING_SHA" ] || [ "$RUNNING_SHA" = "unknown" ]; then
+              echo "실행 중인 Container에서 APP_GIT_SHA를 확인할 수 없습니다."
+              exit 1
+            fi
+
+            if [ "$RUNNING_SHA" != "$DEPLOY_SHA" ]; then
+              echo "실행 중인 Container의 SHA(${RUNNING_SHA})가 배포 대상 SHA(${DEPLOY_SHA})와 일치하지 않습니다."
+              exit 1
+            fi
+
+            echo "배포 검증 완료: SHA=${DEPLOY_SHA}"
+
+  notify-success:
+    name: Discord 배포 성공 알림
+    needs: [notify-start, deploy]
+    if: needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Build Discord payload
+        id: payload
+        env:
+          REPOSITORY: ${{ github.repository }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -Eeuo pipefail
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          fields=$(jq -n \
+            --arg repo "$REPOSITORY" \
+            --arg env "develop" \
+            --arg branch "$BRANCH_NAME" \
+            --arg commit "$SHORT_SHA" \
+            --arg actor "$ACTOR" \
+            --arg workflow "$WORKFLOW_NAME" \
+            '[
+              {name: "Repository", value: $repo, inline: true},
+              {name: "Environment", value: $env, inline: true},
+              {name: "Branch", value: $branch, inline: true},
+              {name: "Commit", value: $commit, inline: true},
+              {name: "Actor", value: $actor, inline: true},
+              {name: "Workflow", value: $workflow, inline: true},
+              {name: "Status", value: "success", inline: true},
+              {name: "Readiness 결과", value: "✅ 통과", inline: true},
+              {name: "Git SHA 검증 결과", value: "✅ 일치", inline: true}
+            ]')
+
+          jq -n \
+            --arg title "✅ CD 배포 성공" \
+            --argjson color 3066993 \
+            --argjson fields "$fields" \
+            --arg runUrl "$RUN_URL" \
+            --arg workflow "$WORKFLOW_NAME" \
+            --arg timestamp "$TIMESTAMP" \
+            '{
+              embeds: [
+                {
+                  title: $title,
+                  description: ($workflow + " 배포가 완료됐습니다(Readiness/Git SHA 검증 통과)"),
+                  color: $color,
+                  fields: $fields,
+                  url: $runUrl,
+                  timestamp: $timestamp
+                }
+              ],
+              allowed_mentions: { parse: [] }
+            }' > /tmp/discord-payload.json
+
+          jq empty /tmp/discord-payload.json
+
+      - name: Send Discord notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_CD_WEBHOOK_URL }}
+        run: |
+          set -Eeuo pipefail
+
+          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
+            echo "::notice::Discord CD 성공 알림을 Skip합니다(DISCORD_CD_WEBHOOK_URL Secret 없음)."
+            echo "### Discord 알림" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 결과: Skip (\`DISCORD_CD_WEBHOOK_URL\` Secret 없음)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          http_status=$(curl \
+            --silent --show-error --output /tmp/discord-response.json --write-out "%{http_code}" \
+            --connect-timeout 10 --max-time 20 \
+            --request POST --header "Content-Type: application/json" \
+            --data @/tmp/discord-payload.json \
+            "${DISCORD_WEBHOOK_URL}?wait=true") || http_status="curl_error"
+
+          if [ "$http_status" = "curl_error" ] || [ "$http_status" -ge 300 ]; then
+            echo "::warning::Discord CD 성공 알림 전송에 실패했습니다(HTTP ${http_status})."
+            echo "### Discord 알림" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 결과: 전송 실패 (HTTP ${http_status})" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "### Discord 알림" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 결과: 성공 알림 전송 성공" >> "$GITHUB_STEP_SUMMARY"
+
+  notify-failure:
+    name: Discord 배포 실패 알림
+    needs: [notify-start, deploy]
+    if: always() && needs.deploy.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Build Discord payload
+        id: payload
+        env:
+          REPOSITORY: ${{ github.repository }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -Eeuo pipefail
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          fields=$(jq -n \
+            --arg repo "$REPOSITORY" \
+            --arg env "develop" \
+            --arg branch "$BRANCH_NAME" \
+            --arg commit "$SHORT_SHA" \
+            --arg actor "$ACTOR" \
+            --arg workflow "$WORKFLOW_NAME" \
+            '[
+              {name: "Repository", value: $repo, inline: true},
+              {name: "Environment", value: $env, inline: true},
+              {name: "Branch", value: $branch, inline: true},
+              {name: "Commit", value: $commit, inline: true},
+              {name: "Actor", value: $actor, inline: true},
+              {name: "Workflow", value: $workflow, inline: true},
+              {name: "Status", value: "failure", inline: true},
+              {
+                name: "실패 사유",
+                value: "서버 배포(Readiness Polling, Git SHA 검증, 또는 Container 실행) 중 하나가 실패했습니다. Workflow Log를 확인하세요.",
+                inline: false
+              }
+            ]')
+
+          jq -n \
+            --arg title "❌ CD 배포 실패" \
+            --argjson color 15158332 \
+            --argjson fields "$fields" \
+            --arg runUrl "$RUN_URL" \
+            --arg workflow "$WORKFLOW_NAME" \
+            --arg timestamp "$TIMESTAMP" \
+            '{
+              embeds: [
+                {
+                  title: $title,
+                  description: ($workflow + " 배포에 실패했습니다"),
+                  color: $color,
+                  fields: $fields,
+                  url: $runUrl,
+                  timestamp: $timestamp
+                }
+              ],
+              allowed_mentions: { parse: [] }
+            }' > /tmp/discord-payload.json
+
+          jq empty /tmp/discord-payload.json
+
+      - name: Send Discord notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_CD_WEBHOOK_URL }}
+        run: |
+          set -Eeuo pipefail
+
+          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
+            echo "::notice::Discord CD 실패 알림을 Skip합니다(DISCORD_CD_WEBHOOK_URL Secret 없음)."
+            echo "### Discord 알림" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 결과: Skip (\`DISCORD_CD_WEBHOOK_URL\` Secret 없음)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          http_status=$(curl \
+            --silent --show-error --output /tmp/discord-response.json --write-out "%{http_code}" \
+            --connect-timeout 10 --max-time 20 \
+            --request POST --header "Content-Type: application/json" \
+            --data @/tmp/discord-payload.json \
+            "${DISCORD_WEBHOOK_URL}?wait=true") || http_status="curl_error"
+
+          if [ "$http_status" = "curl_error" ] || [ "$http_status" -ge 300 ]; then
+            echo "::warning::Discord CD 실패 알림 전송에 실패했습니다(HTTP ${http_status})."
+            echo "### Discord 알림" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 결과: 전송 실패 (HTTP ${http_status})" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "### Discord 알림" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 결과: 실패 알림 전송 성공" >> "$GITHUB_STEP_SUMMARY"
+
+  notify-cancelled:
+    name: Discord 배포 취소 알림
+    needs: [notify-start, deploy]
+    # GitHub Actions가 Workflow Run 자체를 강제 취소하면 이 Job이 예약되지 않을 수 있어(대기 중인
+    # Job까지 즉시 종료), 취소 알림은 Best Effort로만 보장한다(docs/development/cd.md 참고).
+    if: always() && (cancelled() || needs.deploy.result == 'cancelled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Build Discord payload
+        id: payload
+        env:
+          REPOSITORY: ${{ github.repository }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -Eeuo pipefail
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          fields=$(jq -n \
+            --arg repo "$REPOSITORY" \
+            --arg env "develop" \
+            --arg branch "$BRANCH_NAME" \
+            --arg commit "$SHORT_SHA" \
+            --arg actor "$ACTOR" \
+            --arg workflow "$WORKFLOW_NAME" \
+            '[
+              {name: "Repository", value: $repo, inline: true},
+              {name: "Environment", value: $env, inline: true},
+              {name: "Branch", value: $branch, inline: true},
+              {name: "Commit", value: $commit, inline: true},
+              {name: "Actor", value: $actor, inline: true},
+              {name: "Workflow", value: $workflow, inline: true},
+              {name: "Status", value: "cancelled", inline: true}
+            ]')
+
+          jq -n \
+            --arg title "⚠️ CD 배포 취소" \
+            --argjson color 15105570 \
+            --argjson fields "$fields" \
+            --arg runUrl "$RUN_URL" \
+            --arg workflow "$WORKFLOW_NAME" \
+            --arg timestamp "$TIMESTAMP" \
+            '{
+              embeds: [
+                {
+                  title: $title,
+                  description: ($workflow + " 배포가 취소됐습니다"),
+                  color: $color,
+                  fields: $fields,
+                  url: $runUrl,
+                  timestamp: $timestamp
+                }
+              ],
+              allowed_mentions: { parse: [] }
+            }' > /tmp/discord-payload.json
+
+          jq empty /tmp/discord-payload.json
+
+      - name: Send Discord notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_CD_WEBHOOK_URL }}
+        run: |
+          set -Eeuo pipefail
+
+          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
+            echo "::notice::Discord CD 취소 알림을 Skip합니다(DISCORD_CD_WEBHOOK_URL Secret 없음)."
+            echo "### Discord 알림" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 결과: Skip (\`DISCORD_CD_WEBHOOK_URL\` Secret 없음)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          http_status=$(curl \
+            --silent --show-error --output /tmp/discord-response.json --write-out "%{http_code}" \
+            --connect-timeout 10 --max-time 20 \
+            --request POST --header "Content-Type: application/json" \
+            --data @/tmp/discord-payload.json \
+            "${DISCORD_WEBHOOK_URL}?wait=true") || http_status="curl_error"
+
+          if [ "$http_status" = "curl_error" ] || [ "$http_status" -ge 300 ]; then
+            echo "::warning::Discord CD 취소 알림 전송에 실패했습니다(HTTP ${http_status})."
+            echo "### Discord 알림" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 결과: 전송 실패 (HTTP ${http_status})" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "### Discord 알림" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 결과: 취소 알림 전송 성공" >> "$GITHUB_STEP_SUMMARY"

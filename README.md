@@ -21,7 +21,7 @@ GETI 서비스의 Backend Server 저장소다. 처음 이 저장소를 Clone했�
 | Runtime | Java Toolchain 25 | Gradle Wrapper가 자동으로 Toolchain을 내려받는다 |
 | Framework | Spring Boot 4.1.0 (Spring Framework 7.0.8) | |
 | Build | Gradle 9.5.1 (Kotlin DSL, Wrapper 포함) | |
-| Web | Spring MVC(Servlet), Bean Validation, Spring Boot Actuator(`health`만 노출) | [`docs/development/web-api.md`](./docs/development/web-api.md) |
+| Web | Spring MVC(Servlet), Bean Validation, Spring Boot Actuator(`health`/`info` 노출, Liveness/Readiness Probe) | [`docs/development/web-api.md`](./docs/development/web-api.md) |
 | API 문서 | Springdoc OpenAPI 3.0.3(Swagger UI, `local`만 활성화) | [`docs/ai/openapi-documentation.md`](./docs/ai/openapi-documentation.md) |
 | Persistence | Spring Data JPA + Hibernate, PostgreSQL 18, Flyway | [`docs/development/persistence.md`](./docs/development/persistence.md) |
 | Cache | Redis(Lettuce) | [`docs/development/persistence.md`](./docs/development/persistence.md) |
@@ -32,6 +32,7 @@ GETI 서비스의 Backend Server 저장소다. 처음 이 저장소를 Clone했�
 | 코드 품질 | Spotless(ktlint), detekt, EditorConfig | [`docs/development/code-quality.md`](./docs/development/code-quality.md) |
 | 로컬 인프라 | Docker Compose(PostgreSQL, Redis, MinIO) | [`docs/development/docker.md`](./docs/development/docker.md) |
 | CI | GitHub Actions(`CI` Workflow) | [`docs/development/ci.md`](./docs/development/ci.md) |
+| CD | GitHub Actions(`CD` Workflow), Discord 배포 알림 | [`docs/development/cd.md`](./docs/development/cd.md) |
 
 ## Architecture
 
@@ -141,6 +142,7 @@ Issue 생성부터 Draft Pull Request까지의 전체 협업 절차, Branch/Comm
 | [`docs/development/testing.md`](./docs/development/testing.md) | 테스트 유형, Kover 커버리지 |
 | [`docs/development/code-quality.md`](./docs/development/code-quality.md) | Spotless/ktlint/detekt |
 | [`docs/development/ci.md`](./docs/development/ci.md) | GitHub Actions CI, Repository Policy |
+| [`docs/development/cd.md`](./docs/development/cd.md) | GitHub Actions CD, Readiness/Git SHA 검증, Discord 배포 알림 |
 | [`docs/architecture/modularity.md`](./docs/architecture/modularity.md) | Spring Modulith, Package Architecture, Domain Module 내부 구조 |
 | [`docs/architecture/erd.md`](./docs/architecture/erd.md) | 최신 최소 19개 Table ERD, Enum, FK 삭제 정책, 다형적 참조 |
 | [`docs/audit/foundation-audit.md`](./docs/audit/foundation-audit.md) | PR 1~11 기반 구축 전체 감사 결과 |
