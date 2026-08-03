@@ -14,6 +14,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 25m
           script: |
             cd ~/GETI-Server
             git pull origin develop
