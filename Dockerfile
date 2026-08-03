@@ -22,13 +22,18 @@ WORKDIR /app
 
 # /actuator/info의 deployment 필드(DeploymentInfoProperties)에 반영된다. ARG는 이 Stage에서
 # 다시 선언해야 Build 시점에 값을 받고, ENV로 재선언해야 Container Runtime에도 남는다(ARG만으로는
-# Container 실행 시점에 사라진다).
+# Container 실행 시점에 사라진다). APP_ENVIRONMENT도 Runtime Environment로 별도 전달하지 않고
+# 여기서 Build Argument로만 받는다 — CD가 `sudo docker compose ...` 명령 자체를 바꾸지 않고
+# `--build-arg`만으로 네 값을 모두 전달할 수 있게 하기 위함이다(sudoers가 docker 실행만 허용하는
+# 환경에서도 안전하게 동작, docs/development/cd.md 참고).
 ARG APP_VERSION=0.0.1-SNAPSHOT
 ARG APP_GIT_SHA=unknown
 ARG APP_BUILD_TIME=unknown
+ARG APP_ENVIRONMENT=local
 ENV APP_VERSION=${APP_VERSION} \
     APP_GIT_SHA=${APP_GIT_SHA} \
-    APP_BUILD_TIME=${APP_BUILD_TIME}
+    APP_BUILD_TIME=${APP_BUILD_TIME} \
+    APP_ENVIRONMENT=${APP_ENVIRONMENT}
 
 RUN addgroup -S spring && adduser -S spring -G spring
 COPY --from=build /workspace/build/libs/*.jar app.jar

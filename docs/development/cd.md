@@ -42,7 +42,7 @@ CD는 별도 Container Registry(GHCR/ECR 등)를 사용하지 않는다. EC2 서
 ```text
 1. git fetch origin develop && git reset --hard origin/develop
 2. 배포 Metadata 생성(DEPLOY_SHA, APP_BUILD_TIME, APP_VERSION)
-3. docker compose --profile app up -d --build (Metadata를 Container 환경변수로 전달)
+3. docker compose build --build-arg ... (Metadata 전달) 후 docker compose --profile app up -d
 4. Readiness Check(/actuator/health/readiness, 5초 간격 최대 24회 = 최대 120초)
 5. /actuator/info 호출 확인
 6. 실행 중인 Container의 APP_GIT_SHA와 배포 대상 SHA(DEPLOY_SHA) 전체 문자열 비교
@@ -58,7 +58,21 @@ APP_BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 APP_VERSION=$(grep -m1 '^version = ' build.gradle.kts | sed -E 's/version = "([^"]+)"/\1/')
 ```
 
-`APP_VERSION`은 Gradle을 실행해 출력을 Parsing하는 대신(느리고 실패하기 쉬움) `build.gradle.kts`의 `version = "..."` 줄을 직접 읽는다. `APP_ENVIRONMENT`는 `develop`로 고정한다(이 Workflow가 `develop` 배포 전용이기 때문). 이 세 값과 `APP_ENVIRONMENT`는 `sudo env VAR=value ... docker compose up`처럼 `env` 명령으로 전달한다 — `sudo -E`가 아니라 `env`를 쓰는 이유는 서버의 `sudoers` 설정이 `-E`(호출자 환경 변수 보존)를 허용하는지 확인할 수 없어서다(`env` 명령 자체는 별도 `sudoers` 설정 없이 항상 지정한 값을 하위 프로세스 환경으로 전달한다). Secret 값과는 절대 혼합하지 않는다(DB Password 등은 서버의 기존 `.env`/`compose.yaml` 설정을 그대로 사용).
+`APP_VERSION`은 Gradle을 실행해 출력을 Parsing하는 대신(느리고 실패하기 쉬움) `build.gradle.kts`의 `version = "..."` 줄을 직접 읽는다. `APP_ENVIRONMENT`는 `develop`로 고정한다(이 Workflow가 `develop` 배포 전용이기 때문).
+
+이 네 값은 모두 `docker compose build --build-arg VAR=value ... app` 명령줄 옵션으로만 전달하고, `sudo docker compose ...`라는 기존 명령의 실행 대상 자체는 바꾸지 않는다.
+
+```bash
+sudo docker compose build \
+  --build-arg "APP_VERSION=${APP_VERSION}" \
+  --build-arg "APP_GIT_SHA=${DEPLOY_SHA}" \
+  --build-arg "APP_BUILD_TIME=${APP_BUILD_TIME}" \
+  --build-arg "APP_ENVIRONMENT=develop" \
+  app
+sudo docker compose --profile app up -d
+```
+
+처음에는 `sudo env VAR=value ... docker compose up -d --build`처럼 `env` 명령으로 감싸는 방식을 시도했으나, 서버의 `sudoers`가 `docker` 실행만 허용하도록 좁게 구성돼 있다면(devops가 이미 그렇게 설정해 뒀을 가능성을 배제할 수 없음) `sudo`의 실행 대상이 `docker`가 아닌 `env`로 바뀌어 권한 거부로 배포 자체가 실패할 위험이 있었다. 이 위험을 없애기 위해 `sudo`가 항상 `docker`만 실행하도록 `build`와 `up`을 분리했다 — Local Docker로 직접 재현해 `build` 이후 `up -d`(별도 `--build` 없이)가 새로 Build된 Image로 Container를 정상적으로 재생성하는 것을 확인했다. Secret 값과는 절대 혼합하지 않는다(DB Password 등은 서버의 기존 `.env`/`compose.yaml` 설정을 그대로 사용).
 
 ### Readiness Check
 

@@ -116,7 +116,10 @@ jobs:
       # Readiness Check와 배포 SHA 검증을 SSH 세션 안에서 모두 수행한다(서버에 jq/Python 등
       # 별도 도구가 있다고 가정하지 않기 위해, /actuator/info의 JSON을 직접 Parsing하지 않고
       # 실행 중인 Container의 APP_GIT_SHA 환경변수를 직접 읽어 배포 대상 SHA와 비교한다).
-      # docs/development/cd.md 참고.
+      # 배포 Metadata는 `sudo env VAR=value ...`처럼 sudo의 실행 대상을 docker가 아닌 다른
+      # 명령으로 바꾸지 않고, docker compose가 원래 지원하는 `--build-arg`로만 전달한다 —
+      # devops가 이미 구성해 둔 `sudo docker compose ...` 명령 자체(및 그 sudoers 권한)는
+      # 그대로 유지된다. docs/development/cd.md 참고.
       - name: 서버 배포
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -135,12 +138,13 @@ jobs:
             APP_BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             APP_VERSION=$(grep -m1 '^version = ' build.gradle.kts | sed -E 's/version = "([^"]+)"/\1/')
 
-            sudo env \
-              "APP_VERSION=${APP_VERSION}" \
-              "APP_GIT_SHA=${DEPLOY_SHA}" \
-              "APP_BUILD_TIME=${APP_BUILD_TIME}" \
-              "APP_ENVIRONMENT=develop" \
-              docker compose --profile app up -d --build
+            sudo docker compose build \
+              --build-arg "APP_VERSION=${APP_VERSION}" \
+              --build-arg "APP_GIT_SHA=${DEPLOY_SHA}" \
+              --build-arg "APP_BUILD_TIME=${APP_BUILD_TIME}" \
+              --build-arg "APP_ENVIRONMENT=develop" \
+              app
+            sudo docker compose --profile app up -d
 
             READY=false
             for i in $(seq 1 24); do
