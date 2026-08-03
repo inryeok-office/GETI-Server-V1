@@ -107,6 +107,9 @@ jobs:
   deploy:
     name: 서버 배포
     needs: notify-start
+    # 시작 알림 Job이 먼저 끝나기를 기다리기만 하고, 그 결과에는 의존하지 않는다. notify-start가
+    # (Discord 전송이 아니라 Job 자체가) 실패해도 실제 배포는 항상 정상적으로 실행돼야 한다.
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
