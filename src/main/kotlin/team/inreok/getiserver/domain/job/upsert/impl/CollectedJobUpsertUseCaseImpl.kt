@@ -1,5 +1,6 @@
 package team.inreok.getiserver.domain.job.upsert.impl
 
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.company.query.CompanyQuery
@@ -7,6 +8,7 @@ import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
+import team.inreok.getiserver.domain.job.event.JobChangedEvent
 import team.inreok.getiserver.domain.job.exception.JobCompanyNotFoundException
 import team.inreok.getiserver.domain.job.repository.JobRepository
 import team.inreok.getiserver.domain.job.service.validateCommon
@@ -21,6 +23,7 @@ import java.time.LocalDateTime
 class CollectedJobUpsertUseCaseImpl(
     private val jobRepository: JobRepository,
     private val companyQuery: CompanyQuery,
+    private val eventPublisher: ApplicationEventPublisher,
 ) : CollectedJobUpsertUseCase {
     @Transactional
     override fun upsert(command: CollectedJobUpsertCommand): CollectedJobUpsertResult {
@@ -71,6 +74,9 @@ class CollectedJobUpsertUseCaseImpl(
         }
 
         val saved = jobRepository.saveAndFlush(job)
+        // Transaction Commit 이후에만 실제로 전달된다(@TransactionalEventListener). 색인 동기화가
+        // 실패해도 이 Upsert 자체를 Rollback하지 않는다(Issue #69, PostgreSQL이 원본 유지).
+        eventPublisher.publishEvent(JobChangedEvent(requireNotNull(saved.id)))
         return CollectedJobUpsertResult(
             jobId = requireNotNull(saved.id),
             outcome = if (existing == null) JobImportOutcome.CREATED else JobImportOutcome.UPDATED,

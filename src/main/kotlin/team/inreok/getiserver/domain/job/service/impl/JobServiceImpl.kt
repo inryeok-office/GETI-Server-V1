@@ -1,22 +1,17 @@
 package team.inreok.getiserver.domain.job.service.impl
 
-import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Pageable
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
-import team.inreok.getiserver.domain.job.dto.JobSearchResponse
-import team.inreok.getiserver.domain.job.dto.JobSort
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
-import team.inreok.getiserver.domain.job.dto.JobSummaryResponse
 import team.inreok.getiserver.domain.job.dto.JobUpdateRequest
-import team.inreok.getiserver.domain.job.dto.PublicJobStatus
 import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
-import team.inreok.getiserver.domain.job.entity.type.PostingType
+import team.inreok.getiserver.domain.job.event.JobChangedEvent
 import team.inreok.getiserver.domain.job.exception.JobCompanyNotFoundException
 import team.inreok.getiserver.domain.job.exception.JobNotFoundException
 import team.inreok.getiserver.domain.job.exception.JobNotVisibleException
@@ -24,7 +19,7 @@ import team.inreok.getiserver.domain.job.exception.JobStatusTransitionInvalidExc
 import team.inreok.getiserver.domain.job.exception.JobValidationFailedException
 import team.inreok.getiserver.domain.job.repository.JobRepository
 import team.inreok.getiserver.domain.job.service.JobService
-import team.inreok.getiserver.domain.job.service.toTitlePattern
+import team.inreok.getiserver.domain.job.service.PUBLIC_VISIBLE_STATUSES
 import team.inreok.getiserver.domain.job.service.validateCommon
 import team.inreok.getiserver.domain.job.service.validateForPublish
 import java.time.LocalDateTime
@@ -33,6 +28,7 @@ import java.time.LocalDateTime
 class JobServiceImpl(
     private val jobRepository: JobRepository,
     private val companyQuery: CompanyQuery,
+    private val eventPublisher: ApplicationEventPublisher,
 ) : JobService {
     @Transactional
     override fun create(
@@ -72,7 +68,11 @@ class JobServiceImpl(
 
         // @CreationTimestamp/@UpdateTimestamp는 Flush 시점에 채워진다. 응답의 createdAt/updatedAt이
         // null로 나가지 않도록 저장과 동시에 Flush한다(CompanyServiceImpl.create와 같은 이유).
-        return JobDetailResponse.from(jobRepository.saveAndFlush(job), company)
+        val saved = jobRepository.saveAndFlush(job)
+        // Transaction Commit 이후에만 실제로 전달된다(@TransactionalEventListener). 색인 동기화가
+        // 실패해도 이 등록 자체를 Rollback하지 않는다(Issue #69, PostgreSQL이 원본 유지).
+        eventPublisher.publishEvent(JobChangedEvent(requireNotNull(saved.id)))
+        return JobDetailResponse.from(saved, company)
     }
 
     @Transactional
@@ -104,6 +104,7 @@ class JobServiceImpl(
 
         // @UpdateTimestamp가 Flush 시점에 갱신되므로 응답에 낡은 updatedAt이 담기지 않도록 먼저 Flush한다.
         jobRepository.flush()
+        eventPublisher.publishEvent(JobChangedEvent(jobId))
         return JobDetailResponse.from(job, findCompanySummary(job.companyId))
     }
 
@@ -142,6 +143,7 @@ class JobServiceImpl(
         job.status = target
 
         jobRepository.flush()
+        eventPublisher.publishEvent(JobChangedEvent(jobId))
         return JobDetailResponse.from(job, findCompanySummary(job.companyId))
     }
 
@@ -156,7 +158,7 @@ class JobServiceImpl(
     @Transactional
     override fun getPublicDetail(jobId: Long): JobDetailResponse {
         val job = findNotDeleted(jobId)
-        if (job.status !in PublicJobStatus.ALL_VISIBLE) throw JobNotVisibleException(jobId)
+        if (job.status !in PUBLIC_VISIBLE_STATUSES) throw JobNotVisibleException(jobId)
 
         // incrementViewCount는 영속성 Context를 우회하는 UPDATE라 job.viewCount가 낡은 값으로
         // 남는다. 응답에는 이번 조회분이 반영된 값을 담아야 하므로 +1을 직접 반영한다.
@@ -168,46 +170,6 @@ class JobServiceImpl(
             )
         jobRepository.incrementViewCount(jobId)
         return response
-    }
-
-    @Transactional(readOnly = true)
-    override fun searchPublic(
-        query: String?,
-        postingType: PostingType?,
-        status: PublicJobStatus?,
-        openOnly: Boolean,
-        sort: JobSort,
-        pageable: Pageable,
-    ): JobSearchResponse {
-        // 검색어를 보내지 않은 경우와 공백만 보낸 경우를 모두 "제목 조건 없음"으로 취급한다.
-        val titlePattern = toTitlePattern(query)
-        val statuses = status?.let { listOf(it.jobStatus) } ?: PublicJobStatus.ALL_VISIBLE
-
-        // Pageable이 들고 온 sort는 무시하고 JobSort로만 정렬한다. Entity Field 이름이 그대로
-        // 정렬 키로 노출되는 것을 막고, 항상 id DESC 보조 정렬이 붙도록 하기 위함이다.
-        // page/size는 WebPageableConfig가 최대 100으로 제한한 값을 그대로 사용한다.
-        val request = PageRequest.of(pageable.pageNumber, pageable.pageSize, sort.toSort())
-        val page =
-            jobRepository.searchPublic(
-                statuses = statuses,
-                titlePattern = titlePattern,
-                postingType = postingType,
-                openOnly = openOnly,
-                now = LocalDateTime.now(),
-                pageable = request,
-            )
-
-        // 항목마다 기업을 조회하면 N+1이 되므로 한 번에 가져온다.
-        val companies = companyQuery.findActiveSummaries(page.content.map { it.companyId })
-        return JobSearchResponse(
-            content = page.content.map { JobSummaryResponse.from(it, companies[it.companyId]) },
-            page = page.number,
-            size = page.size,
-            totalElements = page.totalElements,
-            totalPages = page.totalPages,
-            first = page.isFirst,
-            last = page.isLast,
-        )
     }
 
     private fun findNotDeleted(jobId: Long): Job =

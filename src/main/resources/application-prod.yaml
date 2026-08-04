@@ -8,6 +8,11 @@ spring:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT}
       password: ${REDIS_PASSWORD:}
+  elasticsearch:
+    # 안전하지 않은 기본값(localhost 등)을 두지 않는다 — 값이 없으면 기동을 거부한다(Issue #69).
+    uris: ${ELASTICSEARCH_URIS}
+    username: ${ELASTICSEARCH_USERNAME:}
+    password: ${ELASTICSEARCH_PASSWORD:}
 
 app:
   jwt:

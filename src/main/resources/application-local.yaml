@@ -7,6 +7,13 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  elasticsearch:
+    # Local Docker Compose의 elasticsearch Service는 인증 없는 격리된 개발 환경이다
+    # (docs/development/docker.md 참고, Issue #69). 인증이 필요하면 ELASTICSEARCH_USERNAME/
+    # ELASTICSEARCH_PASSWORD로 재정의한다.
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+    username: ${ELASTICSEARCH_USERNAME:}
+    password: ${ELASTICSEARCH_PASSWORD:}
 
 # Local 전용 임시 Secret이다(운영에서 재사용 금지). 실제 값을 채운 .env는 Commit되지 않는다.
 # GOOGLE_CLIENT_ID/SECRET을 비워두면 Google 로그인 자체는 실패하지만 App은 정상 기동한다.

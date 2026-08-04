@@ -65,6 +65,28 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # 공고 검색 색인용 Elasticsearch다(Issue #69). Nori(한국어 형태소) Plugin이 필요해 공식 Image를
+  # 그대로 쓰지 않고 docker/elasticsearch/Dockerfile로 Plugin만 추가해 Build한다. 인증 없는
+  # 단일 Node 구성은 격리된 Local 개발 환경 전용이며 운영에서 재사용할 수 없다.
+  elasticsearch:
+    build:
+      context: ./docker/elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "127.0.0.1:${ELASTICSEARCH_PORT:-9200}:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
   # 기본 `docker compose up -d`에는 포함되지 않는다. `--profile app`을 명시했을 때만 실행된다.
   app:
     build:
@@ -104,6 +126,7 @@ services:
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-geti-local-only}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      ELASTICSEARCH_URIS: http://elasticsearch:9200
       # Collector 비Secret 설정만 전달한다(Issue #62). 실제 서비스키(COLLECTOR_*_SERVICE_KEY 등)는
       # 이 Compose 구성으로 전달하지 않는다 — develop 서버에는 실제 API Key를 배치하지 않는다.
       # COLLECTOR_SEED_ENABLED는 여기서 강제로 값을 넣지 않는다 — Host에서 지정하지 않으면
@@ -129,9 +152,12 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
     restart: "no"
 
 volumes:
   postgres-data:
   redis-data:
   minio-data:
+  elasticsearch-data:

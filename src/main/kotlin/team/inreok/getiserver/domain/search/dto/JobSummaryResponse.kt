@@ -1,11 +1,11 @@
-package team.inreok.getiserver.domain.job.dto
+package team.inreok.getiserver.domain.search.dto
 
 import io.swagger.v3.oas.annotations.media.Schema
 import team.inreok.getiserver.domain.company.query.CompanySummary
-import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
+import team.inreok.getiserver.domain.search.document.JobSearchDocument
 import java.time.LocalDateTime
 
 @Schema(description = "공고 목록 항목")
@@ -41,24 +41,25 @@ data class JobSummaryResponse(
     val publishedAt: LocalDateTime?,
 ) {
     companion object {
-        fun from(
-            job: Job,
-            company: CompanySummary?,
-        ): JobSummaryResponse =
+        /**
+         * 검색 결과(Elasticsearch Document)를 그대로 응답으로 옮긴다. PostgreSQL을 다시 조회하지
+         * 않는다(Issue #69 — Elasticsearch가 검색 전용 Read Model이라는 원칙, 완료 보고 참고).
+         */
+        fun from(document: JobSearchDocument): JobSummaryResponse =
             JobSummaryResponse(
-                jobId = requireNotNull(job.id) { "저장된 Job은 id를 가져야 합니다." },
-                title = job.title,
-                postingType = job.type,
-                applicationMethod = job.applicationMethod,
-                status = job.status,
-                company = company,
-                startDate = job.recruitmentStartedAt,
-                endDate = job.recruitmentEndedAt,
-                targetGrade = job.targetGrade,
-                capacity = job.capacity,
-                firstComeServed = job.firstComeServed,
-                viewCount = job.viewCount,
-                publishedAt = job.publishedAt,
+                jobId = document.jobId,
+                title = document.title,
+                postingType = PostingType.valueOf(document.postingType),
+                applicationMethod = ApplicationMethod.valueOf(document.applicationMethod),
+                status = JobStatus.valueOf(document.status),
+                company = document.companyName?.let { CompanySummary(companyId = document.companyId, name = it) },
+                startDate = document.startDate,
+                endDate = document.endDate,
+                targetGrade = document.targetGrade,
+                capacity = document.capacity,
+                firstComeServed = document.firstComeServed,
+                viewCount = document.viewCount,
+                publishedAt = document.publishedAt,
             )
     }
 }

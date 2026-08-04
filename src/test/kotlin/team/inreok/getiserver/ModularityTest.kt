@@ -33,6 +33,7 @@ class ModularityTest {
             "domain.collector",
             "domain.operation",
             "domain.audit",
+            "domain.search",
         )
     }
 }

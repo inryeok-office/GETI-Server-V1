@@ -92,6 +92,10 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 
+    // Search(Elasticsearch + Nori, Issue #69). Version은 Spring Boot Dependency Management가
+    // 관리하는 값을 그대로 쓰고 임의로 고정하지 않는다.
+    implementation("org.springframework.boot:spring-boot-starter-data-elasticsearch")
+
     // Kotlin / Jackson
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
@@ -112,10 +116,12 @@ dependencies {
 
     // Integration Test(Docker/Testcontainers 필요, src/integrationTest 전용)
     "integrationTestImplementation"("org.springframework.boot:spring-boot-starter-data-redis-test")
+    "integrationTestImplementation"("org.springframework.boot:spring-boot-starter-data-elasticsearch-test")
     "integrationTestImplementation"("org.springframework.boot:spring-boot-testcontainers")
     "integrationTestImplementation"("org.testcontainers:testcontainers-junit-jupiter")
     "integrationTestImplementation"("org.testcontainers:testcontainers-postgresql")
     "integrationTestImplementation"("com.redis:testcontainers-redis")
+    "integrationTestImplementation"("org.testcontainers:testcontainers-elasticsearch")
     "integrationTestRuntimeOnly"("org.junit.platform:junit-platform-launcher")
 }
 

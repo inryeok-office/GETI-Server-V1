@@ -6,29 +6,21 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
-import org.mockito.ArgumentMatchers.anyBoolean
-import org.mockito.ArgumentMatchers.anyCollection
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.BDDMockito.given
 import org.mockito.Captor
 import org.mockito.Mock
 import org.mockito.Mockito.never
-import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
-import org.springframework.data.domain.PageImpl
-import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Pageable
-import org.springframework.data.domain.Sort
+import org.springframework.context.ApplicationEventPublisher
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
-import team.inreok.getiserver.domain.job.dto.JobSort
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
 import team.inreok.getiserver.domain.job.dto.JobUpdateRequest
-import team.inreok.getiserver.domain.job.dto.PublicJobStatus
 import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
@@ -58,19 +50,15 @@ class JobServiceTest {
     @Mock
     private lateinit var companyQuery: CompanyQuery
 
+    @Mock
+    private lateinit var eventPublisher: ApplicationEventPublisher
+
     @Captor
     private lateinit var jobCaptor: ArgumentCaptor<Job>
 
-    @Captor
-    private lateinit var statusesCaptor: ArgumentCaptor<Collection<JobStatus>>
-
-    @Captor
-    private lateinit var queryCaptor: ArgumentCaptor<String>
-
-    @Captor
-    private lateinit var pageableCaptor: ArgumentCaptor<Pageable>
-
-    private val service: JobService by lazy { JobServiceImpl(jobRepository, companyQuery) }
+    private val service: JobService by lazy {
+        JobServiceImpl(jobRepository, companyQuery, eventPublisher)
+    }
 
     private val companySummary = CompanySummary(companyId = 1L, name = "인력개발원")
 
@@ -382,123 +370,12 @@ class JobServiceTest {
         verify(jobRepository, never()).incrementViewCount(anyLong())
     }
 
-    // --- 목록 ---
-
-    @Test
-    fun `필터를 지정하지 않으면 게시와 마감 상태만 조회한다`() {
-        givenEmptySearch()
-
-        service.searchPublic(null, null, null, false, JobSort.LATEST, PageRequest.of(0, 20))
-
-        verifySearch()
-        assertThat(statusesCaptor.value).containsExactlyInAnyOrder(JobStatus.PUBLISHED, JobStatus.CLOSED)
-    }
-
-    @Test
-    fun `상태 필터를 지정하면 해당 상태만 조회한다`() {
-        givenEmptySearch()
-
-        service.searchPublic(null, null, PublicJobStatus.CLOSED, false, JobSort.LATEST, PageRequest.of(0, 20))
-
-        verifySearch()
-        assertThat(statusesCaptor.value).containsExactly(JobStatus.CLOSED)
-    }
-
-    @Test
-    fun `검색어가 공백만 있으면 제목 조건 없이 조회한다`() {
-        givenEmptySearch()
-
-        service.searchPublic("   ", null, null, false, JobSort.LATEST, PageRequest.of(0, 20))
-
-        verifySearch()
-        assertThat(queryCaptor.value).isNull()
-    }
-
-    @Test
-    fun `검색어의 LIKE Wildcard를 Escape하고 앞뒤 %를 붙여 Repository에 전달한다`() {
-        givenEmptySearch()
-
-        service.searchPublic("100%_할인", null, null, false, JobSort.LATEST, PageRequest.of(0, 20))
-
-        verifySearch()
-        assertThat(queryCaptor.value).isEqualTo("%100\\%\\_할인%")
-    }
-
-    @Test
-    fun `검색어는 소문자 Pattern으로 변환해 대소문자를 구분하지 않는다`() {
-        givenEmptySearch()
-
-        service.searchPublic("BackEnd", null, null, false, JobSort.LATEST, PageRequest.of(0, 20))
-
-        verifySearch()
-        assertThat(queryCaptor.value).isEqualTo("%backend%")
-    }
-
-    @Test
-    fun `정렬은 JobSort로만 결정되고 항상 공고 ID 보조 정렬이 붙는다`() {
-        givenEmptySearch()
-
-        // Pageable이 엉뚱한 정렬을 들고 와도 무시되어야 한다.
-        val pageable = PageRequest.of(0, 20, Sort.by("bodyMarkdown"))
-        service.searchPublic(null, null, null, false, JobSort.VIEWS, pageable)
-
-        verifySearch()
-        assertThat(pageableCaptor.value.sort.map { "${it.property}:${it.direction}" })
-            .containsExactly("viewCount:DESC", "id:DESC")
-    }
-
-    @Test
-    fun `최신순 정렬은 게시 시각 내림차순과 공고 ID 보조 정렬을 사용한다`() {
-        givenEmptySearch()
-
-        service.searchPublic(null, null, null, false, JobSort.LATEST, PageRequest.of(0, 20))
-
-        verifySearch()
-        assertThat(pageableCaptor.value.sort.map { "${it.property}:${it.direction}" })
-            .containsExactly("publishedAt:DESC", "id:DESC")
-    }
-
-    @Test
-    fun `목록은 기업 요약을 한 번만 조회해 N+1을 피한다`() {
-        val jobs = listOf(jobOf(id = 1L), jobOf(id = 2L), jobOf(id = 3L))
-        given(
-            jobRepository.searchPublic(anyStatuses(), any(), any(), anyBoolean(), anyDateTime(), anyPageable()),
-        ).willReturn(PageImpl(jobs, PageRequest.of(0, 20), 3))
-        given(companyQuery.findActiveSummaries(anyStatusIds())).willReturn(mapOf(1L to companySummary))
-
-        val response = service.searchPublic(null, null, null, false, JobSort.LATEST, PageRequest.of(0, 20))
-
-        assertThat(response.content).hasSize(3)
-        assertThat(response.totalElements).isEqualTo(3)
-        verify(companyQuery, times(1)).findActiveSummaries(anyStatusIds())
-        verify(companyQuery, never()).findActiveSummary(anyLong())
-    }
-
     // --- Fixture ---
     //
     // Kotlin non-null 파라미터에 bare any()를 쓰면 null이 반환되어 NPE가 나므로 Elvis로 기본값을
     // 준다(CompanyServiceTest.anyCompany와 같은 이유).
 
     private fun anyJob(): Job = any(Job::class.java) ?: newJob()
-
-    private fun anyPageable(): Pageable = any(Pageable::class.java) ?: PageRequest.of(0, 20)
-
-    private fun anyDateTime(): LocalDateTime = any(LocalDateTime::class.java) ?: LocalDateTime.now()
-
-    private fun anyStatuses(): Collection<JobStatus> = anyCollection() ?: emptyList()
-
-    private fun anyStatusIds(): Collection<Long> = anyCollection() ?: emptyList()
-
-    private fun verifySearch() {
-        verify(jobRepository).searchPublic(
-            statusesCaptor.capture() ?: emptyList(),
-            queryCaptor.capture(),
-            any(),
-            anyBoolean(),
-            anyDateTime(),
-            pageableCaptor.capture() ?: PageRequest.of(0, 20),
-        )
-    }
 
     private fun givenActiveCompany() {
         given(companyQuery.findActiveSummary(1L)).willReturn(companySummary)
@@ -513,13 +390,6 @@ class JobServiceTest {
 
     private fun givenFoundNotDeleted(job: Job) {
         given(jobRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(job)
-    }
-
-    private fun givenEmptySearch() {
-        given(
-            jobRepository.searchPublic(anyStatuses(), any(), any(), anyBoolean(), anyDateTime(), anyPageable()),
-        ).willReturn(PageImpl(emptyList(), PageRequest.of(0, 20), 0))
-        given(companyQuery.findActiveSummaries(anyStatusIds())).willReturn(emptyMap())
     }
 
     private fun draftRequest(

@@ -1,4 +1,4 @@
-package team.inreok.getiserver.domain.job.dto
+package team.inreok.getiserver.domain.search.dto
 
 import io.swagger.v3.oas.annotations.media.Schema
 
