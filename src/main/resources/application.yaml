@@ -43,6 +43,15 @@ app:
       mma:
         enabled: ${COLLECTOR_MMA_ENABLED:false}
         service-key: ${COLLECTOR_MMA_SERVICE_KEY:}
+      job-alio:
+        enabled: ${COLLECTOR_JOB_ALIO_ENABLED:false}
+        service-key: ${COLLECTOR_JOB_ALIO_SERVICE_KEY:}
+      clean-eye:
+        enabled: ${COLLECTOR_CLEAN_EYE_ENABLED:false}
+        service-key: ${COLLECTOR_CLEAN_EYE_SERVICE_KEY:}
+      nara-ilteo:
+        enabled: ${COLLECTOR_NARA_ILTEO_ENABLED:false}
+        service-key: ${COLLECTOR_NARA_ILTEO_SERVICE_KEY:}
   discord:
     # Collector가 실제 Provider 수집으로 새로 등록(CREATED)한 공고에 대해서만 보내는 알림이다
     # (Issue #62 확장 범위). enabled가 false거나 webhook-url이 비어 있으면 애플리케이션·Collector·

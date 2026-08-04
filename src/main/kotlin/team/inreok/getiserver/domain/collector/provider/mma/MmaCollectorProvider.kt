@@ -47,14 +47,13 @@ private class MmaPaginationState {
 /**
  * 병무청 병역일터(MMA) Provider Adapter다. 공식 활용신청 상세 페이지
  * (https://www.data.go.kr/data/3065599/openapi.do)에서 확인한 Endpoint(`CyJeongBo/list`)와
- * 목록 항목 필드명을 기준으로 구현했다.
+ * 목록 항목 필드명을 기준으로 구현했다. Issue #62 확장 범위에서 실제 인증키로 호출해 응답
+ * 구조와 필드(cygonggoNo/cyjemokNm/eopcheNm/magamDt/yuhyoYn/ddeopmuNm/cjhakryeok/
+ * gyeongryeokGbcdNm/gmhyeongtaeNm/geunmujy/mjinwonNm/yowonGbcdNm 등)를 실제로 확인했다
+ * (최종 보고 참고).
  *
- * **알려진 한계(최종 보고 참고)**: 공식 페이지가 요청/응답 예시(Sample)를 제공하지 않아 다음은
- * 공공데이터포털의 공통 REST 규약(`response/header/resultCode,resultMsg`,
- * `response/body/items/item`, 공통 오류 코드 표)을 근거로 구현했고, 실제 인증키로 아직 검증하지
- * 못했다. 응답에 본문(content)이나 원문 URL(externalUrl)에 대응하는 필드가 공식 목록에 없어
- * 항상 missingFields에 포함되며(PARTIAL, 자동 게시 대상 아님), 실제 값이 확인되면 후속 작업에서
- * 반영한다.
+ * **알려진 한계**: 응답에 원문 URL(externalUrl)에 대응하는 필드가 없어 항상 missingFields에
+ * 포함되며(PARTIAL, 자동 게시 대상 아님), 실제 필드가 확인되면 후속 작업에서 반영한다.
  */
 @Component
 @EnableConfigurationProperties(MmaProviderProperties::class)
@@ -284,8 +283,8 @@ class MmaCollectorProvider(
         }
     }
 
-    // 확인된 필드만 사용한다. 본문(content)·원문 URL(externalUrl)에 대응하는 필드가 공식 목록에
-    // 없어 항상 missingFields에 포함시킨다(추측 금지, 최종 보고 참고). 필수 식별 필드가 없는
+    // 실제 인증키로 확인한(최종 보고 참고) 필드만 사용한다. 원문 URL(externalUrl)에 대응하는
+    // 필드가 응답에 없어 항상 missingFields에 포함시킨다(추측 금지). 필수 식별 필드가 없는
     // 항목을 일찍 걸러내는 가드 절이 중첩 if보다 읽기 쉽다고 판단해 ReturnCount를 그대로 둔다.
     @Suppress("ReturnCount")
     private fun toNormalizedJob(
@@ -302,7 +301,8 @@ class MmaCollectorProvider(
         val missingFields = mutableListOf<String>()
         val endDate = parseDate(text(element, "magamDt"))
         if (endDate == null) missingFields.add("endDate")
-        missingFields.add("content")
+        val content = text(element, "ddeopmuNm")
+        if (content == null) missingFields.add("content")
         missingFields.add("externalUrl")
 
         return NormalizedCollectedJob(
@@ -310,13 +310,21 @@ class MmaCollectorProvider(
             externalJobId = externalJobId,
             title = title,
             companyName = companyName,
-            content = null,
+            content = content,
             externalUrl = null,
             startDate = null,
             endDate = endDate,
             collectedAt = context.requestedAt,
             dataQualityStatus = JobDataQualityStatus.PARTIAL,
             missingFields = missingFields,
+            educationCondition = text(element, "cjhakryeok"),
+            careerCondition = text(element, "gyeongryeokGbcdNm"),
+            employmentType = text(element, "gmhyeongtaeNm"),
+            jobFieldHint = text(element, "jggyeyeolCdNm"),
+            workRegion = text(element, "geunmujy") ?: text(element, "geunmujysido"),
+            qualificationDetail = null,
+            recruitCount = text(element, "mjinwonNm"),
+            militaryServiceType = text(element, "yowonGbcdNm"),
         )
     }
 

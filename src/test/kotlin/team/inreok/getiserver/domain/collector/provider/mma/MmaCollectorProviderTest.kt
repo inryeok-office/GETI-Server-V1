@@ -12,9 +12,9 @@ import java.time.LocalDateTime
 /**
  * 실제 HTTP 호출 없이 XML 응답 Parsing/정규화 규칙만 검증한다(WireMock/MockWebServer를 새로
  * 추가하지 않기 위해 `MmaCollectorProvider.parse`를 internal로 열어 직접 호출, Issue #62 참고).
- * Fixture는 공식 페이지가 확인해 준 필드명(cygonggoNo/cyjemokNm/eopcheNm/magamDt/yuhyoYn)과
- * 공공데이터포털 공통 REST 응답 규약을 근거로 구성했으며, 실제 응답으로 아직 검증하지 못했다
- * (최종 보고의 "제한사항" 참고).
+ * Fixture 필드명(cygonggoNo/cyjemokNm/eopcheNm/magamDt/yuhyoYn/ddeopmuNm/cjhakryeok/
+ * gyeongryeokGbcdNm/gmhyeongtaeNm/geunmujy/mjinwonNm/yowonGbcdNm)은 Issue #62 확장 범위에서
+ * 실제 인증키로 호출해 확인했다(최종 보고 참고).
  */
 class MmaCollectorProviderTest {
     private val provider =
@@ -52,6 +52,43 @@ class MmaCollectorProviderTest {
         // 본문·원문 URL 필드가 공식 목록에 없어 항상 PARTIAL·missingFields에 포함된다.
         assertThat(job.dataQualityStatus).isEqualTo(JobDataQualityStatus.PARTIAL)
         assertThat(job.missingFields).containsExactlyInAnyOrder("content", "externalUrl")
+    }
+
+    @Test
+    fun `실제 응답에 있는 학력·경력·고용형태·근무지역·모집인원·요원구분을 그대로 담는다`() {
+        val xml =
+            envelope(
+                """
+                <item>
+                    <cygonggoNo>2026-000200</cygonggoNo>
+                    <cyjemokNm>정보처리 산업기능요원 모집</cyjemokNm>
+                    <eopcheNm>인력개발원</eopcheNm>
+                    <magamDt>20261231</magamDt>
+                    <yuhyoYn>Y</yuhyoYn>
+                    <ddeopmuNm>사내 업무 시스템 유지보수</ddeopmuNm>
+                    <cjhakryeok>고등학교졸업</cjhakryeok>
+                    <gyeongryeokGbcdNm>신입/경력</gyeongryeokGbcdNm>
+                    <gmhyeongtaeNm>주5일</gmhyeongtaeNm>
+                    <jggyeyeolCdNm>공학계</jggyeyeolCdNm>
+                    <geunmujy>경상남도 창원시 의창구</geunmujy>
+                    <mjinwonNm>1명</mjinwonNm>
+                    <yowonGbcdNm>산업기능요원</yowonGbcdNm>
+                </item>
+                """,
+            )
+
+        val job = provider.parse(xml, context).jobs.single()
+
+        assertThat(job.content).isEqualTo("사내 업무 시스템 유지보수")
+        assertThat(job.educationCondition).isEqualTo("고등학교졸업")
+        assertThat(job.careerCondition).isEqualTo("신입/경력")
+        assertThat(job.employmentType).isEqualTo("주5일")
+        assertThat(job.jobFieldHint).isEqualTo("공학계")
+        assertThat(job.workRegion).isEqualTo("경상남도 창원시 의창구")
+        assertThat(job.recruitCount).isEqualTo("1명")
+        assertThat(job.militaryServiceType).isEqualTo("산업기능요원")
+        // 원문 URL 대응 필드가 없어 content가 채워져도 externalUrl은 여전히 missingFields다.
+        assertThat(job.missingFields).containsExactly("externalUrl")
     }
 
     @Test
