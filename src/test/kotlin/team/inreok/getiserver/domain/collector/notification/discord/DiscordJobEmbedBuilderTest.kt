@@ -2,6 +2,7 @@ package team.inreok.getiserver.domain.collector.notification.discord
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import team.inreok.getiserver.domain.collector.eligibility.JobRelevanceCategory
 import java.time.LocalDateTime
 
 /**
@@ -33,7 +34,7 @@ class DiscordJobEmbedBuilderTest {
         assertThat(embed["url"]).isEqualTo("https://example.com/job/1")
         assertThat(embed["description"]).isEqualTo("새로운 채용공고가 GETI에 등록되었습니다.")
         assertThat(embed["color"]).isEqualTo(DISCORD_EMBED_YELLOW)
-        assertThat(DISCORD_EMBED_YELLOW).isEqualTo(16_705_372)
+        assertThat(DISCORD_EMBED_YELLOW).isEqualTo(16_776_960)
     }
 
     @Test
@@ -142,5 +143,66 @@ class DiscordJobEmbedBuilderTest {
         val embed = (payload["embeds"] as List<Map<String, Any?>>).single()
 
         assertThat((embed["title"] as String).length).isLessThanOrEqualTo(256)
+    }
+
+    @Test
+    fun `직무 분류·고용형태·학력·경력 조건이 있으면 필드로 포함한다`() {
+        val payload =
+            DiscordJobEmbedBuilder.buildPayload(
+                JobNotificationEmbedInput(
+                    jobId = 1L,
+                    sourceDisplayName = "JOB-ALIO",
+                    title = "제목",
+                    companyName = "기업",
+                    externalUrl = null,
+                    recruitmentEndedAt = null,
+                    notifiedAt = notifiedAt,
+                    employmentType = "정규직",
+                    educationCondition = "학력무관",
+                    careerCondition = "신입",
+                    relevanceCategory = JobRelevanceCategory.DIRECT_IT,
+                ),
+            )
+
+        @Suppress("UNCHECKED_CAST")
+        val embed = (payload["embeds"] as List<Map<String, Any?>>).single()
+
+        @Suppress("UNCHECKED_CAST")
+        val fields = (embed["fields"] as List<Map<String, Any?>>).associate { it["name"] to it["value"] }
+
+        // DiscordTextSanitizer가 Discord Markdown 특수문자(밑줄 포함)를 Escape하므로
+        // "DIRECT_IT"의 밑줄도 Escape된 형태로 나온다.
+        assertThat(fields["직무 분류"]).isEqualTo("DIRECT\\_IT")
+        assertThat(fields["고용형태"]).isEqualTo("정규직")
+        assertThat(fields["학력 조건"]).isEqualTo("학력무관")
+        assertThat(fields["경력 조건"]).isEqualTo("신입")
+    }
+
+    @Test
+    fun `직무 분류·고용형태·학력·경력 조건이 없거나 공백이면 필드를 생성하지 않는다`() {
+        val payload =
+            DiscordJobEmbedBuilder.buildPayload(
+                JobNotificationEmbedInput(
+                    jobId = 1L,
+                    sourceDisplayName = "JOB-ALIO",
+                    title = "제목",
+                    companyName = "기업",
+                    externalUrl = null,
+                    recruitmentEndedAt = null,
+                    notifiedAt = notifiedAt,
+                    employmentType = " ",
+                    educationCondition = null,
+                    careerCondition = null,
+                    relevanceCategory = null,
+                ),
+            )
+
+        @Suppress("UNCHECKED_CAST")
+        val embed = (payload["embeds"] as List<Map<String, Any?>>).single()
+
+        @Suppress("UNCHECKED_CAST")
+        val fieldNames = (embed["fields"] as List<Map<String, Any?>>).map { it["name"] }
+
+        assertThat(fieldNames).doesNotContain("직무 분류", "고용형태", "학력 조건", "경력 조건")
     }
 }

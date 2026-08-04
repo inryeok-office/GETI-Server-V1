@@ -3,6 +3,9 @@ package team.inreok.getiserver.domain.collector.service.impl
 import org.slf4j.LoggerFactory
 import org.springframework.core.task.TaskExecutor
 import org.springframework.stereotype.Service
+import team.inreok.getiserver.domain.collector.eligibility.JobEligibilityPolicy
+import team.inreok.getiserver.domain.collector.eligibility.JobEligibilityStatus
+import team.inreok.getiserver.domain.collector.eligibility.JobRelevanceCategory
 import team.inreok.getiserver.domain.collector.entity.CollectionRun
 import team.inreok.getiserver.domain.collector.entity.CollectionRunError
 import team.inreok.getiserver.domain.collector.entity.JobSource
@@ -40,6 +43,9 @@ import java.time.LocalDateTime
  * Convention). 동일 수집 중복 실행 방지는 ShedLock 같은 분산 Lock 없이, 같은 Source에 이미
  * PENDING/RUNNING CollectionRun이 있는지로 판정한다(단일 Instance 배포 기준, 최종 보고 참고).
  */
+@Suppress("TooManyFunctions")
+// 각 함수가 단일 책임(판정/저장/알림/실패 처리 등)을 좁게 나눠 맡고 있어 함수를 더 합치면
+// 오히려 executeRun 흐름을 읽기 어려워진다고 판단해 Class를 분리하는 대신 Suppress를 선택했다.
 @Service
 class CollectorExecutionServiceImpl(
     private val jobSourceRepository: JobSourceRepository,
@@ -154,6 +160,7 @@ class CollectorExecutionServiceImpl(
         var successCount = 0
         var failureCount = 0
         var partialQualityCount = 0
+        val eligibility = EligibilityStats()
         // finishAsCompleted가 source.lastSuccessAt을 갱신하기 전에 판정해야 한다 — "이 Provider의
         // 첫 성공 Run인지"가 초기 수집 알림 억제 정책(app.discord.job-notification.notify-initial-import)의
         // 기준이다(Issue #62 확장 범위).
@@ -172,10 +179,80 @@ class CollectorExecutionServiceImpl(
 
         result.jobs.forEach { job ->
             if (job.dataQualityStatus == JobDataQualityStatus.PARTIAL) partialQualityCount++
-            if (upsertJob(requireNotNull(current.id), source, job, isInitialImport)) successCount++ else failureCount++
+            when (processCollectedJob(requireNotNull(current.id), source, job, isInitialImport, eligibility)) {
+                JobProcessOutcome.SUCCESS -> successCount++
+                JobProcessOutcome.FAILURE -> failureCount++
+                JobProcessOutcome.EXCLUDED -> eligibility.excludedCount++
+            }
         }
 
-        current = finishAsCompleted(current, source, successCount, failureCount, partialQualityCount)
+        current =
+            finishAsCompleted(
+                current,
+                source,
+                successCount,
+                failureCount,
+                partialQualityCount,
+                eligibility,
+                result.requestCount,
+            )
+    }
+
+    private enum class JobProcessOutcome { SUCCESS, FAILURE, EXCLUDED }
+
+    /**
+     * 공고 하나를 적합성 판정 → (통과 시) Upsert 순서로 처리한다. GETI는 최대한 많은 공고를
+     * 저장하는 서비스가 아니라 마이스터고 학생이 실제로 지원·진로 탐색에 활용할 수 있는 공고만
+     * 수집한다(Issue #62 확장 범위, "GETI 공고 수집 범위" 참고). 제외된 공고는 저장·알림
+     * 대상에서 빠지고 실패로 집계하지 않는다(판정 자체가 정상 동작이므로 CollectionRunError를
+     * 남기지 않는다).
+     */
+    private fun processCollectedJob(
+        runId: Long,
+        source: JobSource,
+        job: NormalizedCollectedJob,
+        isInitialImport: Boolean,
+        eligibility: EligibilityStats,
+    ): JobProcessOutcome {
+        val decision = JobEligibilityPolicy.evaluate(job)
+        if (decision.status == JobEligibilityStatus.EXCLUDED) {
+            log.debug(
+                "공고 적합성 판정 제외: sourceCode={}, externalJobId={}, reason={}",
+                source.sourceCode,
+                job.externalJobId,
+                decision.reason,
+            )
+            return JobProcessOutcome.EXCLUDED
+        }
+
+        eligibility.record(decision.category, decision.status == JobEligibilityStatus.REVIEW_REQUIRED)
+        return if (upsertJob(runId, source, job, isInitialImport, decision.category)) {
+            JobProcessOutcome.SUCCESS
+        } else {
+            JobProcessOutcome.FAILURE
+        }
+    }
+
+    /** Provider가 반환한 공고를 적합성 판정 결과별로 집계한다(제외 이유별 상세는 로그에만 남긴다). */
+    private class EligibilityStats {
+        var excludedCount = 0
+        var reviewRequiredCount = 0
+        var directItCount = 0
+        var relatedTechCount = 0
+        var publicFinanceGeneralCount = 0
+
+        fun record(
+            category: JobRelevanceCategory?,
+            reviewRequired: Boolean,
+        ) {
+            if (reviewRequired) reviewRequiredCount++
+            when (category) {
+                JobRelevanceCategory.DIRECT_IT -> directItCount++
+                JobRelevanceCategory.RELATED_TECH -> relatedTechCount++
+                JobRelevanceCategory.PUBLIC_FINANCE_GENERAL -> publicFinanceGeneralCount++
+                null -> Unit
+            }
+        }
     }
 
     /**
@@ -189,6 +266,7 @@ class CollectorExecutionServiceImpl(
         source: JobSource,
         job: NormalizedCollectedJob,
         isInitialImport: Boolean,
+        category: JobRelevanceCategory?,
     ): Boolean =
         try {
             val company =
@@ -210,7 +288,7 @@ class CollectorExecutionServiceImpl(
                     ),
                 )
             if (result.outcome == JobImportOutcome.CREATED) {
-                notifyNewJob(result.jobId, source, job, isInitialImport)
+                notifyNewJob(result.jobId, source, job, isInitialImport, category)
             }
             true
         } catch (ex: RuntimeException) {
@@ -227,6 +305,7 @@ class CollectorExecutionServiceImpl(
         source: JobSource,
         job: NormalizedCollectedJob,
         isInitialImport: Boolean,
+        category: JobRelevanceCategory?,
     ) {
         try {
             jobNotificationService.enqueueIfEligible(
@@ -238,6 +317,10 @@ class CollectorExecutionServiceImpl(
                     companyName = job.companyName,
                     externalUrl = job.externalUrl,
                     recruitmentEndedAt = job.endDate,
+                    employmentType = job.employmentType,
+                    educationCondition = job.educationCondition,
+                    careerCondition = job.careerCondition,
+                    relevanceCategory = category,
                 ),
                 isInitialImport = isInitialImport,
             )
@@ -279,7 +362,9 @@ class CollectorExecutionServiceImpl(
         source.lastError = message
         jobSourceRepository.saveAndFlush(source)
 
-        notifyRunCompleted(saved, source, failureReason = message)
+        // 첫 페이지/첫 목록 조회에서 실패했으므로 실제 발생한 요청은 1건이다(각 Provider의
+        // collect()는 첫 페이지가 실패하면 그대로 예외를 던진다).
+        notifyRunCompleted(saved, source, failureReason = message, eligibility = EligibilityStats(), requestCount = 1)
     }
 
     private fun finishAsCompleted(
@@ -288,6 +373,8 @@ class CollectorExecutionServiceImpl(
         successCount: Int,
         failureCount: Int,
         partialQualityCount: Int,
+        eligibility: EligibilityStats,
+        requestCount: Int,
     ): CollectionRun {
         run.successCount = successCount
         run.failureCount = failureCount
@@ -310,7 +397,24 @@ class CollectorExecutionServiceImpl(
         }
         jobSourceRepository.saveAndFlush(source)
 
-        notifyRunCompleted(saved, source, failureReason = null)
+        log.info(
+            "Collector 실행 완료: sourceCode={}, runId={}, 원본조회={}, 성공={}, 실패={}, 품질경고={}, " +
+                "적합성제외={}, DIRECT_IT={}, RELATED_TECH={}, PUBLIC_FINANCE_GENERAL={}, 확인필요={}, API요청={}",
+            source.sourceCode,
+            saved.id,
+            successCount + failureCount + eligibility.excludedCount,
+            successCount,
+            failureCount,
+            partialQualityCount,
+            eligibility.excludedCount,
+            eligibility.directItCount,
+            eligibility.relatedTechCount,
+            eligibility.publicFinanceGeneralCount,
+            eligibility.reviewRequiredCount,
+            requestCount,
+        )
+
+        notifyRunCompleted(saved, source, failureReason = null, eligibility = eligibility, requestCount = requestCount)
         return saved
     }
 
@@ -322,6 +426,8 @@ class CollectorExecutionServiceImpl(
         run: CollectionRun,
         source: JobSource,
         failureReason: String?,
+        eligibility: EligibilityStats,
+        requestCount: Int,
     ) {
         try {
             collectionRunNotificationSender.notify(
@@ -333,6 +439,12 @@ class CollectorExecutionServiceImpl(
                     totalCount = run.totalCount,
                     successCount = run.successCount,
                     failureCount = run.failureCount,
+                    apiRequestCount = requestCount,
+                    excludedCount = eligibility.excludedCount,
+                    directItCount = eligibility.directItCount,
+                    relatedTechCount = eligibility.relatedTechCount,
+                    publicFinanceGeneralCount = eligibility.publicFinanceGeneralCount,
+                    reviewRequiredCount = eligibility.reviewRequiredCount,
                     partialQualityCount = run.partialQualityCount,
                     startedAt = run.startedAt,
                     finishedAt = requireNotNull(run.finishedAt),

@@ -63,6 +63,10 @@ class JobNotificationServiceImpl(
                     companyName = trigger.companyName,
                     externalUrl = trigger.externalUrl,
                     recruitmentEndedAt = trigger.recruitmentEndedAt,
+                    employmentType = trigger.employmentType,
+                    educationCondition = trigger.educationCondition,
+                    careerCondition = trigger.careerCondition,
+                    relevanceCategory = trigger.relevanceCategory,
                 ),
             )
         } catch (ex: DataIntegrityViolationException) {
@@ -103,6 +107,10 @@ class JobNotificationServiceImpl(
             externalUrl = delivery.externalUrl,
             recruitmentEndedAt = delivery.recruitmentEndedAt,
             notifiedAt = LocalDateTime.now(),
+            employmentType = delivery.employmentType,
+            educationCondition = delivery.educationCondition,
+            careerCondition = delivery.careerCondition,
+            relevanceCategory = delivery.relevanceCategory,
         )
 
     private fun markSent(

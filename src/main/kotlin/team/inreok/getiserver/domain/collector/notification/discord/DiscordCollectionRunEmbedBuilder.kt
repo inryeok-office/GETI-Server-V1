@@ -25,6 +25,15 @@ data class CollectionRunSummaryEmbedInput(
     val finishedAt: LocalDateTime,
     /** Provider 실행 자체가 실패한 경우의 사유(finishAsProviderFailure). 정상 종료면 null. */
     val failureReason: String?,
+    /** 이번 실행이 실제로 발생시킨 외부 API 요청(Page/상세 조회 포함) 수. */
+    val apiRequestCount: Int = 0,
+    /** 적합성 판정(JobEligibilityPolicy)으로 저장 대상에서 제외한 공고 수. */
+    val excludedCount: Int = 0,
+    val directItCount: Int = 0,
+    val relatedTechCount: Int = 0,
+    val publicFinanceGeneralCount: Int = 0,
+    /** 저장은 했지만 자격 조건 확인이 필요한 공고 수(예: 정보처리 산업기능요원). */
+    val reviewRequiredCount: Int = 0,
 )
 
 /**
@@ -53,6 +62,12 @@ object DiscordCollectionRunEmbedBuilder {
                 add(field("성공", input.successCount.toString()))
                 add(field("실패", input.failureCount.toString()))
                 if (input.partialQualityCount > 0) add(field("품질 경고", input.partialQualityCount.toString()))
+                if (input.excludedCount > 0) add(field("적합성 제외", input.excludedCount.toString()))
+                if (hasClassificationBreakdown(input)) {
+                    add(field("적합성 분류", classificationSummary(input)))
+                }
+                if (input.reviewRequiredCount > 0) add(field("확인 필요", input.reviewRequiredCount.toString()))
+                add(field("API 요청 수", input.apiRequestCount.toString()))
                 input.failureReason?.let {
                     add(field("실패 사유", DiscordTextSanitizer.sanitize(it, MAX_FAILURE_REASON)))
                 }
@@ -80,6 +95,13 @@ object DiscordCollectionRunEmbedBuilder {
             "allowed_mentions" to mapOf("parse" to emptyList<String>()),
         )
     }
+
+    private fun hasClassificationBreakdown(input: CollectionRunSummaryEmbedInput): Boolean =
+        input.directItCount > 0 || input.relatedTechCount > 0 || input.publicFinanceGeneralCount > 0
+
+    private fun classificationSummary(input: CollectionRunSummaryEmbedInput): String =
+        "DIRECT_IT ${input.directItCount} · RELATED_TECH ${input.relatedTechCount} · " +
+            "PUBLIC_FINANCE_GENERAL ${input.publicFinanceGeneralCount}"
 
     private data class StatusPresentation(
         val emoji: String,

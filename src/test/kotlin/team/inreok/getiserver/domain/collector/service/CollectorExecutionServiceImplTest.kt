@@ -11,6 +11,7 @@ import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
 import org.mockito.Mockito.atLeast
+import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
@@ -255,6 +256,42 @@ class CollectorExecutionServiceImplTest {
         assertThat(finalRun.successCount).isEqualTo(2)
         assertThat(finalRun.failureCount).isEqualTo(0)
         assertThat(finalRun.partialQualityCount).isEqualTo(1)
+    }
+
+    @Test
+    fun `적합성 판정에서 제외된 공고는 저장·알림 시도 없이 성공도 실패도 아닌 것으로 집계된다`() {
+        // GETI는 최대한 많은 공고를 저장하는 서비스가 아니라 마이스터고 학생이 실제로 지원·진로
+        // 탐색에 활용할 수 있는 공고만 수집한다(Issue #62 확장 범위). 대졸 필수 공고는
+        // JobEligibilityPolicy가 EXCLUDED로 판정해야 한다.
+        val source = sourceOf()
+        given(jobSourceRepository.findAllByOrderBySourceCodeAsc()).willReturn(listOf(source))
+        given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
+        given(collectionRunRepository.saveAndFlush(anyCollectionRun())).willAnswer(::assignIdIfAbsent)
+
+        val excludedJob =
+            NormalizedCollectedJob(
+                sourceCode = JobSourceCode.MMA,
+                externalJobId = "EXT-EXCLUDED",
+                title = "백엔드 개발자",
+                companyName = "인력개발원",
+                collectedAt = now,
+                dataQualityStatus = JobDataQualityStatus.COMPLETE,
+                qualificationDetail = "4년제 대학교 졸업 필수",
+            )
+        val provider =
+            FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(jobs = listOf(excludedJob)) }
+        val service = serviceWith(provider)
+
+        service.runDailyCollection()
+
+        val captor = ArgumentCaptor.forClass(CollectionRun::class.java)
+        verify(collectionRunRepository, times(3)).saveAndFlush(captor.capture())
+        val finalRun = captor.allValues.last()
+        assertThat(finalRun.status).isEqualTo(CollectionRunStatus.SUCCESS)
+        assertThat(finalRun.successCount).isEqualTo(0)
+        assertThat(finalRun.failureCount).isEqualTo(0)
+        verify(companyExternalImportUseCase, never()).findOrCreateExternal(anyImportCommand())
+        verify(collectedJobUpsertUseCase, never()).upsert(anyUpsertCommand())
     }
 
     @Test

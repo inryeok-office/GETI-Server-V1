@@ -4,7 +4,8 @@
 --
 -- Webhook URL은 저장하지 않는다(환경변수로만 참조). 재시도 시 Discord Embed Payload 전체를
 -- 다시 만들 때 필요한 최소 표시 필드(title/company_name/source_display_name/external_url/
--- recruitment_ended_at)만 생성 시점 값을 그대로 보존한다 — Collector 도메인에 Job 조회용
+-- recruitment_ended_at/employment_type/education_condition/career_condition/
+-- relevance_category)만 생성 시점 값을 그대로 보존한다 — Collector 도메인에 Job 조회용
 -- Named Interface를 새로 추가하는 대신 택한 최소 범위 절충이며, Discord로 보내는 Embed
 -- 자체(색상·Footer 등 Discord 전용 구조)나 원본 Provider 응답은 저장하지 않는다.
 CREATE TABLE job_notification_deliveries (
@@ -16,6 +17,12 @@ CREATE TABLE job_notification_deliveries (
     company_name VARCHAR(255) NOT NULL,
     external_url VARCHAR(2000),
     recruitment_ended_at TIMESTAMP,
+    -- Issue #62 확장 범위(적합성 판정)에서 추가한 표시용 스냅샷 필드. 모두 nullable이며
+    -- Provider가 값을 주지 않으면 비워 둔다.
+    employment_type VARCHAR(255),
+    education_condition VARCHAR(255),
+    career_condition VARCHAR(255),
+    relevance_category VARCHAR(30),
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     attempt_count INTEGER NOT NULL DEFAULT 0,
     next_retry_at TIMESTAMP,
@@ -32,6 +39,7 @@ CREATE TABLE job_notification_deliveries (
     CONSTRAINT ck_job_notification_deliveries_attempt_count CHECK (attempt_count >= 0)
 );
 
--- 재시도 대상 조회(status IN (PENDING, FAILED) AND next_retry_at <= now 또는 NULL) 기준.
+-- 재시도 대상 조회(PENDING은 무조건, FAILED는 next_retry_at이 지난 경우만) 기준.
+-- JobNotificationDeliveryRepository.findDueForRetry 참고(PR #68 Code Review Finding #1).
 CREATE INDEX idx_job_notification_deliveries_status_next_retry
     ON job_notification_deliveries (status, next_retry_at);

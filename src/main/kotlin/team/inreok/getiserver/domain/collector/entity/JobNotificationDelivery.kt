@@ -10,6 +10,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
+import team.inreok.getiserver.domain.collector.eligibility.JobRelevanceCategory
 import team.inreok.getiserver.domain.collector.entity.type.JobNotificationDeliveryStatus
 import java.time.LocalDateTime
 
@@ -36,6 +37,15 @@ class JobNotificationDelivery(
     val externalUrl: String? = null,
     @Column(name = "recruitment_ended_at")
     val recruitmentEndedAt: LocalDateTime? = null,
+    @Column(name = "employment_type", length = 255)
+    val employmentType: String? = null,
+    @Column(name = "education_condition", length = 255)
+    val educationCondition: String? = null,
+    @Column(name = "career_condition", length = 255)
+    val careerCondition: String? = null,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "relevance_category", length = 30)
+    val relevanceCategory: JobRelevanceCategory? = null,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

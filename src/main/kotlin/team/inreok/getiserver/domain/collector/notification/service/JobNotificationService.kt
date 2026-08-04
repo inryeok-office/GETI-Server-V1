@@ -1,5 +1,6 @@
 package team.inreok.getiserver.domain.collector.notification.service
 
+import team.inreok.getiserver.domain.collector.eligibility.JobRelevanceCategory
 import java.time.LocalDateTime
 
 /**
@@ -32,4 +33,8 @@ data class JobNotificationTrigger(
     val companyName: String,
     val externalUrl: String?,
     val recruitmentEndedAt: LocalDateTime?,
+    val employmentType: String? = null,
+    val educationCondition: String? = null,
+    val careerCondition: String? = null,
+    val relevanceCategory: JobRelevanceCategory? = null,
 )
