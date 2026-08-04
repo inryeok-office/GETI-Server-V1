@@ -1,0 +1,17 @@
+# develop Branch CD 배포(EC2) 전용 Profile이다(docs/development/cd.md). Spring Profile Group
+# (spring.profiles.group.develop: local, application.yaml 참고)으로 local의 PostgreSQL/Redis/
+# JWT 등 Infra 기본값을 그대로 물려받고, 이 파일은 Collector 화면 검증용 Seed 기본값만
+# 재정의한다. 실제 Provider 인증키/외부 Scheduler는 여기서도 켜지 않는다(기본 false 유지) —
+# develop 서버에는 실제 API Key를 배치하지 않는다(Issue #62).
+app:
+  collector:
+    seed:
+      enabled: ${COLLECTOR_SEED_ENABLED:true}
+  discord:
+    # develop은 webhook-url 기본값이 없어(base application.yaml) Secret을 실제로 등록하기 전까지는
+    # enabled를 true로 재정의해도 isConfigured()가 false로 남아 안전하다. 이후 GitHub Secret
+    # DISCORD_JOB_WEBHOOK_URL을 등록하면 재배포 없이 그대로 활성화되게 하기 위한 기본값이다.
+    # Seed(CollectorDevSeedRunner)는 CollectorExecutionServiceImpl을 거치지 않아 이 알림을
+    # 절대 발생시키지 않는다.
+    job-notification:
+      enabled: ${DISCORD_JOB_NOTIFICATION_ENABLED:true}

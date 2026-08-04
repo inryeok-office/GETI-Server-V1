@@ -32,6 +32,14 @@ interface CompanyRepository : JpaRepository<Company, Long> {
         id: Long,
     ): Boolean
 
+    // Collector의 외부 기업 Find-or-Create(CompanyExternalImportUseCase)가 기존 companies와
+    // 동일한 (name, type) 중복 판정 기준(Issue #56, uk_companies_name_type_active)을 재사용할 때
+    // 사용한다. existsBy...는 존재 여부만 알려줘 이미 있는 기업의 ID를 알 수 없으므로 별도로 둔다.
+    fun findByNameIgnoreCaseAndTypeAndDeletedAtIsNull(
+        name: String,
+        type: CompanyType,
+    ): Company?
+
     // :query는 Service 계층에서 LIKE Wildcard(%, _)와 Escape 문자(\)를 미리 이스케이프해 전달한다
     // (domain.company.service.escapeLikePattern 참고). null이면 이름 조건을 적용하지 않는다.
     @Query(

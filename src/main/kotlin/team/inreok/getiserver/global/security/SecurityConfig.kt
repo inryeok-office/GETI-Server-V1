@@ -86,9 +86,17 @@ class SecurityConfig(
                 // 더 구체적인 admin 경로를 먼저 선언해야 아래 조회 규칙에 가려지지 않는다.
                 authorize("/api/v1/admin/jobs", hasAnyRole("TEACHER", "DEVELOPER"))
                 authorize("/api/v1/admin/jobs/**", hasAnyRole("TEACHER", "DEVELOPER"))
+                // Collector 운영(수집원 관리·수동 실행·수집 실행 이력)은 개발자만 접근한다(Issue #62).
+                authorize("/api/v1/admin/job-sources", hasRole("DEVELOPER"))
+                authorize("/api/v1/admin/job-sources/**", hasRole("DEVELOPER"))
+                authorize("/api/v1/admin/collector-actions", hasRole("DEVELOPER"))
+                authorize("/api/v1/admin/collection-runs", hasRole("DEVELOPER"))
+                authorize("/api/v1/admin/collection-runs/**", hasRole("DEVELOPER"))
                 // 공고 조회(목록·상세)는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
                 authorize("/api/v1/jobs", authenticated)
                 authorize("/api/v1/jobs/**", authenticated)
+                // 공개 공고 출처 목록(JobSourceController)도 인증된 사용자 모두 접근할 수 있다(Issue #62).
+                authorize("/api/v1/job-sources", authenticated)
                 authorize(anyRequest, permitAll)
             }
             exceptionHandling {

@@ -8,10 +8,11 @@ GETI-Server는 공통 설정과 환경별 설정을 분리하고, Secret을 저�
 | --- | --- | --- |
 | 공통 | `src/main/resources/application.yaml` | 모든 환경에서 동일하고 Secret이 아닌 설정. 현재는 `spring.application.name`만 있다. |
 | `local` | `src/main/resources/application-local.yaml` | 개발자 로컬 실행에 필요한 안전한 Override. 현재는 애플리케이션 Package(`team.inreok.getiserver`) Logging 수준을 `DEBUG`로 높이는 설정만 있다. |
+| `develop` | `src/main/resources/application-develop.yaml` | `develop` Branch CD 배포(EC2) 전용(`docs/development/cd.md`). Spring Profile Group(`spring.profiles.group.develop: local`, `application.yaml`)으로 `local`의 Infra 기본값을 그대로 물려받고, Collector 개발용 Seed 기본값(`COLLECTOR_SEED_ENABLED=true`)만 재정의한다(Issue #62). `compose.yaml`의 `app` Service 기본 `SPRING_PROFILES_ACTIVE`가 이 Profile이다. |
 | `test` | (파일 없음) | 테스트는 `spring-boot-starter-data-jpa-test`/`webmvc-test`가 제공하는 `com.h2database:h2`(`testRuntimeOnly`)를 Spring Boot가 자동으로 감지해 In-memory DB로 JPA Context를 구성한다. 현재 Override가 필요한 설정이 없어 `application-test.yaml`을 만들지 않았다. |
-| `prod` | (파일 없음) | 현재 운영 환경에 필요한 실제 설정이 없다. 빈 파일을 미리 만들지 않았다. 운영 전용 값이 실제로 생기면 이 표와 함께 `application-prod.yaml`을 추가한다. |
+| `prod` | `src/main/resources/application-prod.yaml` | 운영 환경 전용. Secret은 기본값 없이 필수 환경 변수로만 받아 누락 시 기동을 실패시킨다(Fail-Fast). Swagger UI/OpenAPI JSON을 비활성화한다. |
 
-파일이 없는 Profile은 공통 설정만 적용된다. 이는 의도된 상태이며 누락이 아니다(예: `prod`가 별도 Override 없이 공통 설정을 그대로 쓰는 것은 `local`의 `DEBUG` Logging이 운영에 새어 나가지 않는다는 뜻이기도 하다).
+파일이 없는 Profile은 공통 설정만 적용된다. 이는 의도된 상태이며 누락이 아니다.
 
 ## Profile 활성화
 
@@ -50,8 +51,27 @@ Profile을 지정하지 않으면 공통 설정만 적용된다(현재는 `local
 | `APP_GIT_SHA` | `app.deployment.git-sha` | 선택 | 전체 | 아니오 | `unknown` |
 | `APP_BUILD_TIME` | `app.deployment.build-time` | 선택 | 전체 | 아니오 | `unknown` |
 | `APP_ENVIRONMENT` | `app.deployment.environment` | 선택 | 전체 | 아니오 | `local` |
+| `COLLECTOR_MMA_ENABLED` | `app.collector.provider.mma.enabled` | 선택 | 전체 | 아니오 | `false` |
+| `COLLECTOR_MMA_SERVICE_KEY` | `app.collector.provider.mma.service-key` | 선택 | 전체 | 예 | 없음(비어 있으면 `configured=false`) |
+| `COLLECTOR_JOB_ALIO_ENABLED` | (아직 미연동, 값 이름만 예약) | 선택 | 전체 | 아니오 | `false` |
+| `COLLECTOR_JOB_ALIO_SERVICE_KEY` | (아직 미연동, 값 이름만 예약) | 선택 | 전체 | 예 | 없음 |
+| `COLLECTOR_CLEAN_EYE_ENABLED` | (아직 미연동, 값 이름만 예약) | 선택 | 전체 | 아니오 | `false` |
+| `COLLECTOR_CLEAN_EYE_SERVICE_KEY` | (아직 미연동, 값 이름만 예약) | 선택 | 전체 | 예 | 없음 |
+| `COLLECTOR_NARA_ILTEO_ENABLED` | (아직 미연동, 값 이름만 예약) | 선택 | 전체 | 아니오 | `false` |
+| `COLLECTOR_NARA_ILTEO_SERVICE_KEY` | (아직 미연동, 값 이름만 예약) | 선택 | 전체 | 예 | 없음 |
+| `COLLECTOR_SARAMIN_ENABLED` | (아직 미연동, 값 이름만 예약) | 선택 | 전체 | 아니오 | `false` |
+| `COLLECTOR_SARAMIN_ACCESS_KEY` | (아직 미연동, 값 이름만 예약) | 선택 | 전체 | 예 | 없음 |
+| `COLLECTOR_EXTERNAL_SCHEDULER_ENABLED` | `app.collector.scheduler.external-enabled` | 선택 | 전체 | 아니오 | `false` |
+| `COLLECTOR_SEED_ENABLED` | `app.collector.seed.enabled` | 선택 | 전체 | 아니오 | `false`(`develop`만 `true`) |
+| `DISCORD_JOB_NOTIFICATION_ENABLED` | `app.discord.job-notification.enabled` | 선택 | 전체 | 아니오 | `false`(`develop`만 `true`) |
+| `DISCORD_JOB_WEBHOOK_URL` | `app.discord.job-notification.webhook-url` | 선택 | 전체 | 예 | 없음(비어 있으면 `isConfigured()=false`) |
+| `DISCORD_JOB_NOTIFY_INITIAL_IMPORT` | `app.discord.job-notification.notify-initial-import` | 선택 | 전체 | 아니오 | `false` |
 
 `APP_VERSION`/`APP_GIT_SHA`/`APP_BUILD_TIME`/`APP_ENVIRONMENT`는 `/actuator/info`의 `deployment` Field(`DeploymentInfoContributor`)와 CD의 배포 SHA 검증에 쓰인다. CD가 Docker Build/Runtime 시점에 실제 값을 주입하며([`cd.md`](./cd.md) 참고), 로컬 개발자가 직접 설정할 필요가 없어(안전한 기본값으로 기동됨) `.env.example`에는 포함하지 않았다.
+
+`COLLECTOR_*`는 Issue #62(Collector Provider 연동)에서 추가했다. `COLLECTOR_MMA_*`만 실제 Provider 구현(`MmaCollectorProvider`)이 연결되어 있고, 나머지 세 Provider(`JOB_ALIO`/`CLEAN_EYE`/`NARA_ILTEO`)는 공식 활용신청 상세 페이지가 Base URL·Query Parameter·응답 필드를 공개하지 않아 이번 범위에서 추측 구현을 하지 않았다 — 값 이름만 `.env.example`에 예약해 두고 실제 Adapter는 후속 작업에서 연결한다. `COLLECTOR_SEED_ENABLED=true`를 `prod`/`production` Profile에서 사용하면 `CollectorSeedProdGuard`가 애플리케이션 기동을 거부한다(Fail-Fast).
+
+`DISCORD_JOB_*`는 Issue #62 확장 범위(Collector 실제 Provider 수집으로 새로 등록(CREATED)된 공고에 대한 Discord Webhook 알림)에서 추가했다. CD 배포 알림(`DISCORD_CD_WEBHOOK_URL`)과는 완전히 별개의 Secret이며([`cd.md`](./cd.md#collector-신규-공고-discord-webhook-secret-전달-discord_job_webhook_url) 참고), 세 값 모두 설정하지 않아도 애플리케이션·Collector·공고 등록은 정상 동작하고 알림만 비활성 상태로 남는다. `DISCORD_JOB_NOTIFY_INITIAL_IMPORT=false`(기본값)는 해당 Provider의 최초 성공 수집에서는 개별 알림을 보내지 않는다(수백 건이 한 번에 쌓일 수 있는 최초 전체 수집에서 Discord Rate Limit/스팸을 피하기 위함) — 이후 일일 증분 수집의 신규 공고부터 개별 알림이 발송된다. `CollectorDevSeedRunner`(개발용 Fixture)는 이 알림 경로를 거치지 않아 Seed 데이터로는 알림이 발생하지 않는다.
 
 PostgreSQL/Redis 연결 환경 변수(`DATABASE_URL` 등)는 이 표에 중복하지 않고 [`persistence.md`](./persistence.md)에서 관리한다.
 

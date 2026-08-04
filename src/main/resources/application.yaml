@@ -7,6 +7,12 @@ spring:
       ddl-auto: validate
   flyway:
     clean-disabled: true
+  profiles:
+    # develop Profile은 local의 PostgreSQL/Redis/JWT 등 Infra 기본값을 그대로 재사용하고
+    # Collector Seed 기본값만 다르게 둔다(Issue #62, docs/development/cd.md). Profile Group을
+    # 활성화하면 develop과 local이 함께 활성화되어 application-local.yaml도 적용된다.
+    group:
+      develop: local
 
 # JWT Access/Refresh Token 만료 시간(초). Secret은 Profile별 실제 값이 필요해 여기(공통 설정)에는
 # 두지 않고 application-local.yaml/application-prod.yaml에서만 정의한다(datasource 설정과 동일한 방식).
@@ -22,6 +28,43 @@ app:
   oauth:
     google:
       scope: openid,email,profile
+  collector:
+    scheduler:
+      # 일일 수집 실행 시각(초 분 시 일 월 요일). 매일 03:00에 실행한다(Issue #62).
+      cron: "0 0 3 * * *"
+      # 기본은 항상 꺼져 있다. 실제 서버에서 자동 외부 호출을 명시적으로 켜야만 동작한다.
+      external-enabled: ${COLLECTOR_EXTERNAL_SCHEDULER_ENABLED:false}
+    # 화면 검증용 개발 Fixture 자동 적재 여부(CollectorDevSeedRunner). 기본은 꺼져 있고
+    # application-develop.yaml만 기본값을 true로 재정의한다. prod/production Profile에서
+    # true로 켜면 애플리케이션이 기동을 거부한다(CollectorSeedProdGuard).
+    seed:
+      enabled: ${COLLECTOR_SEED_ENABLED:false}
+    provider:
+      mma:
+        enabled: ${COLLECTOR_MMA_ENABLED:false}
+        service-key: ${COLLECTOR_MMA_SERVICE_KEY:}
+      job-alio:
+        enabled: ${COLLECTOR_JOB_ALIO_ENABLED:false}
+        service-key: ${COLLECTOR_JOB_ALIO_SERVICE_KEY:}
+      clean-eye:
+        enabled: ${COLLECTOR_CLEAN_EYE_ENABLED:false}
+        service-key: ${COLLECTOR_CLEAN_EYE_SERVICE_KEY:}
+      nara-ilteo:
+        enabled: ${COLLECTOR_NARA_ILTEO_ENABLED:false}
+        service-key: ${COLLECTOR_NARA_ILTEO_SERVICE_KEY:}
+  discord:
+    # Collector가 실제 Provider 수집으로 새로 등록(CREATED)한 공고에 대해서만 보내는 알림이다
+    # (Issue #62 확장 범위). enabled가 false거나 webhook-url이 비어 있으면 애플리케이션·Collector·
+    # 공고 등록은 그대로 정상 동작하고 알림만 비활성 상태로 유지된다(Fail-Fast 아님). CD/기존
+    # 배포 알림(DISCORD_CD_WEBHOOK_URL)과는 별개의 Secret이다 — 절대 같은 값으로 가정하지 않는다.
+    job-notification:
+      enabled: ${DISCORD_JOB_NOTIFICATION_ENABLED:false}
+      webhook-url: ${DISCORD_JOB_WEBHOOK_URL:}
+      # 첫 전체 수집(해당 Provider의 최초 성공 Run)에서도 공고별로 개별 알림을 보낼지 여부.
+      # 기본 false — 최초 수집은 수백 건일 수 있어 Discord Rate Limit/스팸을 피한다.
+      notify-initial-import: ${DISCORD_JOB_NOTIFY_INITIAL_IMPORT:false}
+      # 재시도 대기 중인 Delivery를 다시 살펴보는 주기(ms). 기본 5분.
+      retry-interval-ms: 300000
   # /actuator/info의 "deployment" 필드(DeploymentInfoContributor)가 사용하는 배포 메타데이터다.
   # CD가 Docker Build/Runtime 시점에 APP_VERSION/APP_GIT_SHA/APP_BUILD_TIME/APP_ENVIRONMENT를
   # 주입한다(docs/development/cd.md 참고). version의 "0.0.1-SNAPSHOT" 기본값은 build.gradle.kts의
