@@ -28,6 +28,7 @@ import team.inreok.getiserver.domain.collector.exception.CollectorAlreadyRunning
 import team.inreok.getiserver.domain.collector.exception.JobSourceNotFoundException
 import team.inreok.getiserver.domain.collector.exception.SourceNotApprovedException
 import team.inreok.getiserver.domain.collector.exception.SourceNotConfiguredException
+import team.inreok.getiserver.domain.collector.notification.service.CollectionRunNotificationSender
 import team.inreok.getiserver.domain.collector.notification.service.JobNotificationService
 import team.inreok.getiserver.domain.collector.provider.CollectorCollectionContext
 import team.inreok.getiserver.domain.collector.provider.CollectorCollectionResult
@@ -73,6 +74,9 @@ class CollectorExecutionServiceImplTest {
 
     @Mock
     private lateinit var jobNotificationService: JobNotificationService
+
+    @Mock
+    private lateinit var collectionRunNotificationSender: CollectionRunNotificationSender
 
     // 실제 Bean은 별도 Thread에서 실행하지만, Test는 결정적인 결과 확인을 위해 호출 Thread에서
     // 즉시 실행하는 동기 Fake를 사용한다.
@@ -167,6 +171,7 @@ class CollectorExecutionServiceImplTest {
             collectedJobUpsertUseCase,
             companyExternalImportUseCase,
             jobNotificationService,
+            collectionRunNotificationSender,
             synchronousExecutor,
         )
     }
@@ -304,6 +309,7 @@ class CollectorExecutionServiceImplTest {
                 collectedJobUpsertUseCase,
                 companyExternalImportUseCase,
                 jobNotificationService,
+                collectionRunNotificationSender,
                 synchronousExecutor,
             )
 

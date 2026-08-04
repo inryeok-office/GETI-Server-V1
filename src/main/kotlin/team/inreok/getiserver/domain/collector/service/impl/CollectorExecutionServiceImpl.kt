@@ -14,6 +14,8 @@ import team.inreok.getiserver.domain.collector.exception.CollectorAlreadyRunning
 import team.inreok.getiserver.domain.collector.exception.JobSourceNotFoundException
 import team.inreok.getiserver.domain.collector.exception.SourceNotApprovedException
 import team.inreok.getiserver.domain.collector.exception.SourceNotConfiguredException
+import team.inreok.getiserver.domain.collector.notification.discord.CollectionRunSummaryEmbedInput
+import team.inreok.getiserver.domain.collector.notification.service.CollectionRunNotificationSender
 import team.inreok.getiserver.domain.collector.notification.service.JobNotificationService
 import team.inreok.getiserver.domain.collector.notification.service.JobNotificationTrigger
 import team.inreok.getiserver.domain.collector.provider.CollectorCollectionContext
@@ -47,6 +49,7 @@ class CollectorExecutionServiceImpl(
     private val collectedJobUpsertUseCase: CollectedJobUpsertUseCase,
     private val companyExternalImportUseCase: CompanyExternalImportUseCase,
     private val jobNotificationService: JobNotificationService,
+    private val collectionRunNotificationSender: CollectionRunNotificationSender,
     private val collectorTaskExecutor: TaskExecutor,
 ) : CollectorExecutionService {
     override fun runDailyCollection() {
@@ -265,12 +268,14 @@ class CollectorExecutionServiceImpl(
         run.failureCount = 1
         run.totalCount = 1
         run.finishedAt = LocalDateTime.now()
-        collectionRunRepository.saveAndFlush(run)
+        val saved = collectionRunRepository.saveAndFlush(run)
 
-        source.lastCollectedAt = run.finishedAt
-        source.lastFailureAt = run.finishedAt
+        source.lastCollectedAt = saved.finishedAt
+        source.lastFailureAt = saved.finishedAt
         source.lastError = message
         jobSourceRepository.saveAndFlush(source)
+
+        notifyRunCompleted(saved, source, failureReason = message)
     }
 
     private fun finishAsCompleted(
@@ -300,7 +305,39 @@ class CollectorExecutionServiceImpl(
             source.lastError = "일부 또는 전체 공고 처리에 실패했습니다(failureCount=$failureCount)."
         }
         jobSourceRepository.saveAndFlush(source)
+
+        notifyRunCompleted(saved, source, failureReason = null)
         return saved
+    }
+
+    // Discord 알림 실패가 이미 확정된 Run 결과·Source 상태 저장에 영향을 주면 안 되므로, 여기서
+    // 발생하는 어떤 예외도 삼킨다(로그만 남긴다). 개별 신규 공고 알림과 달리 DB 재시도 대상이
+    // 아니다(Best Effort, 최종 보고 참고).
+    @Suppress("TooGenericExceptionCaught")
+    private fun notifyRunCompleted(
+        run: CollectionRun,
+        source: JobSource,
+        failureReason: String?,
+    ) {
+        try {
+            collectionRunNotificationSender.notify(
+                CollectionRunSummaryEmbedInput(
+                    runId = requireNotNull(run.id),
+                    sourceDisplayName = source.name,
+                    action = run.action,
+                    status = run.status,
+                    totalCount = run.totalCount,
+                    successCount = run.successCount,
+                    failureCount = run.failureCount,
+                    partialQualityCount = run.partialQualityCount,
+                    startedAt = run.startedAt,
+                    finishedAt = requireNotNull(run.finishedAt),
+                    failureReason = failureReason,
+                ),
+            )
+        } catch (ex: Exception) {
+            log.warn("Collection Run 요약 알림 전송 중 오류(runId={})", run.id, ex)
+        }
     }
 
     private companion object {
