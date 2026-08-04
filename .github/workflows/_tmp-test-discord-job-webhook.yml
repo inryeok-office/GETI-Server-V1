@@ -3,8 +3,15 @@ name: (임시) Discord Job Webhook 등록 테스트
 # DISCORD_JOB_WEBHOOK_URL GitHub Secret이 실제로 유효한지 1회성으로 확인하기 위한 임시 Workflow다.
 # Collector 신규 공고 알림 기능(Issue #62 확장 범위) 자체는 이 Workflow를 사용하지 않는다 — 검증이
 # 끝나면 이 파일은 삭제한다.
+#
+# workflow_dispatch는 GitHub 정책상 Default Branch(main)에 있어야만 수동 실행 대상으로 노출되어
+# Feature Branch에서는 바로 실행할 수 없다. 이 Branch에 대한 push 자체를 Trigger로 사용해 별도
+# 병합 없이 1회 실행한 뒤 이 파일을 삭제한다.
 on:
-  workflow_dispatch:
+  push:
+    branches: [feature/62-collector-core]
+    paths:
+      - .github/workflows/_tmp-test-discord-job-webhook.yml
 
 jobs:
   test:
