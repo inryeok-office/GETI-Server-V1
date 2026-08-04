@@ -174,20 +174,52 @@ Spring Data의 `Page<T>`를 API 응답으로 직접 반환하지 않는다. `Pag
 
 ## Actuator / Health
 
-`management.endpoints.web.exposure.include=health`, `management.endpoint.health.show-details=never`를 공통 설정에 명시했다(Spring Boot 기본값과 동일하지만, 향후 실수로 다른 Endpoint가 노출되는 것을 막기 위해 명시적으로 선언했다). `env`/`beans`/`configprops`/`heapdump`/`threaddump`/`loggers`/`metrics` 등은 노출하지 않는다.
+`management.endpoints.web.exposure.include=health,info`, `management.endpoint.health.show-details=never`를 공통 설정에 명시했다(향후 실수로 다른 Endpoint가 노출되는 것을 막기 위해 명시적으로 선언했다). `env`/`beans`/`configprops`/`heapdump`/`threaddump`/`loggers`/`mappings`/`metrics` 등은 노출하지 않는다.
 
-`GET /actuator/health`는 인증이 아직 없는 현재 단계에서 `{"status":"UP"}` 수준의 최소 정보만 반환한다(`show-details=never`). DataSource/Redis Health Indicator는 Spring Boot가 각각 `DataSource`/`RedisConnectionFactory` Bean 존재 시 자동 등록하며, `docker compose --profile app`으로 실제 PostgreSQL/Redis와 함께 기동해 `UP` 응답을 확인했다([Docker app Profile 검증](#docker-연계) 참고). MinIO는 아직 Client 연동이 없어 Custom Health Indicator를 추가하지 않았다.
+`management.endpoint.health.probes.enabled=true`로 Liveness/Readiness Probe를 활성화하고, `management.endpoint.health.group.*`으로 각 Group의 구성원을 명시적으로 제한한다.
+
+| Endpoint | 목적 | 구성원 | 검사하지 않는 것 |
+| --- | --- | --- | --- |
+| `GET /actuator/health` | 기존 호환성을 위해 유지하는 전체 상태(하위 Group 결과를 종합) | (전체) | - |
+| `GET /actuator/health/liveness` | 애플리케이션 프로세스가 요청에 응답할 수 있는지만 확인. PostgreSQL/Redis 장애로 무한 재시작되지 않도록 외부 의존성을 보지 않는다 | `livenessState` | PostgreSQL, Redis, MinIO, Collector 외부 API, Discord Webhook, AI Provider |
+| `GET /actuator/health/readiness` | 실제 요청을 처리할 준비가 됐는지 확인(CD/Docker Health Check가 사용). GETI 서버 운영에 필수적인 PostgreSQL과 Redis만 검사한다 | `readinessState`, `db`, `redis` | MinIO(Application Client 미연동), 모든 Collector 외부 API(사람인/병역일터/JOB-ALIO/클린아이/나라일터/IBK i-ONE JOB/고용24 등), Discord Webhook, AI Provider |
+
+Contributor 이름(`livenessState`/`readinessState`/`db`/`redis`)은 실제 `HealthContributorRegistry`로 확인했다(Spring Boot 4.x는 Health 관련 Class를 `org.springframework.boot.health.*`(별도 Module `spring-boot-health`, `spring-boot-starter-actuator`가 Transitive로 포함)로 재구성했다). `show-details=never`이므로 위 Endpoint는 모두 `{"status":"UP"}`/`{"status":"DOWN"}` 수준만 반환하고 DB/Redis Host·Port·예외 메시지를 노출하지 않는다. Readiness 실패(예: Redis 연결 끊김)는 HTTP 503으로 응답한다.
+
+`db`/`redis` Health Contributor는 Spring Boot가 각각 `DataSource`/`RedisConnectionFactory` Bean 존재 시 자동 등록하며, `docker compose --profile app`으로 실제 PostgreSQL/Redis와 함께 기동해 `UP` 응답을 확인했다([Docker app Profile 검증](#docker-연계) 참고). Testcontainers 기반 검증은 [`HealthReadinessIntegrationTest`](../../src/integrationTest/kotlin/team/inreok/getiserver/global/health/HealthReadinessIntegrationTest.kt)를 따른다.
+
+### Deployment Info (`/actuator/info`)
+
+`GET /actuator/info`는 `DeploymentInfoContributor`(`team.inreok.getiserver.global.health`)가 추가한 `deployment` Field로 배포 메타데이터를 반환한다.
+
+```json
+{
+  "deployment": {
+    "service": "GETI-Server",
+    "version": "0.0.1-SNAPSHOT",
+    "gitSha": "e92f13e5ca589dca98b78e3661158294b146a638",
+    "buildTime": "2026-08-03T15:00:00Z",
+    "environment": "develop"
+  }
+}
+```
+
+값은 `DeploymentInfoProperties`(`app.deployment.*`)가 갖고, CD가 Docker Build/Runtime 시점에 `APP_VERSION`/`APP_GIT_SHA`/`APP_BUILD_TIME`/`APP_ENVIRONMENT` 환경변수로 주입한다([`cd.md`](./cd.md) 참고). `management.info.env.enabled` 같은 무제한 `info.*` 노출은 사용하지 않고, 이 5개 Field만 명시적으로 노출한다 — JWT Secret, OAuth Client Secret, DB/Redis 연결 정보 등은 이 Contributor가 다루는 Field 밖에 있어 노출되지 않는다.
+
+## Security
+
+`/actuator/health`, `/actuator/health/**`, `/actuator/info`는 `SecurityConfig`에서 인증 없이 permitAll로 명시한다(CD Readiness Check, Docker Health Check가 인증 없이 호출해야 하므로). `env`/`beans`/`mappings` 등 노출되지 않은 다른 Actuator Endpoint는 `management.endpoints.web.exposure.include`에도 없어 애초에 404다.
 
 ## Docker 연계
 
-`compose.yaml`의 `app` Service에 Actuator 기반 Health Check를 추가했다.
+`compose.yaml`의 `app` Service Health Check는 단순 Process 생존이 아니라 Readiness(PostgreSQL/Redis 연결 포함)를 기준으로 판단한다.
 
 ```yaml
 healthcheck:
-  test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${SERVER_PORT:-8080}/actuator/health"]
+  test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${SERVER_PORT:-8080}/actuator/health/readiness"]
 ```
 
-Runtime Image(`eclipse-temurin:25.0.3_9-jre-alpine`)에는 `curl`이 없고 Alpine 기본 제공 `wget`(BusyBox)만 있어 `wget --spider`를 사용했다(실제 Image에서 `which curl`/`which wget`으로 확인). `docker compose --profile app up -d --build` 실행 후 `docker compose ps`로 `app` Service가 `healthy`가 되는 것을 확인했다.
+Runtime Image(`eclipse-temurin:25.0.3_9-jre-alpine`)에는 `curl`이 없고 Alpine 기본 제공 `wget`(BusyBox)만 있어 `wget --spider`를 사용했다(실제 Image에서 `which curl`/`which wget`으로 확인). `docker compose --profile app up -d --build` 실행 후 `docker compose ps`로 `app` Service가 `healthy`가 되는 것을 확인했다. 이 `compose.yaml`/`Dockerfile`은 로컬 전체 Container 검증뿐 아니라 CD가 `develop` 배포마다 EC2 서버에서 그대로 실행한다([`docs/development/docker.md`](./docker.md), [`cd.md`](./cd.md) 참고).
 
 ## OpenAPI
 
@@ -216,6 +248,8 @@ Runtime Image(`eclipse-temurin:25.0.3_9-jre-alpine`)에는 `curl`이 없고 Alpi
 | [`RequestIdFilterTest`](../../src/test/kotlin/team/inreok/getiserver/global/web/RequestIdFilterTest.kt) | requestId 생성, Client 값 재사용, 성공/오류 응답 모두 포함 | `@WebMvcTest` + `MockMvc` |
 
 세 Test 모두 `WebTestSupportController`(`src/test`에만 존재)를 대상으로 한다. Production Source에는 예시 Controller를 두지 않았다. `WebTestSupportController`와 Test Class들은 모두 `src/test` Source Set에 있어 `main` Classpath에 포함되지 않고 Spring Modulith Production Module 탐지 대상이 아니다.
+
+Actuator Health/Info는 `src/test/kotlin/team/inreok/getiserver/global/health/`의 `HealthEndpointTest`(Liveness/Readiness/Info 응답과 Secret 미노출, 노출되지 않은 Actuator Endpoint 404), `HealthGroupMembershipTest`(Group 구성원 White-box 검증), `DeploymentInfoPropertiesTest`/`DeploymentInfoContributorTest`(배포 메타데이터 Binding)가 검증한다. PostgreSQL/Redis가 모두 정상일 때 Readiness가 실제로 UP이 되는 경로는 `src/integrationTest`의 `HealthReadinessIntegrationTest`(Testcontainers)가 담당한다.
 
 ## 검증 명령
 

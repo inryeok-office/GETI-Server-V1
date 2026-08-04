@@ -46,6 +46,12 @@ Profile을 지정하지 않으면 공통 설정만 적용된다(현재는 `local
 | 환경 변수 | Spring Property | 필수 여부 | 사용 Profile | Secret 여부 | 기본값 |
 | --- | --- | --- | --- | --- | --- |
 | `SPRING_PROFILES_ACTIVE` | `spring.profiles.active` | 선택 | 전체 | 아니오 | 없음(미지정 시 공통 설정만 적용) |
+| `APP_VERSION` | `app.deployment.version` | 선택 | 전체 | 아니오 | `0.0.1-SNAPSHOT`(build.gradle.kts의 `version`과 동일) |
+| `APP_GIT_SHA` | `app.deployment.git-sha` | 선택 | 전체 | 아니오 | `unknown` |
+| `APP_BUILD_TIME` | `app.deployment.build-time` | 선택 | 전체 | 아니오 | `unknown` |
+| `APP_ENVIRONMENT` | `app.deployment.environment` | 선택 | 전체 | 아니오 | `local` |
+
+`APP_VERSION`/`APP_GIT_SHA`/`APP_BUILD_TIME`/`APP_ENVIRONMENT`는 `/actuator/info`의 `deployment` Field(`DeploymentInfoContributor`)와 CD의 배포 SHA 검증에 쓰인다. CD가 Docker Build/Runtime 시점에 실제 값을 주입하며([`cd.md`](./cd.md) 참고), 로컬 개발자가 직접 설정할 필요가 없어(안전한 기본값으로 기동됨) `.env.example`에는 포함하지 않았다.
 
 PostgreSQL/Redis 연결 환경 변수(`DATABASE_URL` 등)는 이 표에 중복하지 않고 [`persistence.md`](./persistence.md)에서 관리한다.
 

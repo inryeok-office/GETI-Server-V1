@@ -1,6 +1,6 @@
 # CI 및 Repository Policy
 
-GETI-Server는 Pull Request가 Merge되기 전에 코드 품질, 단위 테스트, 통합 테스트, Spring Modulith 구조, Coverage, Build, Docker 구성을 GitHub Actions로 자동 검증한다. 이 문서는 실제 구성한 CI Workflow와 Repository Policy(PR Template, CODEOWNERS, Dependabot, Branch Protection)를 다룬다. CD(배포)는 이 문서의 범위가 아니다.
+GETI-Server는 Pull Request가 Merge되기 전에 코드 품질, 단위 테스트, 통합 테스트, Spring Modulith 구조, Coverage, Build, Docker 구성을 GitHub Actions로 자동 검증한다. 이 문서는 실제 구성한 CI Workflow와 Repository Policy(PR Template, CODEOWNERS, Dependabot, Branch Protection)를 다룬다. CD(배포)는 이 문서의 범위가 아니다 — 실제 구성된 CD Workflow와 Discord 배포 알림은 [`cd.md`](./cd.md)를 따른다.
 
 ## CI와 CD 구분
 

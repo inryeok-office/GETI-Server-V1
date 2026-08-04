@@ -62,6 +62,13 @@ class SecurityConfig(
                 authorize("/v3/api-docs/**", permitAll)
                 authorize("/swagger-ui/**", permitAll)
                 authorize("/swagger-ui.html", permitAll)
+                // CD Readiness Polling과 Docker Health Check가 인증 없이 호출해야 하므로 노출 중인
+                // Actuator Endpoint(health,info, docs/development/cd.md 참고)만 명시적으로 permitAll
+                // 처리한다. env/beans/mappings/heapdump 등 다른 Actuator Endpoint는 management.endpoints
+                // .web.exposure.include에도 없어 애초에 존재하지 않는다.
+                authorize("/actuator/health", permitAll)
+                authorize("/actuator/health/**", permitAll)
+                authorize("/actuator/info", permitAll)
                 authorize("/api/v1/auth/session", authenticated)
                 authorize("/api/v1/auth/logout", authenticated)
                 authorize("/api/v1/me/**", authenticated)

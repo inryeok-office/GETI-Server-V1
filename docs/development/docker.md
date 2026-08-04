@@ -171,12 +171,13 @@ MINIO_CONSOLE_PORT=19001
 
 ## `app` Profile Dockerfile
 
-Root의 `Dockerfile`은 `compose.yaml`의 `app` Service 전용이며 Local 전체 환경 검증 목적이다. 운영 배포용 Image 전략은 아직 확정하지 않았다.
+Root의 `Dockerfile`은 원래 `compose.yaml`의 `app` Service를 통한 Local 전체 환경 검증 목적으로 만들었다. 실제로는 `.github/workflows/cd.yml`이 `develop` Branch 배포마다 EC2 서버에서 이 `Dockerfile`과 `compose.yaml`을 그대로 Build/실행한다(Registry Push 없이 서버에서 직접 Source Build, [`cd.md`](./cd.md) 참고). Registry(GHCR/ECR 등)를 사용하는 별도 운영 Image 전략은 아직 확정하지 않았다 — 이 Compose 구성이 그 역할까지 임시로 겸하고 있다.
 
 - Build Stage: `eclipse-temurin:25.0.3_9-jdk-alpine` — `./gradlew bootJar` 실행(Test는 `bootJar`가 기본으로 실행하지 않아 별도로 Skip 옵션을 주지 않았다)
 - Runtime Stage: `eclipse-temurin:25.0.3_9-jre-alpine` — Build Stage에서 생성한 Jar만 복사
 - Root가 아닌 `spring` User로 실행
-- Application Health Check는 아직 구성하지 않았다. `/actuator/health` 등 실제 Health Endpoint가 없는 상태에서 존재하지 않는 URL을 Health Check에 사용하지 않기 위함이다. Spring Boot Actuator가 도입되면 재검토한다.
+- `ARG`/`ENV`로 `APP_VERSION`/`APP_GIT_SHA`/`APP_BUILD_TIME`을 Runtime Container에 남긴다. `/actuator/info`(`DeploymentInfoContributor`)가 이 값을 반환하고, CD가 배포된 Container의 Git SHA를 검증하는 데 사용한다([`web-api.md`](./web-api.md#deployment-info-actuatorinfo), [`cd.md`](./cd.md) 참고). `APP_ENVIRONMENT`는 Build Argument가 아니라 `compose.yaml`의 Runtime Environment로 전달한다(Image를 다시 Build하지 않고도 배포 환경을 바꿀 수 있게 하기 위함).
+- `compose.yaml`의 `app` Service Health Check는 `/actuator/health/readiness`를 사용한다(PostgreSQL/Redis 연결까지 포함한 실제 요청 처리 준비 상태 기준, 단순 Process 생존이 아님).
 
 ```bash
 docker build -t geti-server:local .
