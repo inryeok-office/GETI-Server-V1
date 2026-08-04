@@ -69,8 +69,12 @@ class CollectorExecutionServiceImpl(
         action: CollectorAction,
         sourceIds: List<Long>,
     ): List<CollectionRun> {
+        // 같은 sourceId가 중복 요청되면 requireRunnable의 중복 실행 검사(existsBySourceIdAndStatusIn)가
+        // 아직 아무 Run도 저장되지 않은 시점에 두 번 다 통과해 같은 Source에 CollectionRun이
+        // 2건 생성될 수 있다(PR #68 Code Review Finding #2) — 검증 전에 먼저 중복을 제거한다.
+        val distinctSourceIds = sourceIds.distinct()
         // 하나라도 검증에 실패하면 어떤 실행도 만들지 않는다(부분 접수 없음).
-        val sources = sourceIds.map(::requireRunnable)
+        val sources = distinctSourceIds.map(::requireRunnable)
 
         val startedAt = LocalDateTime.now()
         val runs =

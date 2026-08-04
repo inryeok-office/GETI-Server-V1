@@ -63,9 +63,6 @@ class JobNotificationServiceImplTest {
 
     private fun anyPayload(): Map<String, Any?> = any<Map<String, Any?>>() ?: emptyMap()
 
-    private fun anyStatusList(): List<JobNotificationDeliveryStatus> =
-        any<List<JobNotificationDeliveryStatus>>() ?: emptyList()
-
     private fun anyDateTime(): LocalDateTime = any(LocalDateTime::class.java) ?: LocalDateTime.now()
 
     @Test
@@ -152,7 +149,7 @@ class JobNotificationServiceImplTest {
 
         service.processDueRetries()
 
-        verify(deliveryRepository, never()).findDueForRetry(anyStatusList(), anyDateTime())
+        verify(deliveryRepository, never()).findDueForRetry(anyDateTime())
     }
 
     @Test
@@ -165,7 +162,7 @@ class JobNotificationServiceImplTest {
                 title = "x",
                 companyName = "x",
             ).apply { attemptCount = 5 }
-        given(deliveryRepository.findDueForRetry(anyStatusList(), anyDateTime())).willReturn(listOf(exhausted))
+        given(deliveryRepository.findDueForRetry(anyDateTime())).willReturn(listOf(exhausted))
         val service = serviceWith(configuredProperties)
 
         service.processDueRetries()
@@ -187,7 +184,7 @@ class JobNotificationServiceImplTest {
                 attemptCount = 1
                 nextRetryAt = LocalDateTime.now().minusMinutes(1)
             }
-        given(deliveryRepository.findDueForRetry(anyStatusList(), anyDateTime())).willReturn(listOf(due))
+        given(deliveryRepository.findDueForRetry(anyDateTime())).willReturn(listOf(due))
         given(deliveryRepository.saveAndFlush(anyDelivery())).willAnswer { it.arguments[0] }
         given(discordWebhookClient.send(anyString(), anyPayload())).willReturn(DiscordWebhookSendResult.Sent("1"))
         val service = serviceWith(configuredProperties)

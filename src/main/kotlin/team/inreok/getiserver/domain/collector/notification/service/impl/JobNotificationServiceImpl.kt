@@ -47,7 +47,7 @@ class JobNotificationServiceImpl(
     override fun processDueRetries() {
         if (!properties.isConfigured()) return
         deliveryRepository
-            .findDueForRetry(RETRYABLE_STATUSES, LocalDateTime.now())
+            .findDueForRetry(LocalDateTime.now())
             .filter { it.attemptCount < MAX_ATTEMPTS }
             .forEach { attemptSend(it) }
     }
@@ -154,7 +154,6 @@ class JobNotificationServiceImpl(
         const val MAX_ERROR_MESSAGE_LENGTH = 500
         const val BASE_BACKOFF_SECONDS = 60L
         const val MAX_BACKOFF_SECONDS = 1_800L
-        val RETRYABLE_STATUSES = listOf(JobNotificationDeliveryStatus.PENDING, JobNotificationDeliveryStatus.FAILED)
         val log = LoggerFactory.getLogger(JobNotificationServiceImpl::class.java)
     }
 }

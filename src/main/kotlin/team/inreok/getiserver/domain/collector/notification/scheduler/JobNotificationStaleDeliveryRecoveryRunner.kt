@@ -22,10 +22,7 @@ class JobNotificationStaleDeliveryRecoveryRunner(
     override fun run(args: ApplicationArguments) {
         val stale =
             try {
-                deliveryRepository.findDueForRetry(
-                    listOf(JobNotificationDeliveryStatus.SENDING),
-                    java.time.LocalDateTime.MAX,
-                )
+                deliveryRepository.findAllByStatus(JobNotificationDeliveryStatus.SENDING)
             } catch (ex: DataAccessException) {
                 log.warn("서버 재시작 정리용 알림 Delivery 조회에 실패해 이번 기동에서는 건너뜁니다.", ex)
                 return

@@ -397,6 +397,27 @@ class CollectorExecutionServiceImplTest {
     }
 
     @Test
+    fun `같은 sourceId가 중복 요청되면 CollectionRun을 한 번만 생성한다`() {
+        // requireRunnable의 중복 실행 검사(existsBySourceIdAndStatusIn)는 아직 아무 Run도 저장되지
+        // 않은 시점에 수행되므로, 중복 제거 없이는 [1, 1] 같은 요청이 두 검사를 모두 통과해 같은
+        // Source에 CollectionRun이 2건 생성될 수 있다(PR #68 Code Review Finding #2).
+        val source = sourceOf()
+        given(jobSourceRepository.findById(1L)).willReturn(Optional.of(source))
+        given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
+        given(collectionRunRepository.saveAndFlush(anyCollectionRun())).willAnswer(::assignIdIfAbsent)
+        givenCompanyResolves()
+        given(collectedJobUpsertUseCase.upsert(anyUpsertCommand()))
+            .willReturn(CollectedJobUpsertResult(jobId = 1L, outcome = JobImportOutcome.CREATED, published = true))
+        val provider =
+            FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(jobs = listOf(jobOf("EXT-1"))) }
+        val service = serviceWith(provider)
+
+        val runs = service.triggerManual(CollectorAction.COLLECT, listOf(1L, 1L))
+
+        assertThat(runs).hasSize(1)
+    }
+
+    @Test
     fun `존재하지 않는 수집원으로 수동 실행을 요청하면 JobSourceNotFoundException이 발생하고 실행을 만들지 않는다`() {
         given(jobSourceRepository.findById(99L)).willReturn(Optional.empty())
         val service = serviceWith(FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(emptyList()) })
