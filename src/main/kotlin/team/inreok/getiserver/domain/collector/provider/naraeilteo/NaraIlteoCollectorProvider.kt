@@ -16,6 +16,8 @@ import team.inreok.getiserver.domain.collector.provider.CollectorProvider
 import team.inreok.getiserver.domain.collector.provider.CollectorProviderException
 import team.inreok.getiserver.domain.collector.provider.NormalizedCollectedJob
 import team.inreok.getiserver.domain.collector.provider.ServiceKeyCodec
+import team.inreok.getiserver.domain.collector.provider.normalizeExternalUrl
+import team.inreok.getiserver.domain.collector.provider.normalizeRecruitmentPeriod
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -39,8 +41,10 @@ internal data class NaraIlteoListPageResult(
     val totalCount: Int?,
 )
 
-private class NaraIlteoListState {
+/** [NaraIlteoCollectorProvider.paginateList] 순회 중 누적되는 상태다. Test에서 직접 검증한다. */
+internal class NaraIlteoListState {
     val items = mutableListOf<NaraIlteoListItem>()
+    val errors = mutableListOf<CollectorItemError>()
     val seenIdx = mutableSetOf<String>()
     var previousPageIds: Set<String>? = null
     var fetchedItemCount = 0
@@ -79,15 +83,7 @@ class NaraIlteoCollectorProvider(
 
         val beginDate = beginDateOf(context)
         val endDate = context.requestedAt.toLocalDate()
-        val listState = NaraIlteoListState()
-
-        var pageNo = 1
-        while (pageNo <= properties.maxPages && processNextListPage(pageNo, beginDate, endDate, listState)) {
-            pageNo++
-        }
-        if (pageNo > properties.maxPages) {
-            log.warn("나라일터 목록 순회가 최대 페이지 수({})에 도달해 조기 종료했습니다.", properties.maxPages)
-        }
+        val listState = paginateList { pageNo -> fetchXml(buildListUri(pageNo, beginDate, endDate), "나라일터 목록") }
 
         return fetchDetails(listState, context)
     }
@@ -95,14 +91,46 @@ class NaraIlteoCollectorProvider(
     private fun beginDateOf(context: CollectorCollectionContext): LocalDate =
         context.since?.toLocalDate() ?: context.requestedAt.toLocalDate().minusDays(properties.initialLookbackDays)
 
+    // 목록 페이지 순회(무한 루프 방지/중복 페이지 감지/최대 페이지 안전장치/부분 페이지 실패 처리)를
+    // 실제 HTTP 호출과 분리해 internal로 열어 둔다. Test는 실제 RestClient 없이 Fixture XML을
+    // 반환하는 fetchPage Lambda를 직접 주입해 순회 로직만 검증한다(Mma/JobAlio Provider와 같은 패턴).
+    internal fun paginateList(fetchPage: (pageNo: Int) -> String): NaraIlteoListState {
+        val state = NaraIlteoListState()
+        var pageNo = 1
+        while (pageNo <= properties.maxPages && processNextListPage(pageNo, fetchPage, state)) {
+            pageNo++
+        }
+        if (pageNo > properties.maxPages) {
+            log.warn("나라일터 목록 순회가 최대 페이지 수({})에 도달해 조기 종료했습니다.", properties.maxPages)
+        }
+        return state
+    }
+
+    // 페이지 하나를 조회·반영하고 순회를 계속할지(true) 중단할지(false)를 반환한다. 첫 페이지
+    // 실패는 Provider 전체 실패로 전파하고(기존 단일 페이지 동작과 호환), 이후 페이지의 실패는
+    // 지금까지 모은 결과를 보존하고 오류로 기록한 뒤 순회를 중단한다(Mma/JobAlio Provider와 같은
+    // 부분 페이지 실패 처리 패턴).
+    @Suppress("ReturnCount")
     private fun processNextListPage(
         pageNo: Int,
-        beginDate: LocalDate,
-        endDate: LocalDate,
+        fetchPage: (pageNo: Int) -> String,
         state: NaraIlteoListState,
     ): Boolean {
         state.requestCount++
-        val page = parseListPage(fetchXml(buildListUri(pageNo, beginDate, endDate), "나라일터 목록"))
+        val page =
+            try {
+                parseListPage(fetchPage(pageNo))
+            } catch (ex: CollectorProviderException) {
+                if (pageNo == 1) throw ex
+                state.errors.add(
+                    CollectorItemError(
+                        externalJobId = null,
+                        code = "COLLECTOR_PAGE_FETCH_FAILED",
+                        message = "나라일터 목록 페이지 $pageNo 조회에 실패해 이전 페이지까지의 결과만 반환합니다: ${ex.message}",
+                    ),
+                )
+                return false
+            }
 
         val currentPageIds = page.items.map { it.idx }.toSet()
         if (currentPageIds.isNotEmpty() && currentPageIds == state.previousPageIds) {
@@ -126,7 +154,7 @@ class NaraIlteoCollectorProvider(
         context: CollectorCollectionContext,
     ): CollectorCollectionResult {
         val jobs = mutableListOf<NormalizedCollectedJob>()
-        val errors = mutableListOf<CollectorItemError>()
+        val errors = listState.errors.toMutableList()
         var requestCount = listState.requestCount
 
         val toFetch = listState.items.take(properties.maxDetailFetchesPerRun)
@@ -316,12 +344,11 @@ private fun buildNaraIlteoNormalizedJob(
     val item = document.getElementsByTagName("item").item(0) as? org.w3c.dom.Element ?: return null
 
     val missingFields = mutableListOf<String>()
-    val startDate = parseYmd(listItem.begindate)
-    val endDate = parseYmd(listItem.enddate)
+    val (startDate, endDate) = normalizeRecruitmentPeriod(parseYmd(listItem.begindate), parseYmd(listItem.enddate))
     if (endDate == null) missingFields.add("endDate")
     val content = text(item, "contents")?.let(::stripHtml)
     if (content == null) missingFields.add("content")
-    val externalUrl = text(item, "link01")
+    val externalUrl = normalizeExternalUrl(text(item, "link01"))
     if (externalUrl == null) missingFields.add("externalUrl")
 
     return NormalizedCollectedJob(
@@ -358,12 +385,15 @@ private fun jobTypeLabelOf(type01: String?): String? =
         else -> null
     }
 
-private fun stripHtml(raw: String): String =
+// Tag만 있고 실제 텍스트가 없으면(예: 이미지 하나만 있는 본문) null을 반환해 "본문 없음"으로
+// 취급한다 — Tag가 섞인 원문을 그대로 돌려주면 missingFields가 "content"를 놓치고 Job/Discord에
+// HTML Tag가 그대로 노출된다.
+private fun stripHtml(raw: String): String? =
     raw
         .replace(Regex("<[^>]*>"), " ")
         .replace(Regex("\\s+"), " ")
         .trim()
-        .takeIf { it.isNotEmpty() } ?: raw
+        .takeIf { it.isNotEmpty() }
 
 private fun text(
     element: org.w3c.dom.Element,

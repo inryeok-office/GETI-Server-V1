@@ -178,11 +178,19 @@ class CollectorExecutionServiceImpl(
         }
 
         result.jobs.forEach { job ->
-            if (job.dataQualityStatus == JobDataQualityStatus.PARTIAL) partialQualityCount++
             when (processCollectedJob(requireNotNull(current.id), source, job, isInitialImport, eligibility)) {
-                JobProcessOutcome.SUCCESS -> successCount++
-                JobProcessOutcome.FAILURE -> failureCount++
-                JobProcessOutcome.EXCLUDED -> eligibility.excludedCount++
+                JobProcessOutcome.SUCCESS -> {
+                    successCount++
+                    if (job.dataQualityStatus == JobDataQualityStatus.PARTIAL) partialQualityCount++
+                }
+
+                JobProcessOutcome.FAILURE -> {
+                    failureCount++
+                }
+
+                JobProcessOutcome.EXCLUDED -> {
+                    eligibility.excludedCount++
+                }
             }
         }
 

@@ -186,6 +186,24 @@ class JobEligibilityPolicyTest {
     }
 
     @Test
+    fun `산업기능요원 정보처리 공고 원문에 전산 직무 Keyword가 함께 있어도 편입 자격 확인이 필요하다`() {
+        // classifyCategory가 일반 JOB_FIELD_DIRECT_IT Keyword("전산")를 mmaClassification보다
+        // 먼저 확인하면 REVIEW_REQUIRED가 조용히 ELIGIBLE로 바뀌던 회귀를 방지한다.
+        val decision =
+            JobEligibilityPolicy.evaluate(
+                inputOf(
+                    sourceCode = JobSourceCode.MMA,
+                    title = "정보처리 산업기능요원 모집",
+                    content = "전산실에서 개발자 업무를 보조합니다.",
+                    militaryServiceType = "산업기능요원",
+                ),
+            )
+
+        assertThat(decision.status).isEqualTo(JobEligibilityStatus.REVIEW_REQUIRED)
+        assertThat(decision.category).isEqualTo(JobRelevanceCategory.DIRECT_IT)
+    }
+
+    @Test
     fun `전문연구요원은 기본 제외 대상이다`() {
         val decision =
             JobEligibilityPolicy.evaluate(

@@ -16,6 +16,8 @@ import team.inreok.getiserver.domain.collector.provider.CollectorProvider
 import team.inreok.getiserver.domain.collector.provider.CollectorProviderException
 import team.inreok.getiserver.domain.collector.provider.NormalizedCollectedJob
 import team.inreok.getiserver.domain.collector.provider.ServiceKeyCodec
+import team.inreok.getiserver.domain.collector.provider.normalizeExternalUrl
+import team.inreok.getiserver.domain.collector.provider.normalizeRecruitmentPeriod
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -299,10 +301,13 @@ private fun buildJobAlioNormalizedJob(
     val companyName = item.stringOrNull("instNm") ?: return null
 
     val missingFields = mutableListOf<String>()
-    val startDate = parseYmd(item.stringOrNull("pbancBgngYmd"))
-    val endDate = parseYmd(item.stringOrNull("pbancEndYmd"))
+    val (startDate, endDate) =
+        normalizeRecruitmentPeriod(
+            parseYmd(item.stringOrNull("pbancBgngYmd")),
+            parseYmd(item.stringOrNull("pbancEndYmd")),
+        )
     if (endDate == null) missingFields.add("endDate")
-    val externalUrl = item.stringOrNull("srcUrl")
+    val externalUrl = normalizeExternalUrl(item.stringOrNull("srcUrl"))
     if (externalUrl == null) missingFields.add("externalUrl")
     missingFields.add("content")
 

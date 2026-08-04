@@ -295,6 +295,38 @@ class CollectorExecutionServiceImplTest {
     }
 
     @Test
+    fun `적합성 판정에서 제외된 공고의 품질 경고는 집계하지 않는다`() {
+        // partialQualityCount는 실제로 저장된 공고 기준으로 집계해야 한다. 제외된 공고까지
+        // 포함하면 Discord 요약 알림의 "전체 공고 수"보다 "품질 경고" 건수가 더 커지는 등
+        // 두 집계 기준이 어긋난다(실제 API로 재현해 발견, Issue #62 확장 범위).
+        val source = sourceOf()
+        given(jobSourceRepository.findAllByOrderBySourceCodeAsc()).willReturn(listOf(source))
+        given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
+        given(collectionRunRepository.saveAndFlush(anyCollectionRun())).willAnswer(::assignIdIfAbsent)
+
+        val excludedPartialJob =
+            NormalizedCollectedJob(
+                sourceCode = JobSourceCode.MMA,
+                externalJobId = "EXT-EXCLUDED-PARTIAL",
+                title = "백엔드 개발자",
+                companyName = "인력개발원",
+                collectedAt = now,
+                dataQualityStatus = JobDataQualityStatus.PARTIAL,
+                qualificationDetail = "4년제 대학교 졸업 필수",
+            )
+        val provider =
+            FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(jobs = listOf(excludedPartialJob)) }
+        val service = serviceWith(provider)
+
+        service.runDailyCollection()
+
+        val captor = ArgumentCaptor.forClass(CollectionRun::class.java)
+        verify(collectionRunRepository, times(3)).saveAndFlush(captor.capture())
+        val finalRun = captor.allValues.last()
+        assertThat(finalRun.partialQualityCount).isEqualTo(0)
+    }
+
+    @Test
     fun `Job 반영이 실패하면 해당 공고만 실패로 기록되고 다른 공고 처리는 계속된다`() {
         val source = sourceOf()
         given(jobSourceRepository.findAllByOrderBySourceCodeAsc()).willReturn(listOf(source))

@@ -1,6 +1,7 @@
 package team.inreok.getiserver.domain.collector.notification.service
 
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentMatchers.any
@@ -11,6 +12,7 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
+import org.springframework.dao.DataIntegrityViolationException
 import team.inreok.getiserver.domain.collector.entity.JobNotificationDelivery
 import team.inreok.getiserver.domain.collector.entity.type.JobNotificationDeliveryStatus
 import team.inreok.getiserver.domain.collector.notification.DiscordJobNotificationProperties
@@ -91,6 +93,33 @@ class JobNotificationServiceImplTest {
         service.enqueueIfEligible(triggerOf(jobId = 1L), isInitialImport = false)
 
         verify(deliveryRepository, never()).saveAndFlush(anyDelivery())
+    }
+
+    @Test
+    fun `Delivery 저장이 job_id Unique 위반으로 실패하면 조용히 건너뛴다`() {
+        given(deliveryRepository.existsByJobId(1L)).willReturn(false)
+        given(deliveryRepository.saveAndFlush(anyDelivery()))
+            .willThrow(
+                DataIntegrityViolationException(
+                    "duplicate key value violates unique constraint \"uk_job_notification_deliveries_job\"",
+                ),
+            )
+        val service = serviceWith(configuredProperties)
+
+        service.enqueueIfEligible(triggerOf(jobId = 1L), isInitialImport = false)
+
+        verify(discordWebhookClient, never()).send(anyString(), anyPayload())
+    }
+
+    @Test
+    fun `Delivery 저장이 다른 이유로 실패하면 예외를 그대로 전파한다`() {
+        given(deliveryRepository.existsByJobId(1L)).willReturn(false)
+        given(deliveryRepository.saveAndFlush(anyDelivery()))
+            .willThrow(DataIntegrityViolationException("value too long for type character varying(255)"))
+        val service = serviceWith(configuredProperties)
+
+        assertThatThrownBy { service.enqueueIfEligible(triggerOf(jobId = 1L), isInitialImport = false) }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
     }
 
     @Test

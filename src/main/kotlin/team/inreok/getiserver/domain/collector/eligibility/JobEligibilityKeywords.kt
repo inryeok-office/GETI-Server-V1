@@ -2,24 +2,7 @@ package team.inreok.getiserver.domain.collector.eligibility
 
 // 사용자가 확정한 수집 범위 명세(광주소프트웨어마이스터고 학생 기준)의 키워드 목록을 그대로
 // 옮긴 상수 모음이다. 판정 로직(JobEligibilityPolicy)과 분리해 키워드 자체의 근거를 추적하기
-// 쉽게 한다. 모든 비교는 [normalizeForMatching]으로 정규화한 �에 수행한다.
-
-/** 학력조건 - 고졸 지원 가능으로 판정하는 표현(4.1). */
-internal val EDUCATION_HIGH_SCHOOL_OK =
-    listOf(
-        "고졸",
-        "고등학교 졸업",
-        "고등학교졸업",
-        "고등학교 졸업자",
-        "고등학교 졸업예정자",
-        "고졸 이상",
-        "학력무관",
-        "학력 제한 없음",
-        "학력제한없음",
-        "별도 고졸 전형",
-        "고교 졸업 예정자 지원 가능",
-        "고교졸업예정자",
-    )
+// 쉽게 한다. 모든 비교는 [normalizeForMatching]으로 정규화한 값에 수행한다.
 
 /** 학력조건 - 상급 학위·전문자격을 필수로 요구해 제외하는 표현(4.1). */
 internal val EDUCATION_DEGREE_REQUIRED =
@@ -37,20 +20,6 @@ internal val EDUCATION_DEGREE_REQUIRED =
         "대학교 재학생 또는 졸업자만 지원",
         "대졸 이상만 지원",
         "대학교 졸업자만 지원",
-    )
-
-/** 경력조건 - 신입 지원 가능으로 판정하는 표현(4.2). */
-internal val CAREER_ENTRY_LEVEL_OK =
-    listOf(
-        "신입",
-        "경력무관",
-        "신입·경력",
-        "신입 경력",
-        "신입/경력",
-        "신입 지원 가능",
-        "경력 우대",
-        "우대사항",
-        "우대조건",
     )
 
 /** 경력조건 - 경력을 필수로 요구해 제외하는 표현(4.2). */
@@ -236,18 +205,6 @@ internal val MMA_PRIORITY_FIELD =
 
 /** 산업기능요원 - 전문연구요원은 기본 제외 대상이다(4.7). */
 internal val MMA_EXCLUDE_SERVICE_TYPE = listOf("전문연구요원")
-
-/** 고용형태 - 기본 수집 대상(4.8). */
-internal val EMPLOYMENT_TYPE_INCLUDE =
-    listOf(
-        "정규직",
-        "무기계약직",
-        "채용연계형 인턴",
-        "정규직 전환형 인턴",
-        "체험형 청년인턴",
-        "계약직",
-        "기간제",
-    )
 
 /** 고용형태 - 기본 제외 대상(4.8). */
 internal val EMPLOYMENT_TYPE_EXCLUDE =

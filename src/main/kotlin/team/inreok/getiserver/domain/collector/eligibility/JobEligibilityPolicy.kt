@@ -133,13 +133,19 @@ object JobEligibilityPolicy {
         val reviewRequired: Boolean,
     )
 
-    // 직무 관련성 판정도 우선순위(금융 IT -> 직접 IT -> 공공 IT -> 연관 기술직 -> 생산기술 ->
-    // 병역일터 특수 규칙 -> 공공 일반직)를 순서대로 확인해야 하므로 분기가 많다.
+    // 직무 관련성 판정도 우선순위(병역일터 특수 규칙 -> 금융 IT -> 직접 IT -> 공공 IT -> 연관
+    // 기술직 -> 생산기술 -> 공공 일반직)를 순서대로 확인해야 하므로 분기가 많다. 병역일터
+    // 산업기능요원의 "정보처리" 편입 자격 확인 규칙(mmaClassification)은 다른 직무 관련성
+    // Keyword보다 먼저 확인한다 — 정보처리 공고 원문이 "전산"/"개발자" 등 JOB_FIELD_DIRECT_IT
+    // Keyword를 함께 포함하는 경우가 실제로 흔해서, 순서가 뒤였다면 REVIEW_REQUIRED 표시가
+    // 조용히 건너뛰어졌다(자격 확인이 필요한 병역 특례 공고를 일반 DIRECT_IT처럼 취급하는 결함).
     @Suppress("ReturnCount")
     private fun classifyCategory(
         text: String,
         input: JobEligibilityInput,
     ): CategoryClassification? {
+        mmaClassification(text, input)?.let { return it }
+
         if (containsAny(text, FINANCE_DIRECT_IT)) return CategoryClassification(JobRelevanceCategory.DIRECT_IT, false)
         if (containsAny(text, JOB_FIELD_DIRECT_IT)) return CategoryClassification(JobRelevanceCategory.DIRECT_IT, false)
         if (containsAny(
@@ -159,8 +165,6 @@ object JobEligibilityPolicy {
         if (containsAny(text, PRODUCTION_GENERAL_EXCLUDE) && containsAny(text, PRODUCTION_TECH_CONTEXT)) {
             return CategoryClassification(JobRelevanceCategory.RELATED_TECH, false)
         }
-
-        mmaClassification(text, input)?.let { return it }
 
         if (containsAny(text, PUBLIC_FINANCE_GENERAL_KEYWORDS)) {
             return CategoryClassification(JobRelevanceCategory.PUBLIC_FINANCE_GENERAL, false)

@@ -16,6 +16,8 @@ import team.inreok.getiserver.domain.collector.provider.CollectorProvider
 import team.inreok.getiserver.domain.collector.provider.CollectorProviderException
 import team.inreok.getiserver.domain.collector.provider.NormalizedCollectedJob
 import team.inreok.getiserver.domain.collector.provider.ServiceKeyCodec
+import team.inreok.getiserver.domain.collector.provider.normalizeExternalUrl
+import team.inreok.getiserver.domain.collector.provider.normalizeRecruitmentPeriod
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -249,12 +251,12 @@ private fun buildCleanEyeNormalizedJob(
     val companyName = text(element, "ENT_NAME") ?: return null
 
     val missingFields = mutableListOf<String>()
-    val startDate = parseIsoDate(text(element, "PUB_DATE"))
-    val endDate = parseIsoDate(text(element, "PUB_END_DATE"))
+    val (startDate, endDate) =
+        normalizeRecruitmentPeriod(parseIsoDate(text(element, "PUB_DATE")), parseIsoDate(text(element, "PUB_END_DATE")))
     if (endDate == null) missingFields.add("endDate")
     val content = text(element, "DUTY_DETAIL")
     if (content == null) missingFields.add("content")
-    val externalUrl = text(element, "URL")
+    val externalUrl = normalizeExternalUrl(text(element, "URL"))
     if (externalUrl == null) missingFields.add("externalUrl")
 
     val licenses =

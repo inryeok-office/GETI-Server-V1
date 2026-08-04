@@ -1,5 +1,6 @@
 package team.inreok.getiserver.domain.collector.notification.service.impl
 
+import org.hibernate.exception.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.dao.DataIntegrityViolationException
@@ -44,12 +45,23 @@ class JobNotificationServiceImpl(
         attemptSend(delivery)
     }
 
+    // attemptSend가 SENDING으로 먼저 flush한 뒤 실제 HTTP 호출을 하므로, 한 건에서 예기치 못한
+    // 예외가 나 forEach가 중단되면 그 Delivery가 SENDING에 멈춘 채 다음 Sweep(findDueForRetry는
+    // PENDING/FAILED만 조회) 대상에서 빠진다. 한 건의 실패가 나머지 재시도 대상 처리를 막지
+    // 않도록 각 Delivery를 독립적으로 처리한다.
+    @Suppress("TooGenericExceptionCaught")
     override fun processDueRetries() {
         if (!properties.isConfigured()) return
         deliveryRepository
             .findDueForRetry(LocalDateTime.now())
             .filter { it.attemptCount < MAX_ATTEMPTS }
-            .forEach { attemptSend(it) }
+            .forEach { delivery ->
+                try {
+                    attemptSend(delivery)
+                } catch (ex: RuntimeException) {
+                    log.warn("알림 재시도 처리 중 예기치 못한 오류(deliveryId={})", delivery.id, ex)
+                }
+            }
     }
 
     private fun createDeliveryOrNull(trigger: JobNotificationTrigger): JobNotificationDelivery? =
@@ -70,7 +82,15 @@ class JobNotificationServiceImpl(
                 ),
             )
         } catch (ex: DataIntegrityViolationException) {
-            // job_id UNIQUE 위반 — 동시 호출 등으로 이미 생성된 경우다. 조용히 건너뛴다(멱등).
+            // job_id UNIQUE 위반(동시 호출 등으로 이미 생성된 경우)만 조용히 건너뛴다(멱등). title/
+            // employmentType 등 길이 제한 위반처럼 다른 원인의 DataIntegrityViolationException까지
+            // "이미 존재함"으로 오판하면 실제 저장 실패가 알림 자체를 조용히 누락시킨다(CompanyExternalImportUseCaseImpl과
+            // 같은 방식으로 제약조건 이름을 확인한다).
+            val constraintName = (ex.cause as? ConstraintViolationException)?.constraintName
+            val isJobIdDuplicate =
+                constraintName?.equals(JOB_ID_UNIQUE_CONSTRAINT, ignoreCase = true) == true ||
+                    ex.message?.contains(JOB_ID_UNIQUE_CONSTRAINT, ignoreCase = true) == true
+            if (!isJobIdDuplicate) throw ex
             log.debug("이미 생성된 알림 Delivery라 재생성하지 않습니다: jobId={}", trigger.jobId, ex)
             null
         }
@@ -162,6 +182,7 @@ class JobNotificationServiceImpl(
         const val MAX_ERROR_MESSAGE_LENGTH = 500
         const val BASE_BACKOFF_SECONDS = 60L
         const val MAX_BACKOFF_SECONDS = 1_800L
+        const val JOB_ID_UNIQUE_CONSTRAINT = "uk_job_notification_deliveries_job"
         val log = LoggerFactory.getLogger(JobNotificationServiceImpl::class.java)
     }
 }
