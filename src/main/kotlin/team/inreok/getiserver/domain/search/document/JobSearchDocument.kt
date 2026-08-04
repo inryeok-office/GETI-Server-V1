@@ -38,8 +38,12 @@ data class JobSearchDocument(
     val status: String,
     @Field(type = FieldType.Long)
     val companyId: Long,
+    // 공고 등록 후 기업이 삭제되면 null이다(JobSummaryResponse.company와 동일한 정책, PR #70
+    // Review 반영 — 이전에는 빈 문자열로 채워 응답의 company Field가 항상 존재하는 것처럼
+    // 보였는데, 원래 계약(기업이 없으면 company 자체가 null)과 달라 API 계약이 조용히
+    // 바뀌는 문제였다).
     @Field(type = FieldType.Text, analyzer = "job_search_korean")
-    val companyName: String,
+    val companyName: String?,
     @Field(type = FieldType.Keyword)
     val companyType: String?,
     @Field(type = FieldType.Keyword)

@@ -49,14 +49,14 @@ class JobIndexDocumentBuilderTest {
     }
 
     @Test
-    fun `기업이 삭제되어 조회되지 않으면 빈 이름으로 채우고 실패하지 않는다`() {
+    fun `기업이 삭제되어 조회되지 않으면 companyName을 null로 두고 실패하지 않는다`() {
         given(jobIndexQueryPort.findById(1L)).willReturn(snapshotOf())
         given(companyQuery.findActiveSummary(1L)).willReturn(null)
         given(companyQuery.findActiveType(1L)).willReturn(null)
 
         val document = builder.buildFor(1L)
 
-        assertThat(document!!.companyName).isEmpty()
+        assertThat(document!!.companyName).isNull()
         assertThat(document.companyType).isNull()
     }
 

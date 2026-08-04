@@ -43,3 +43,13 @@ CREATE TABLE search_reindex_runs (
 
 -- 이미 실행 중인 재색인이 있는지(중복 요청 차단, 409 REINDEX_ALREADY_RUNNING) 확인하는 조회 기준.
 CREATE INDEX idx_search_reindex_runs_status ON search_reindex_runs (status);
+
+-- Application 계층의 existsByStatusIn 확인과 INSERT 사이에는 DB 잠금이 없어(TOCTOU), 거의
+-- 동시에 들어온 두 요청이 모두 통과해 PENDING/RUNNING Row가 2개 이상 생길 수 있다(PR #70
+-- Review 반영). 활성 상태(PENDING/RUNNING) Row가 항상 1건 이하이도록 DB 제약으로 강제한다 —
+-- WHERE 절을 만족하는 모든 Row가 상수 표현식(TRUE)에 대해 같은 값을 가지므로, 이 Index는
+-- "활성 Row는 최대 1건"이라는 의미가 된다. 두 번째 INSERT는 Unique 제약 위반으로 실패하고
+-- SearchReindexServiceImpl이 이를 REINDEX_ALREADY_RUNNING(409)으로 변환한다.
+CREATE UNIQUE INDEX uk_search_reindex_runs_active_singleton
+    ON search_reindex_runs ((true))
+    WHERE status IN ('PENDING', 'RUNNING');

@@ -31,9 +31,10 @@ class JobIndexDocumentBuilder(
             applicationMethod = snapshot.applicationMethod,
             status = snapshot.status,
             companyId = snapshot.companyId,
-            // 공고 등록 후 기업이 삭제될 수 있다(JobSummaryResponse.company와 동일한 정책). 검색
-            // Document에서까지 완전히 빼면 색인 실패로 이어지므로 이름이 없다는 뜻의 빈 문자열로 둔다.
-            companyName = company?.name ?: "",
+            // 공고 등록 후 기업이 삭제될 수 있다. company가 null이면 companyName도 null로 두고,
+            // JobSummaryResponse.from이 이를 company: CompanySummary? = null로 그대로 옮긴다
+            // (기업이 삭제되면 응답의 company 자체가 null이라는 기존 계약을 유지, PR #70 Review 반영).
+            companyName = company?.name,
             companyType = companyType?.name,
             sourceName = snapshot.sourceName,
             targetGrade = snapshot.targetGrade,

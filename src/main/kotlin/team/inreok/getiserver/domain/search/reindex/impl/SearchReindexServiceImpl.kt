@@ -2,6 +2,7 @@ package team.inreok.getiserver.domain.search.reindex.impl
 
 import org.slf4j.LoggerFactory
 import org.springframework.core.task.TaskExecutor
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import team.inreok.getiserver.domain.job.query.JobIndexQueryPort
 import team.inreok.getiserver.domain.search.config.SearchProperties
@@ -35,7 +36,20 @@ class SearchReindexServiceImpl(
     override fun triggerReindex(): SearchReindexRun {
         if (reindexRunRepository.existsByStatusIn(ACTIVE_STATUSES)) throw ReindexAlreadyRunningException()
 
-        val run = reindexRunRepository.saveAndFlush(SearchReindexRun())
+        // 위 existsByStatusIn 확인과 이 INSERT 사이에는 DB 잠금이 없어(TOCTOU), 거의 동시에 들어온
+        // 두 요청이 모두 확인을 통과할 수 있다. uk_search_reindex_runs_active_singleton(활성 Row
+        // 최대 1건 Partial Unique Index, V10 Migration)이 최종 방어선이다 — 위반하면 DB가
+        // DataIntegrityViolationException을 던지고 여기서 REINDEX_ALREADY_RUNNING(409)으로
+        // 변환한다(PR #70 Review 반영).
+        val run =
+            try {
+                reindexRunRepository.saveAndFlush(SearchReindexRun())
+            } catch (ex: DataIntegrityViolationException) {
+                // BusinessException은 cause를 받지 않아 원본 예외를 여기서 남긴다(detekt
+                // SwallowedException 반영) — 실제 제약 위반 여부를 나중에 DB 로그로도 추적할 수 있다.
+                log.warn("재색인 동시 요청이 DB 제약으로 차단됨(uk_search_reindex_runs_active_singleton)", ex)
+                throw ReindexAlreadyRunningException()
+            }
         val runId = requireNotNull(run.id)
         // 요청 Thread는 여기서 반환한다(202 Accepted) — 실제 재색인은 별도 Thread에서 진행한다.
         searchTaskExecutor.execute {

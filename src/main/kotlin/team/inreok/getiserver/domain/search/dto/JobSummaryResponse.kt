@@ -20,8 +20,11 @@ data class JobSummaryResponse(
     val applicationMethod: ApplicationMethod,
     @param:Schema(description = "공고 상태", example = "PUBLISHED")
     val status: JobStatus,
-    @param:Schema(description = "기업 요약")
-    val company: CompanySummary,
+    @param:Schema(
+        description = "기업 요약. 공고 등록 후 기업이 삭제되면 null이 될 수 있다.",
+        nullable = true,
+    )
+    val company: CompanySummary?,
     @param:Schema(description = "모집 시작 시각", example = "2026-08-01T00:00:00", nullable = true)
     val startDate: LocalDateTime?,
     @param:Schema(description = "모집 종료 시각. null이면 마감 없는 공고다.", example = "2026-08-31T23:59:59", nullable = true)
@@ -49,7 +52,7 @@ data class JobSummaryResponse(
                 postingType = PostingType.valueOf(document.postingType),
                 applicationMethod = ApplicationMethod.valueOf(document.applicationMethod),
                 status = JobStatus.valueOf(document.status),
-                company = CompanySummary(companyId = document.companyId, name = document.companyName),
+                company = document.companyName?.let { CompanySummary(companyId = document.companyId, name = it) },
                 startDate = document.startDate,
                 endDate = document.endDate,
                 targetGrade = document.targetGrade,

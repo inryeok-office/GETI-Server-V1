@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
 import org.springframework.core.task.SyncTaskExecutor
+import org.springframework.dao.DataIntegrityViolationException
 import team.inreok.getiserver.domain.job.query.JobIndexQueryPort
 import team.inreok.getiserver.domain.job.query.JobIndexSnapshot
 import team.inreok.getiserver.domain.search.config.SearchProperties
@@ -70,6 +71,19 @@ class SearchReindexServiceImplTest {
         assertThatThrownBy { service.triggerReindex() }
             .isInstanceOf(ReindexAlreadyRunningException::class.java)
         verify(reindexRunRepository, never()).saveAndFlush(anyRun())
+    }
+
+    @Test
+    fun `existsByStatusIn 확인과 저장 사이의 동시 요청은 DB 제약 위반을 REINDEX_ALREADY_RUNNING으로 변환한다`() {
+        // existsByStatusIn은 통과했지만(TOCTOU), uk_search_reindex_runs_active_singleton
+        // Partial Unique Index(V10 Migration)가 실제로는 막는 상황을 재현한다(PR #70 Review 반영).
+        given(reindexRunRepository.existsByStatusIn(anyStatuses())).willReturn(false)
+        willThrow(DataIntegrityViolationException("duplicate key value violates unique constraint"))
+            .given(reindexRunRepository)
+            .saveAndFlush(anyRun())
+
+        assertThatThrownBy { service.triggerReindex() }
+            .isInstanceOf(ReindexAlreadyRunningException::class.java)
     }
 
     @Test

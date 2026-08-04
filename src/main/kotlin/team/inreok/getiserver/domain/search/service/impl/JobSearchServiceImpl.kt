@@ -58,6 +58,10 @@ class JobSearchServiceImpl(
                 ).withPageable(pageable)
                 .withSort { s -> s.field { f -> f.field(sortField(sort)).order(sortOrder(sort, direction)) } }
                 .withSort { s -> s.field { f -> f.field("jobId").order(SortOrder.Desc) } }
+                // Elasticsearch는 기본적으로 10,000건 이상은 totalHits를 정확히 세지 않고
+                // 근사값(하한)으로 반환한다 — Pagination(totalPages)이 부정확해질 수 있어
+                // 명시적으로 정확한 count를 요청한다(PR #70 Review 반영).
+                .withTrackTotalHits(true)
                 .build()
 
         val hits = indexManager.search(esQuery)

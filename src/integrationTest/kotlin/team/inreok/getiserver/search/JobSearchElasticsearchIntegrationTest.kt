@@ -285,6 +285,17 @@ class JobSearchElasticsearchIntegrationTest {
     }
 
     @Test
+    fun `기업이 삭제된 공고는 company가 null인 채로 검색 결과에 나온다`() {
+        indexDocument(jobId = 1L, title = "기업 삭제된 공고", companyName = null)
+        refresh()
+
+        val result = search(query = "기업 삭제된")
+
+        assertThat(result.content).hasSize(1)
+        assertThat(result.content.single().company).isNull()
+    }
+
+    @Test
     fun `Bulk 색인은 여러 건을 한 번에 반영한다`() {
         val documents = (1..5).map { documentOf(jobId = it.toLong(), title = "공고 $it") }
         indexManager.bulkIndex(TEST_INDEX, documents)
@@ -330,7 +341,7 @@ class JobSearchElasticsearchIntegrationTest {
         title: String,
         content: String? = null,
         postingType: PostingType = PostingType.MOU,
-        companyName: String = "인력개발원",
+        companyName: String? = "인력개발원",
         companyType: CompanyType = CompanyType.GENERAL,
         sourceName: String? = null,
         targetGrade: Int? = null,
@@ -363,7 +374,7 @@ class JobSearchElasticsearchIntegrationTest {
         title: String,
         content: String? = null,
         postingType: PostingType = PostingType.MOU,
-        companyName: String = "인력개발원",
+        companyName: String? = "인력개발원",
         companyType: CompanyType = CompanyType.GENERAL,
         sourceName: String? = null,
         targetGrade: Int? = null,
