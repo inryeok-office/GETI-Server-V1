@@ -2,6 +2,7 @@ package team.inreok.getiserver.domain.company.query
 
 import io.swagger.v3.oas.annotations.media.Schema
 import org.springframework.modulith.NamedInterface
+import team.inreok.getiserver.domain.company.entity.type.CompanyType
 
 /**
  * 다른 Domain Module이 기업의 존재 여부와 공개 요약 정보만 조회할 수 있게 하는 계약이다.
@@ -21,6 +22,14 @@ interface CompanyQuery {
      * 되므로 한 번에 조회한다. 존재하지 않거나 삭제된 ID는 결과 Map에 담기지 않는다.
      */
     fun findActiveSummaries(companyIds: Collection<Long>): Map<Long, CompanySummary>
+
+    /**
+     * Search Domain이 Elasticsearch Document의 `companyType` 필드를 채울 때만 쓰는 최소 조회다
+     * (Issue #69). `CompanySummary`에 `CompanyType`을 넣지 않는 이유는 [CompanySummary] 문서
+     * 참고 — 응답 Contract를 넓히지 않기 위해 별도 메서드로 분리했다. `company.entity.type`은
+     * `operation.entity.type`과 같은 방식으로 Named Interface로 이미 공개되어 있다.
+     */
+    fun findActiveType(companyId: Long): CompanyType?
 }
 
 /**

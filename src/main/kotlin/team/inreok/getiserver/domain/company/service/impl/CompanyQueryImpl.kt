@@ -3,6 +3,7 @@ package team.inreok.getiserver.domain.company.service.impl
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.company.entity.Company
+import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.company.repository.CompanyRepository
@@ -27,6 +28,10 @@ class CompanyQueryImpl(
             .findAllByIdInAndDeletedAtIsNull(companyIds.toSet())
             .associate { toSummary(it).let { summary -> summary.companyId to summary } }
     }
+
+    @Transactional(readOnly = true)
+    override fun findActiveType(companyId: Long): CompanyType? =
+        companyRepository.findByIdAndDeletedAtIsNull(companyId)?.type
 
     private fun toSummary(company: Company): CompanySummary =
         CompanySummary(
