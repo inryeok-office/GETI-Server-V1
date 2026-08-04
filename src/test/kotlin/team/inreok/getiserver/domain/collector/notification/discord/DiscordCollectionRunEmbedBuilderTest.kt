@@ -35,10 +35,10 @@ class DiscordCollectionRunEmbedBuilderTest {
     private fun fieldsOf(embed: Map<String, Any?>) = (embed["fields"] as List<Map<String, Any?>>)
 
     @Test
-    fun `성공하면 초록색과 성공 Label을 사용한다`() {
+    fun `성공하면 노란색과 성공 Label을 사용한다`() {
         val embed = embedOf(DiscordCollectionRunEmbedBuilder.buildPayload(inputOf(CollectionRunStatus.SUCCESS)))
 
-        assertThat(embed["color"]).isEqualTo(DISCORD_EMBED_GREEN)
+        assertThat(embed["color"]).isEqualTo(DISCORD_EMBED_YELLOW)
         assertThat(embed["title"] as String).contains("✅", "[병역일터]", "성공")
     }
 
@@ -56,7 +56,7 @@ class DiscordCollectionRunEmbedBuilderTest {
     }
 
     @Test
-    fun `실패하면 빨간색과 실패 사유 필드를 포함한다`() {
+    fun `실패해도 노란색을 유지하고 실패 사유 필드를 포함한다`() {
         val embed =
             embedOf(
                 DiscordCollectionRunEmbedBuilder.buildPayload(
@@ -70,7 +70,7 @@ class DiscordCollectionRunEmbedBuilderTest {
                 ),
             )
 
-        assertThat(embed["color"]).isEqualTo(DISCORD_EMBED_RED)
+        assertThat(embed["color"]).isEqualTo(DISCORD_EMBED_YELLOW)
         val fieldValues = fieldsOf(embed).associate { it["name"] to it["value"] }
         assertThat(fieldValues["실패 사유"]).isEqualTo("MMA 인증 오류")
     }

@@ -16,6 +16,7 @@ import team.inreok.getiserver.domain.collector.provider.CollectorProvider
 import team.inreok.getiserver.domain.collector.provider.CollectorProviderException
 import team.inreok.getiserver.domain.collector.provider.NormalizedCollectedJob
 import team.inreok.getiserver.domain.collector.provider.ServiceKeyCodec
+import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -42,6 +43,7 @@ private class MmaPaginationState {
     var previousPageIds: Set<String>? = null
     var fetchedItemCount = 0
     var totalCount: Int? = null
+    var requestCount = 0
 }
 
 /**
@@ -93,7 +95,7 @@ class MmaCollectorProvider(
             log.warn("MMA 수집이 최대 페이지 수({})에 도달해 조기 종료했습니다.", properties.maxPages)
         }
 
-        return CollectorCollectionResult(jobs = state.jobs, errors = state.errors)
+        return CollectorCollectionResult(jobs = state.jobs, errors = state.errors, requestCount = state.requestCount)
     }
 
     // 페이지 하나를 조회·반영하고 순회를 계속할지(true) 중단할지(false)를 반환한다.
@@ -104,6 +106,7 @@ class MmaCollectorProvider(
         context: CollectorCollectionContext,
         state: MmaPaginationState,
     ): Boolean {
+        state.requestCount++
         val page =
             try {
                 parsePage(fetchPage(pageNo), context)
@@ -142,7 +145,7 @@ class MmaCollectorProvider(
     @Suppress("ThrowsCount")
     private fun fetchPage(pageNo: Int): String {
         val uri = buildUri(pageNo)
-        val xml =
+        val bytes =
             try {
                 restClient
                     .get()
@@ -160,7 +163,7 @@ class MmaCollectorProvider(
                         throw CollectorProviderException.ServerError(
                             "MMA가 서버 오류를 반환했습니다(${response.statusCode.value()}).",
                         )
-                    }.body<String>()
+                    }.body<ByteArray>()
             } catch (ex: CollectorProviderException) {
                 throw ex
             } catch (ex: java.net.SocketTimeoutException) {
@@ -169,7 +172,12 @@ class MmaCollectorProvider(
                 throw CollectorProviderException.NetworkError(ex.message ?: "MMA 호출 중 네트워크 오류가 발생했습니다.", cause = ex)
             }
 
-        return xml ?: throw CollectorProviderException.ResponseInvalid("MMA 응답 본문이 비어 있습니다.")
+        // MMA는 Content-Type을 "application/xml"로만 보내고 charset을 명시하지 않는다(XML
+        // Prolog 자체는 encoding="UTF-8"). Spring이 charset 없는 응답을 Body String으로 바로
+        // 변환하면 UTF-8 대신 ISO-8859-1로 잘못 해석해 한글이 깨진다(실제 호출로 확인). 원본
+        // Byte를 직접 받아 UTF-8로 명시적으로 Decoding한다.
+        return bytes?.let { String(it, StandardCharsets.UTF_8) }
+            ?: throw CollectorProviderException.ResponseInvalid("MMA 응답 본문이 비어 있습니다.")
     }
 
     private fun buildUri(pageNo: Int): java.net.URI {

@@ -203,6 +203,7 @@ class MmaCollectorProviderTest {
         assertThat(result.jobs.map { it.externalJobId })
             .containsExactlyInAnyOrder("2026-000201", "2026-000202", "2026-000203")
         assertThat(result.errors).isEmpty()
+        assertThat(result.requestCount).isEqualTo(2)
     }
 
     @Test
@@ -288,6 +289,8 @@ class MmaCollectorProviderTest {
         assertThat(result.jobs).hasSize(2)
         assertThat(result.errors).hasSize(1)
         assertThat(result.errors.single().code).isEqualTo("COLLECTOR_PAGE_FETCH_FAILED")
+        // 실패한 페이지 조회 시도도 실제 발생한 외부 API 요청이므로 집계에 포함되어야 한다.
+        assertThat(result.requestCount).isEqualTo(2)
     }
 
     @Test

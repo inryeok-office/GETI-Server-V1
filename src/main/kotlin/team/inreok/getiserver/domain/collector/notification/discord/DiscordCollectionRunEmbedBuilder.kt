@@ -7,10 +7,6 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-/** 기존 CD 배포 알림(cd.yml)이 쓰는 discord.py 고전 팔레트와 맞춘 상수다. */
-const val DISCORD_EMBED_GREEN = 3_066_993
-const val DISCORD_EMBED_RED = 15_158_332
-
 /** Discord Collection Run 완료 Embed 생성에 필요한 최소 정보. */
 data class CollectionRunSummaryEmbedInput(
     val runId: Long,
@@ -78,7 +74,7 @@ object DiscordCollectionRunEmbedBuilder {
             buildMap<String, Any?> {
                 put("title", "${presentation.emoji} [$safeSourceName] 수집 실행 ${presentation.label}")
                 put("description", "Collector 수집 실행이 종료되었습니다.")
-                put("color", presentation.color)
+                put("color", DISCORD_EMBED_YELLOW)
                 put("fields", fields)
                 put("footer", mapOf("text" to "GETI Collector"))
                 put(
@@ -106,36 +102,19 @@ object DiscordCollectionRunEmbedBuilder {
     private data class StatusPresentation(
         val emoji: String,
         val label: String,
-        val color: Int,
     )
 
     // PENDING/RUNNING/CANCELED는 실제로 이 Embed가 만들어지는 시점(Run 종료 시)에는 나타나지
-    // 않지만, CollectionRunStatus의 모든 값을 방어적으로 처리한다.
+    // 않지만, CollectionRunStatus의 모든 값을 방어적으로 처리한다. 색상은 결과와 무관하게 항상
+    // DISCORD_EMBED_YELLOW를 쓴다 — 채용공고 수집 알림은 성공/실패와 관계없이 항상 노란색으로
+    // 표시하기로 확정했다(개별 신규 공고 알림과 동일한 정책).
     private fun presentationOf(status: CollectionRunStatus): StatusPresentation =
         when (status) {
-            CollectionRunStatus.SUCCESS -> {
-                StatusPresentation("✅", "성공", DISCORD_EMBED_GREEN)
-            }
-
-            CollectionRunStatus.PARTIAL_SUCCESS -> {
-                StatusPresentation("⚠️", "부분 성공", DISCORD_EMBED_YELLOW)
-            }
-
-            CollectionRunStatus.FAILED -> {
-                StatusPresentation("❌", "실패", DISCORD_EMBED_RED)
-            }
-
-            CollectionRunStatus.CANCELED -> {
-                StatusPresentation("⏹️", "취소", DISCORD_EMBED_RED)
-            }
-
-            CollectionRunStatus.PENDING, CollectionRunStatus.RUNNING -> {
-                StatusPresentation(
-                    "⏳",
-                    "진행 중",
-                    DISCORD_EMBED_YELLOW,
-                )
-            }
+            CollectionRunStatus.SUCCESS -> StatusPresentation("✅", "성공")
+            CollectionRunStatus.PARTIAL_SUCCESS -> StatusPresentation("⚠️", "부분 성공")
+            CollectionRunStatus.FAILED -> StatusPresentation("❌", "실패")
+            CollectionRunStatus.CANCELED -> StatusPresentation("⏹️", "취소")
+            CollectionRunStatus.PENDING, CollectionRunStatus.RUNNING -> StatusPresentation("⏳", "진행 중")
         }
 
     private fun formatDuration(duration: Duration): String {

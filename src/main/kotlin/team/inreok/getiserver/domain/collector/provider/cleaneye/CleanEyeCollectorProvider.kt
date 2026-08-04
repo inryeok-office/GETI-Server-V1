@@ -16,6 +16,7 @@ import team.inreok.getiserver.domain.collector.provider.CollectorProvider
 import team.inreok.getiserver.domain.collector.provider.CollectorProviderException
 import team.inreok.getiserver.domain.collector.provider.NormalizedCollectedJob
 import team.inreok.getiserver.domain.collector.provider.ServiceKeyCodec
+import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -111,7 +112,7 @@ class CleanEyeCollectorProvider(
                         throw CollectorProviderException.ServerError(
                             "클린아이가 서버 오류를 반환했습니다(${response.statusCode.value()}).",
                         )
-                    }.body<String>()
+                    }.body<ByteArray>()
             } catch (ex: CollectorProviderException) {
                 throw ex
             } catch (ex: java.net.SocketTimeoutException) {
@@ -120,7 +121,10 @@ class CleanEyeCollectorProvider(
                 throw CollectorProviderException.NetworkError(ex.message ?: "클린아이 호출 중 네트워크 오류가 발생했습니다.", cause = ex)
             }
 
-        return body ?: throw CollectorProviderException.ResponseInvalid("클린아이 응답 본문이 비어 있습니다.")
+        // 클린아이도 MMA와 같은 이유(Content-Type에 charset 미포함, 실제 응답은 UTF-8)로 원본
+        // Byte를 직접 받아 UTF-8로 명시적으로 Decoding한다(MmaCollectorProvider.fetchPage 참고).
+        return body?.let { String(it, StandardCharsets.UTF_8) }
+            ?: throw CollectorProviderException.ResponseInvalid("클린아이 응답 본문이 비어 있습니다.")
     }
 
     private fun buildUri(sidoCd: String): java.net.URI {
