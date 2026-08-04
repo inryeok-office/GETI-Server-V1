@@ -36,7 +36,9 @@ data class CollectorItemError(
     val message: String,
 )
 
+/** [requestCount]는 이번 collect() 호출 한 번이 실제로 발생시킨 외부 HTTP 요청 수다(Discord 실행 요약 알림 표시용). */
 data class CollectorCollectionResult(
     val jobs: List<NormalizedCollectedJob>,
     val errors: List<CollectorItemError> = emptyList(),
+    val requestCount: Int = 0,
 )
