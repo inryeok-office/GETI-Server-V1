@@ -25,8 +25,8 @@ import team.inreok.getiserver.domain.collector.dto.JobSourceListResponse
 import team.inreok.getiserver.domain.collector.dto.JobSourceUpdateRequest
 import team.inreok.getiserver.domain.collector.dto.JobSourceUpdateResponse
 import team.inreok.getiserver.domain.collector.entity.type.CollectionRunStatus
-import team.inreok.getiserver.domain.collector.exception.CollectorActionNotSupportedException
 import team.inreok.getiserver.domain.collector.service.CollectionRunQueryService
+import team.inreok.getiserver.domain.collector.service.CollectorExecutionService
 import team.inreok.getiserver.domain.collector.service.JobSourceService
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
 import team.inreok.getiserver.global.web.ApiResponse
@@ -45,6 +45,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 class CollectorAdminController(
     private val jobSourceService: JobSourceService,
     private val collectionRunQueryService: CollectionRunQueryService,
+    private val collectorExecutionService: CollectorExecutionService,
 ) {
     @Operation(
         summary = "수집원 설정·상태 목록 조회",
@@ -94,32 +95,48 @@ class CollectorAdminController(
     @Operation(
         summary = "수동 수집·동기화 실행",
         description = """
-            수집원을 수동으로 즉시 실행한다.
+            지정한 수집원을 수동으로 즉시 실행한다. 대상 수집원 중 하나라도 승인·설정·중복 실행
+            조건을 만족하지 못하면 어떤 실행도 만들지 않고 즉시 오류를 반환한다(부분 접수 없음).
 
-            **현재 상태**: `CollectorAction` Enum 값이 Notion API 명세서와 저장소 어디에도
-            확정되어 있지 않아(Issue #62), 이 Endpoint는 항상 501(COLLECTOR_ACTION_NOT_SUPPORTED)을
-            반환한다. 값이 확정되면 후속 작업에서 실제 구현으로 교체한다. 일일 자동 수집은
-            Scheduler(`CollectorExecutionService.runDailyCollection`)로 이미 동작한다.
+            요청 Thread는 실제 외부 수집이 끝나기 전에 즉시 반환한다(202 Accepted). 생성된 각
+            수집 실행은 PENDING 상태로 즉시 만들어지고, 실제 Provider 호출과 결과 반영은 별도
+            Thread에서 비동기로 진행되며 `GET /api/v1/admin/collection-runs/{runId}`로 진행
+            상황을 확인한다.
         """,
     )
     @ApiResponses(
-        SwaggerApiResponse(responseCode = "202", description = "접수 성공(CollectorAction 확정 후 활성화)"),
+        SwaggerApiResponse(responseCode = "202", description = "접수 성공"),
+        SwaggerApiResponse(responseCode = "400", description = "요청 값 형식 오류(VALIDATION_FAILED)"),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "403", description = "개발자 권한이 없음 (FORBIDDEN)"),
+        SwaggerApiResponse(responseCode = "404", description = "수집원이 없음 (JOB_SOURCE_NOT_FOUND)"),
         SwaggerApiResponse(
-            responseCode = "501",
-            description = "CollectorAction 값이 확정되지 않아 지원하지 않음 (COLLECTOR_ACTION_NOT_SUPPORTED)",
+            responseCode = "409",
+            description =
+                "승인되지 않음(SOURCE_NOT_APPROVED), 설정되지 않음(SOURCE_NOT_CONFIGURED), " +
+                    "이미 실행 중(COLLECTOR_ALREADY_RUNNING)",
         ),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @PostMapping("/collector-actions")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    @Suppress("UnusedParameter", "UNUSED_PARAMETER")
     fun triggerCollectorAction(
-        // CollectorAction 확정 전까지 항상 501을 반환하므로 실제로 사용하지 않지만, Request Body
-        // 계약을 Swagger 문서에 남기고 향후 구현 교체 시 Signature를 유지하기 위해 남겨둔다.
         @Valid @RequestBody request: CollectorActionRequest,
-    ): ApiResponse<CollectorActionResponse> = throw CollectorActionNotSupportedException()
+    ): ApiResponse<CollectorActionResponse> {
+        val acceptedAt = LocalDateTime.now()
+        val runs =
+            collectorExecutionService.triggerManual(
+                requireNotNull(request.action),
+                requireNotNull(request.sourceIds),
+            )
+        return ApiResponse.of(
+            CollectorActionResponse(
+                runIds = runs.map { requireNotNull(it.id) },
+                status = CollectionRunStatus.PENDING,
+                acceptedAt = acceptedAt,
+            ),
+        )
+    }
 
     @Operation(
         summary = "수집 실행 목록 조회",

@@ -7,6 +7,8 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentMatchers.any
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
@@ -79,7 +81,7 @@ class CollectedJobUpsertUseCaseImplTest {
 
         val result = useCase.upsert(commandOf())
 
-        assertThat(result.created).isTrue()
+        assertThat(result.outcome).isEqualTo(JobImportOutcome.CREATED)
         assertThat(result.jobId).isEqualTo(10L)
         assertThat(result.published).isTrue()
     }
@@ -104,9 +106,35 @@ class CollectedJobUpsertUseCaseImplTest {
 
         val result = useCase.upsert(commandOf(content = "갱신된 본문"))
 
-        assertThat(result.created).isFalse()
+        assertThat(result.outcome).isEqualTo(JobImportOutcome.UPDATED)
         assertThat(result.jobId).isEqualTo(20L)
         assertThat(existing.bodyMarkdown).isEqualTo("갱신된 본문")
+    }
+
+    @Test
+    fun `동일 출처·외부 ID의 내용이 그대로면 UNCHANGED를 반환하고 저장하지 않는다`() {
+        val existing =
+            Job(
+                companyId = 1L,
+                type = PostingType.GENERAL,
+                applicationMethod = ApplicationMethod.EXTERNAL,
+                title = "백엔드 개발자",
+                status = JobStatus.PUBLISHED,
+            ).apply {
+                id = 30L
+                sourceName = "MMA"
+                externalJobId = "EXT-1"
+                bodyMarkdown = "본문"
+                externalUrl = "https://example.com/job/1"
+            }
+        given(companyQuery.findActiveSummary(1L)).willReturn(CompanySummary(companyId = 1L, name = "인력개발원"))
+        given(jobRepository.findBySourceNameAndExternalJobId("MMA", "EXT-1")).willReturn(existing)
+
+        val result = useCase.upsert(commandOf())
+
+        assertThat(result.outcome).isEqualTo(JobImportOutcome.UNCHANGED)
+        assertThat(result.jobId).isEqualTo(30L)
+        verify(jobRepository, never()).saveAndFlush(anyJob())
     }
 
     @Test

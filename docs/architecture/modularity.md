@@ -211,6 +211,8 @@ Module 간 순환 의존성을 만들지 않고, 다른 Module의 내부 구현(
 
 두 번째 사례는 `collector`(`CollectorExecutionServiceImpl`)가 `job`이 공개한 `domain.job.upsert` Package(`CollectedJobUpsertUseCase`/`CollectedJobUpsertCommand`/`CollectedJobUpsertResult`, 각 Type에 `@NamedInterface` 직접 선언, `CompanyQuery`와 같은 방식)를 통해 외부 수집 공고를 반영하는 것이다(Issue #62). Collector는 이 Package를 통해서만 `job`에 접근하고, `Job` Entity나 `JobRepository`는 참조하지 않는다. `collector`의 새 CollectionRun 실행 상태(`CollectionRunStatus`)는 `operation.OperationStatus`와 값 집합이 달라(`PARTIAL_SUCCESS`/`CANCELED` 포함) 재사용하지 않고 `domain.collector.entity.type`에 새로 정의했다.
 
+세 번째 사례는 같은 `CollectorExecutionServiceImpl`이 `company`가 공개한 `domain.company.external` Package(`CompanyExternalImportUseCase`/`CompanyExternalImportCommand`/`CompanyExternalImportResult`)를 통해 외부에서 수집한 기업명으로 기존 기업을 찾거나 최소 정보로 새로 만드는 것이다(Issue #62). 정규화된 공고는 기업명(String)만 제공하는데 `jobs.company_id`가 `NOT NULL`이라 Collector가 companyId를 직접 해석해야 했고, `CompanyQuery`는 ID 기준 조회만 공개해(Issue #56) 이 용도에 맞지 않았다. `company` 도메인이 소유한 (name, type) 미삭제 Unique 판정(`uk_companies_name_type_active`)을 그대로 재사용해 별도 중복 정책을 만들지 않았다. `CompanyRepository`/`Company` Entity는 여전히 비공개다.
+
 새로운 Domain 간 의존이 필요해지면 이 방식(Named Interface로 필요한 Package만 명시적으로 공개)을 그대로 따르고, 이 문서에 근거를 추가한다.
 
 ## 만들지 않는 Package

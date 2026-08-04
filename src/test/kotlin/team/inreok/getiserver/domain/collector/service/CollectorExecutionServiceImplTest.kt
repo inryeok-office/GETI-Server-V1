@@ -1,6 +1,7 @@
 package team.inreok.getiserver.domain.collector.service
 
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentCaptor
@@ -13,18 +14,23 @@ import org.mockito.Mockito.atLeast
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
-import org.springframework.beans.factory.ObjectProvider
+import org.springframework.core.task.TaskExecutor
 import team.inreok.getiserver.domain.collector.entity.CollectionRun
 import team.inreok.getiserver.domain.collector.entity.CollectionRunError
 import team.inreok.getiserver.domain.collector.entity.JobSource
 import team.inreok.getiserver.domain.collector.entity.type.CollectionRunStatus
+import team.inreok.getiserver.domain.collector.entity.type.CollectorAction
 import team.inreok.getiserver.domain.collector.entity.type.JobDataQualityStatus
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceApprovalStatus
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceCode
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceType
+import team.inreok.getiserver.domain.collector.exception.CollectorAlreadyRunningException
+import team.inreok.getiserver.domain.collector.exception.JobSourceNotFoundException
+import team.inreok.getiserver.domain.collector.exception.SourceNotApprovedException
+import team.inreok.getiserver.domain.collector.exception.SourceNotConfiguredException
+import team.inreok.getiserver.domain.collector.notification.service.JobNotificationService
 import team.inreok.getiserver.domain.collector.provider.CollectorCollectionContext
 import team.inreok.getiserver.domain.collector.provider.CollectorCollectionResult
-import team.inreok.getiserver.domain.collector.provider.CollectorCompanyResolver
 import team.inreok.getiserver.domain.collector.provider.CollectorProvider
 import team.inreok.getiserver.domain.collector.provider.CollectorProviderException
 import team.inreok.getiserver.domain.collector.provider.NormalizedCollectedJob
@@ -33,15 +39,20 @@ import team.inreok.getiserver.domain.collector.repository.CollectionRunErrorRepo
 import team.inreok.getiserver.domain.collector.repository.CollectionRunRepository
 import team.inreok.getiserver.domain.collector.repository.JobSourceRepository
 import team.inreok.getiserver.domain.collector.service.impl.CollectorExecutionServiceImpl
+import team.inreok.getiserver.domain.company.external.CompanyExternalImportCommand
+import team.inreok.getiserver.domain.company.external.CompanyExternalImportResult
+import team.inreok.getiserver.domain.company.external.CompanyExternalImportUseCase
 import team.inreok.getiserver.domain.job.upsert.CollectedJobUpsertCommand
 import team.inreok.getiserver.domain.job.upsert.CollectedJobUpsertResult
 import team.inreok.getiserver.domain.job.upsert.CollectedJobUpsertUseCase
+import team.inreok.getiserver.domain.job.upsert.JobImportOutcome
 import java.time.LocalDateTime
+import java.util.Optional
 
 /**
- * 실제 Provider·Job Upsert가 없는 이번 범위에서 Orchestrator의 격리·집계 규칙만 검증하는
- * Test다. [FakeCollectorProvider]와 [FakeCollectorCompanyResolver]는 이 Test 전용이며
- * Production Source Set에는 존재하지 않는다(Issue #62 요구사항).
+ * 실제 Provider·Job/Company Upsert가 없는 이번 범위에서 Orchestrator의 격리·집계·비동기 접수
+ * 규칙만 검증하는 Test다. [FakeCollectorProvider]는 이 Test 전용이며 Production Source Set에는
+ * 존재하지 않는다(Issue #62 요구사항).
  */
 @ExtendWith(MockitoExtension::class)
 class CollectorExecutionServiceImplTest {
@@ -56,6 +67,16 @@ class CollectorExecutionServiceImplTest {
 
     @Mock
     private lateinit var collectedJobUpsertUseCase: CollectedJobUpsertUseCase
+
+    @Mock
+    private lateinit var companyExternalImportUseCase: CompanyExternalImportUseCase
+
+    @Mock
+    private lateinit var jobNotificationService: JobNotificationService
+
+    // 실제 Bean은 별도 Thread에서 실행하지만, Test는 결정적인 결과 확인을 위해 호출 Thread에서
+    // 즉시 실행하는 동기 Fake를 사용한다.
+    private val synchronousExecutor = TaskExecutor { command -> command.run() }
 
     private val now = LocalDateTime.of(2026, 8, 3, 3, 0)
 
@@ -91,7 +112,7 @@ class CollectorExecutionServiceImplTest {
     // Kotlin non-null 파라미터에 bare any()를 쓰면 null 반환으로 NPE가 나므로 Elvis로 기본값을
     // 채운다(CompanyServiceTest.anyCompany()와 동일한 방식).
     private fun anyCollectionRun(): CollectionRun =
-        any(CollectionRun::class.java) ?: CollectionRun(sourceId = 0, action = "x", startedAt = now)
+        any(CollectionRun::class.java) ?: CollectionRun(sourceId = 0, action = CollectorAction.SYNC, startedAt = now)
 
     private fun anyCollectionRunError(): CollectionRunError =
         any(CollectionRunError::class.java)
@@ -110,6 +131,24 @@ class CollectorExecutionServiceImplTest {
             publish = false,
         )
 
+    private fun anyImportCommand(): CompanyExternalImportCommand =
+        any(CompanyExternalImportCommand::class.java) ?: CompanyExternalImportCommand("x", "x")
+
+    private val fallbackTrigger =
+        team.inreok.getiserver.domain.collector.notification.service.JobNotificationTrigger(
+            jobId = 0,
+            sourceCode = "x",
+            sourceDisplayName = "x",
+            title = "x",
+            companyName = "x",
+            externalUrl = null,
+            recruitmentEndedAt = null,
+        )
+
+    private fun anyTrigger(): team.inreok.getiserver.domain.collector.notification.service.JobNotificationTrigger =
+        any(team.inreok.getiserver.domain.collector.notification.service.JobNotificationTrigger::class.java)
+            ?: fallbackTrigger
+
     // 실제 JPA saveAndFlush는 Insert 시 자동 생성 ID를 채워 돌려주지만 Mock은 그렇지 않다.
     // requireNotNull(run.id)를 쓰는 Production 코드가 정상 동작하도록 최초 저장에서 ID를 채워
     // 넣는다(CompanyServiceTest.saveAndFlush Stub와 같은 목적).
@@ -118,20 +157,7 @@ class CollectorExecutionServiceImplTest {
     private fun assignIdIfAbsent(invocation: org.mockito.invocation.InvocationOnMock): CollectionRun =
         (invocation.arguments[0] as CollectionRun).apply { if (id == null) id = nextRunId++ }
 
-    // ObjectProvider는 단순 조회 계약이라 Mockito Mock 대신 직접 구현한다 — Skip 경로로 끝나는
-    // Test는 getIfAvailable()이 호출되지 않아 Mock Stub를 쓰면 Strict Stubbing이
-    // UnnecessaryStubbingException을 던지기 때문이다.
-    private fun objectProviderOf(resolver: CollectorCompanyResolver?): ObjectProvider<CollectorCompanyResolver> =
-        object : ObjectProvider<CollectorCompanyResolver> {
-            override fun getObject(): CollectorCompanyResolver = requireNotNull(resolver)
-
-            override fun getIfAvailable(): CollectorCompanyResolver? = resolver
-        }
-
-    private fun serviceWith(
-        provider: CollectorProvider?,
-        companyResolver: CollectorCompanyResolver? = CollectorCompanyResolver { 100L },
-    ): CollectorExecutionService {
+    private fun serviceWith(provider: CollectorProvider?): CollectorExecutionService {
         val registry = ProviderRegistry(listOfNotNull(provider))
         return CollectorExecutionServiceImpl(
             jobSourceRepository,
@@ -139,9 +165,18 @@ class CollectorExecutionServiceImplTest {
             collectionRunErrorRepository,
             registry,
             collectedJobUpsertUseCase,
-            objectProviderOf(companyResolver),
+            companyExternalImportUseCase,
+            jobNotificationService,
+            synchronousExecutor,
         )
     }
+
+    private fun givenCompanyResolves(companyId: Long = 100L) {
+        given(companyExternalImportUseCase.findOrCreateExternal(anyImportCommand()))
+            .willReturn(CompanyExternalImportResult(companyId = companyId, created = false))
+    }
+
+    // --- runDailyCollection ---
 
     @Test
     fun `등록된 Provider가 없으면 실행 이력 없이 정상 Skip한다`() {
@@ -189,8 +224,9 @@ class CollectorExecutionServiceImplTest {
         given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
         given(collectionRunRepository.saveAndFlush(anyCollectionRun()))
             .willAnswer(::assignIdIfAbsent)
+        givenCompanyResolves()
         given(collectedJobUpsertUseCase.upsert(anyUpsertCommand()))
-            .willReturn(CollectedJobUpsertResult(jobId = 1L, created = true, published = true))
+            .willReturn(CollectedJobUpsertResult(jobId = 1L, outcome = JobImportOutcome.CREATED, published = true))
 
         val provider =
             FakeCollectorProvider(JobSourceCode.MMA) {
@@ -209,6 +245,7 @@ class CollectorExecutionServiceImplTest {
         val captor = ArgumentCaptor.forClass(CollectionRun::class.java)
         verify(collectionRunRepository, times(3)).saveAndFlush(captor.capture())
         val finalRun = captor.allValues.last()
+        assertThat(finalRun.action).isEqualTo(CollectorAction.SYNC)
         assertThat(finalRun.status).isEqualTo(CollectionRunStatus.SUCCESS)
         assertThat(finalRun.successCount).isEqualTo(2)
         assertThat(finalRun.failureCount).isEqualTo(0)
@@ -216,20 +253,21 @@ class CollectorExecutionServiceImplTest {
     }
 
     @Test
-    fun `기업명을 해석할 수 없는 공고는 실패로 기록되고 다른 공고 처리는 계속된다`() {
+    fun `Job 반영이 실패하면 해당 공고만 실패로 기록되고 다른 공고 처리는 계속된다`() {
         val source = sourceOf()
         given(jobSourceRepository.findAllByOrderBySourceCodeAsc()).willReturn(listOf(source))
         given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
         given(collectionRunRepository.saveAndFlush(anyCollectionRun()))
             .willAnswer(::assignIdIfAbsent)
-        // 기업명을 해석할 수 없으면 collectedJobUpsertUseCase.upsert는 아예 호출되지 않는다.
+        givenCompanyResolves()
+        given(collectedJobUpsertUseCase.upsert(anyUpsertCommand()))
+            .willThrow(IllegalStateException("upsert 실패"))
 
         val provider =
             FakeCollectorProvider(JobSourceCode.MMA) {
                 CollectorCollectionResult(jobs = listOf(jobOf("EXT-1"), jobOf("EXT-2")))
             }
-        // Company 해석 계약이 아직 없어(Blocker) resolver가 항상 null을 반환하는 상황을 재현한다.
-        val service = serviceWith(provider, companyResolver = null)
+        val service = serviceWith(provider)
 
         service.runDailyCollection()
 
@@ -248,8 +286,9 @@ class CollectorExecutionServiceImplTest {
             .willReturn(false)
         given(collectionRunRepository.saveAndFlush(anyCollectionRun()))
             .willAnswer(::assignIdIfAbsent)
+        givenCompanyResolves()
         given(collectedJobUpsertUseCase.upsert(anyUpsertCommand()))
-            .willReturn(CollectedJobUpsertResult(jobId = 1L, created = true, published = true))
+            .willReturn(CollectedJobUpsertResult(jobId = 1L, outcome = JobImportOutcome.CREATED, published = true))
 
         val failingProvider =
             FakeCollectorProvider(JobSourceCode.MMA) { throw CollectorProviderException.Timeout() }
@@ -263,7 +302,9 @@ class CollectorExecutionServiceImplTest {
                 collectionRunErrorRepository,
                 registry,
                 collectedJobUpsertUseCase,
-                objectProviderOf(CollectorCompanyResolver { 100L }),
+                companyExternalImportUseCase,
+                jobNotificationService,
+                synchronousExecutor,
             )
 
         service.runDailyCollection()
@@ -275,6 +316,132 @@ class CollectorExecutionServiceImplTest {
         val statusesBySource = captor.allValues.groupBy { it.sourceId }.mapValues { it.value.last().status }
         assertThat(statusesBySource[1L]).isEqualTo(CollectionRunStatus.FAILED)
         assertThat(statusesBySource[2L]).isEqualTo(CollectionRunStatus.SUCCESS)
+    }
+
+    @Test
+    fun `공고가 새로 생성되면 Discord 알림 등록을 시도한다`() {
+        val source = sourceOf()
+        given(jobSourceRepository.findAllByOrderBySourceCodeAsc()).willReturn(listOf(source))
+        given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
+        given(collectionRunRepository.saveAndFlush(anyCollectionRun())).willAnswer(::assignIdIfAbsent)
+        givenCompanyResolves()
+        given(collectedJobUpsertUseCase.upsert(anyUpsertCommand()))
+            .willReturn(CollectedJobUpsertResult(jobId = 42L, outcome = JobImportOutcome.CREATED, published = true))
+        val provider =
+            FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(jobs = listOf(jobOf("EXT-1"))) }
+        val service = serviceWith(provider)
+
+        service.runDailyCollection()
+
+        // ArgumentCaptor.capture()를 Kotlin non-null 파라미터 2개짜리 호출에 eq()와 함께 쓰면
+        // Elvis 평가 순서 때문에 Matcher가 중복 등록된다(InvalidUseOfMatchersException) — 대신
+        // argThat으로 값 하나만 뽑아 확인한다.
+        var capturedJobId: Long? = null
+        verify(jobNotificationService).enqueueIfEligible(
+            org.mockito.ArgumentMatchers.argThat { trigger ->
+                capturedJobId = trigger?.jobId
+                true
+            }
+                ?: fallbackTrigger,
+            org.mockito.ArgumentMatchers.eq(true),
+        )
+        assertThat(capturedJobId).isEqualTo(42L)
+    }
+
+    @Test
+    fun `공고가 변경 없음(UNCHANGED)으로 반영되면 Discord 알림을 등록하지 않는다`() {
+        val source = sourceOf()
+        given(jobSourceRepository.findAllByOrderBySourceCodeAsc()).willReturn(listOf(source))
+        given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
+        given(collectionRunRepository.saveAndFlush(anyCollectionRun())).willAnswer(::assignIdIfAbsent)
+        givenCompanyResolves()
+        given(collectedJobUpsertUseCase.upsert(anyUpsertCommand()))
+            .willReturn(CollectedJobUpsertResult(jobId = 42L, outcome = JobImportOutcome.UNCHANGED, published = true))
+        val provider =
+            FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(jobs = listOf(jobOf("EXT-1"))) }
+        val service = serviceWith(provider)
+
+        service.runDailyCollection()
+
+        verify(
+            jobNotificationService,
+            times(0),
+        ).enqueueIfEligible(anyTrigger(), org.mockito.ArgumentMatchers.anyBoolean())
+    }
+
+    // --- triggerManual ---
+
+    @Test
+    fun `수동 실행은 대상 수집원의 CollectionRun을 PENDING으로 즉시 생성해 반환한다`() {
+        val source = sourceOf()
+        given(jobSourceRepository.findById(1L)).willReturn(Optional.of(source))
+        given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
+        given(collectionRunRepository.saveAndFlush(anyCollectionRun())).willAnswer(::assignIdIfAbsent)
+        givenCompanyResolves()
+        given(collectedJobUpsertUseCase.upsert(anyUpsertCommand()))
+            .willReturn(CollectedJobUpsertResult(jobId = 1L, outcome = JobImportOutcome.CREATED, published = true))
+        val provider =
+            FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(jobs = listOf(jobOf("EXT-1"))) }
+        val service = serviceWith(provider)
+
+        val runs = service.triggerManual(CollectorAction.COLLECT, listOf(1L))
+
+        assertThat(runs).hasSize(1)
+        assertThat(runs.single().action).isEqualTo(CollectorAction.COLLECT)
+    }
+
+    @Test
+    fun `존재하지 않는 수집원으로 수동 실행을 요청하면 JobSourceNotFoundException이 발생하고 실행을 만들지 않는다`() {
+        given(jobSourceRepository.findById(99L)).willReturn(Optional.empty())
+        val service = serviceWith(FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(emptyList()) })
+
+        assertThatThrownBy { service.triggerManual(CollectorAction.COLLECT, listOf(99L)) }
+            .isInstanceOf(JobSourceNotFoundException::class.java)
+        verify(collectionRunRepository, times(0)).saveAndFlush(anyCollectionRun())
+    }
+
+    @Test
+    fun `승인되지 않은 수집원으로 수동 실행을 요청하면 SourceNotApprovedException이 발생한다`() {
+        val source = sourceOf(approvalStatus = JobSourceApprovalStatus.PENDING_APPROVAL)
+        given(jobSourceRepository.findById(1L)).willReturn(Optional.of(source))
+        val service = serviceWith(FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(emptyList()) })
+
+        assertThatThrownBy { service.triggerManual(CollectorAction.COLLECT, listOf(1L)) }
+            .isInstanceOf(SourceNotApprovedException::class.java)
+    }
+
+    @Test
+    fun `설정되지 않은 수집원으로 수동 실행을 요청하면 SourceNotConfiguredException이 발생한다`() {
+        val source = sourceOf()
+        given(jobSourceRepository.findById(1L)).willReturn(Optional.of(source))
+        // Provider가 등록되지 않아 configured=false
+        val service = serviceWith(provider = null)
+
+        assertThatThrownBy { service.triggerManual(CollectorAction.COLLECT, listOf(1L)) }
+            .isInstanceOf(SourceNotConfiguredException::class.java)
+    }
+
+    @Test
+    fun `이미 실행 중인 수집원으로 수동 실행을 요청하면 CollectorAlreadyRunningException이 발생한다`() {
+        val source = sourceOf()
+        given(jobSourceRepository.findById(1L)).willReturn(Optional.of(source))
+        given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(true)
+        val service = serviceWith(FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(emptyList()) })
+
+        assertThatThrownBy { service.triggerManual(CollectorAction.COLLECT, listOf(1L)) }
+            .isInstanceOf(CollectorAlreadyRunningException::class.java)
+    }
+
+    @Test
+    fun `여러 수집원 중 하나라도 검증에 실패하면 어떤 실행도 만들지 않는다`() {
+        val validSource = sourceOf(id = 1L)
+        given(jobSourceRepository.findById(1L)).willReturn(Optional.of(validSource))
+        given(jobSourceRepository.findById(2L)).willReturn(Optional.empty())
+        val service = serviceWith(FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(emptyList()) })
+
+        assertThatThrownBy { service.triggerManual(CollectorAction.COLLECT, listOf(1L, 2L)) }
+            .isInstanceOf(JobSourceNotFoundException::class.java)
+        verify(collectionRunRepository, times(0)).saveAndFlush(anyCollectionRun())
     }
 
     private class FakeCollectorProvider(

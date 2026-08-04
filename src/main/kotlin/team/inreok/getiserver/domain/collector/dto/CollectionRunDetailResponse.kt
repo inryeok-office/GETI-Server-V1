@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 import team.inreok.getiserver.domain.collector.entity.CollectionRun
 import team.inreok.getiserver.domain.collector.entity.CollectionRunError
 import team.inreok.getiserver.domain.collector.entity.type.CollectionRunStatus
+import team.inreok.getiserver.domain.collector.entity.type.CollectorAction
 import java.time.LocalDateTime
 
 @Schema(description = "수집 실행 오류 상세")
@@ -43,8 +44,8 @@ data class CollectionRunDetailResponse(
     val sourceId: Long,
     @param:Schema(description = "수집원 이름")
     val sourceName: String,
-    @param:Schema(description = "실행 방식 내부 식별자(CollectorAction 확정 전까지 내부 값)")
-    val action: String,
+    @param:Schema(description = "실행 방식")
+    val action: CollectorAction,
     @param:Schema(description = "실행 상태")
     val status: CollectionRunStatus,
     @param:Schema(description = "성공 건수")

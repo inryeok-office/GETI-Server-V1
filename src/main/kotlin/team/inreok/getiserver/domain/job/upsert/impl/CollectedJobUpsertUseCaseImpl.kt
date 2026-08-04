@@ -14,6 +14,7 @@ import team.inreok.getiserver.domain.job.service.validateForPublish
 import team.inreok.getiserver.domain.job.upsert.CollectedJobUpsertCommand
 import team.inreok.getiserver.domain.job.upsert.CollectedJobUpsertResult
 import team.inreok.getiserver.domain.job.upsert.CollectedJobUpsertUseCase
+import team.inreok.getiserver.domain.job.upsert.JobImportOutcome
 import java.time.LocalDateTime
 
 @Service
@@ -28,6 +29,14 @@ class CollectedJobUpsertUseCaseImpl(
         companyQuery.findActiveSummary(command.companyId) ?: throw JobCompanyNotFoundException(command.companyId)
 
         val existing = jobRepository.findBySourceNameAndExternalJobId(command.sourceName, command.externalJobId)
+        if (existing != null && !hasContentChanged(existing, command)) {
+            return CollectedJobUpsertResult(
+                jobId = requireNotNull(existing.id),
+                outcome = JobImportOutcome.UNCHANGED,
+                published = existing.status == JobStatus.PUBLISHED,
+            )
+        }
+
         val job =
             existing ?: Job(
                 companyId = command.companyId,
@@ -64,8 +73,21 @@ class CollectedJobUpsertUseCaseImpl(
         val saved = jobRepository.saveAndFlush(job)
         return CollectedJobUpsertResult(
             jobId = requireNotNull(saved.id),
-            created = existing == null,
+            outcome = if (existing == null) JobImportOutcome.CREATED else JobImportOutcome.UPDATED,
             published = saved.status == JobStatus.PUBLISHED,
         )
     }
+
+    // 단순 updatedAt 변경만으로 항상 Update하지 않기 위해, 실제로 노출되는 값이 바뀌었을 때만
+    // 갱신한다(Issue #62 확정 정책). 게시 상태 자체(PUBLISHED로의 전환 시도)는 이 비교에 포함하지
+    // 않는다 — 값이 그대로라면 이전 호출에서 이미 같은 publish 판정을 거쳤다고 보기 때문이다.
+    private fun hasContentChanged(
+        existing: Job,
+        command: CollectedJobUpsertCommand,
+    ): Boolean =
+        existing.title != command.title.trim() ||
+            existing.bodyMarkdown != command.content ||
+            existing.externalUrl != command.externalUrl ||
+            existing.recruitmentStartedAt != command.startDate ||
+            existing.recruitmentEndedAt != command.endDate
 }

@@ -16,6 +16,9 @@ interface CollectionRunRepository : JpaRepository<CollectionRun, Long> {
         statuses: Collection<CollectionRunStatus>,
     ): Boolean
 
+    // 서버 재시작 후 남아있는 PENDING/RUNNING 실행을 정리할 때 사용한다(CollectorStaleRunRecoveryRunner).
+    fun findAllByStatusIn(statuses: Collection<CollectionRunStatus>): List<CollectionRun>
+
     // 목록 조회는 DB Pagination과 필터를 함께 처리한다. 모든 조건은 null이면 적용하지 않는다.
     //
     // startAt/endAt은 ":startAt IS NULL OR ..." 형태로 두면 PostgreSQL이 Parameter Type을 추론하지

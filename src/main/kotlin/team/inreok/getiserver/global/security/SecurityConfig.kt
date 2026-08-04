@@ -95,6 +95,8 @@ class SecurityConfig(
                 // 공고 조회(목록·상세)는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
                 authorize("/api/v1/jobs", authenticated)
                 authorize("/api/v1/jobs/**", authenticated)
+                // 공개 공고 출처 목록(JobSourceController)도 인증된 사용자 모두 접근할 수 있다(Issue #62).
+                authorize("/api/v1/job-sources", authenticated)
                 authorize(anyRequest, permitAll)
             }
             exceptionHandling {

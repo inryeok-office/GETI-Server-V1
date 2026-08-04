@@ -27,13 +27,16 @@ import team.inreok.getiserver.domain.collector.dto.JobSourceListResponse
 import team.inreok.getiserver.domain.collector.dto.JobSourceResponse
 import team.inreok.getiserver.domain.collector.dto.JobSourceUpdateRequest
 import team.inreok.getiserver.domain.collector.dto.JobSourceUpdateResponse
+import team.inreok.getiserver.domain.collector.entity.CollectionRun
 import team.inreok.getiserver.domain.collector.entity.type.CollectionRunStatus
+import team.inreok.getiserver.domain.collector.entity.type.CollectorAction
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceApprovalStatus
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceCode
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceType
 import team.inreok.getiserver.domain.collector.exception.CollectorAlreadyRunningException
 import team.inreok.getiserver.domain.collector.exception.JobSourceNotFoundException
 import team.inreok.getiserver.domain.collector.service.CollectionRunQueryService
+import team.inreok.getiserver.domain.collector.service.CollectorExecutionService
 import team.inreok.getiserver.domain.collector.service.JobSourceService
 import team.inreok.getiserver.global.security.JwtTokenProvider
 import team.inreok.getiserver.global.security.SecurityConfig
@@ -54,6 +57,9 @@ class CollectorAdminControllerTest
 
         @MockitoBean
         private lateinit var collectionRunQueryService: CollectionRunQueryService
+
+        @MockitoBean
+        private lateinit var collectorExecutionService: CollectorExecutionService
 
         @MockitoBean
         private lateinit var jwtTokenProvider: JwtTokenProvider
@@ -179,18 +185,67 @@ class CollectorAdminControllerTest
                 .andExpect(jsonPath("$.error.code").value("COLLECTOR_ALREADY_RUNNING"))
         }
 
-        // --- 수동 실행(CollectorAction 미확정으로 항상 501) ---
+        // --- 수동 실행 ---
 
         @Test
-        fun `수동 실행 요청은 CollectorAction 미확정으로 501을 반환한다`() {
+        fun `개발자가 수동 실행을 요청하면 202와 생성된 runId 목록을 반환한다`() {
+            val run =
+                CollectionRun(sourceId = 1L, action = CollectorAction.COLLECT, startedAt = LocalDateTime.now()).apply {
+                    id =
+                        10L
+                }
+            given(collectorExecutionService.triggerManual(CollectorAction.COLLECT, listOf(1L))).willReturn(listOf(run))
+
             mockMvc
                 .perform(
                     post("/api/v1/admin/collector-actions")
                         .with(authOf(1L, "DEVELOPER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{ "action": "COLLECT", "sourceIds": [1] }"""),
-                ).andExpect(status().isNotImplemented)
-                .andExpect(jsonPath("$.error.code").value("COLLECTOR_ACTION_NOT_SUPPORTED"))
+                ).andExpect(status().isAccepted)
+                .andExpect(jsonPath("$.data.runIds[0]").value(10))
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+        }
+
+        @Test
+        fun `존재하지 않는 수집원으로 수동 실행을 요청하면 404를 반환한다`() {
+            given(collectorExecutionService.triggerManual(CollectorAction.COLLECT, listOf(99L)))
+                .willThrow(JobSourceNotFoundException(99L))
+
+            mockMvc
+                .perform(
+                    post("/api/v1/admin/collector-actions")
+                        .with(authOf(1L, "DEVELOPER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "action": "COLLECT", "sourceIds": [99] }"""),
+                ).andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.error.code").value("JOB_SOURCE_NOT_FOUND"))
+        }
+
+        @Test
+        fun `이미 실행 중인 수집원으로 수동 실행을 요청하면 409를 반환한다`() {
+            given(collectorExecutionService.triggerManual(CollectorAction.SYNC, listOf(1L)))
+                .willThrow(CollectorAlreadyRunningException(1L))
+
+            mockMvc
+                .perform(
+                    post("/api/v1/admin/collector-actions")
+                        .with(authOf(1L, "DEVELOPER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "action": "SYNC", "sourceIds": [1] }"""),
+                ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.error.code").value("COLLECTOR_ALREADY_RUNNING"))
+        }
+
+        @Test
+        fun `action이 없으면 400을 반환한다`() {
+            mockMvc
+                .perform(
+                    post("/api/v1/admin/collector-actions")
+                        .with(authOf(1L, "DEVELOPER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "sourceIds": [1] }"""),
+                ).andExpect(status().isBadRequest)
         }
 
         @Test
@@ -234,7 +289,7 @@ class CollectorAdminControllerTest
                     runId = 1L,
                     sourceId = 1L,
                     sourceName = "병역일터",
-                    action = "SCHEDULED_SYNC",
+                    action = CollectorAction.SYNC,
                     status = CollectionRunStatus.SUCCESS,
                     successCount = 3,
                     failureCount = 0,

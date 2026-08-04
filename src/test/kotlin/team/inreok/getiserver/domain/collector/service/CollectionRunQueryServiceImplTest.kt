@@ -13,6 +13,7 @@ import team.inreok.getiserver.domain.collector.entity.CollectionRun
 import team.inreok.getiserver.domain.collector.entity.CollectionRunError
 import team.inreok.getiserver.domain.collector.entity.JobSource
 import team.inreok.getiserver.domain.collector.entity.type.CollectionRunStatus
+import team.inreok.getiserver.domain.collector.entity.type.CollectorAction
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceApprovalStatus
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceCode
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceType
@@ -55,7 +56,7 @@ class CollectionRunQueryServiceImplTest {
         id: Long,
         sourceId: Long,
         status: CollectionRunStatus = CollectionRunStatus.SUCCESS,
-    ) = CollectionRun(sourceId = sourceId, action = "SCHEDULED_SYNC", status = status, startedAt = now).apply {
+    ) = CollectionRun(sourceId = sourceId, action = CollectorAction.SYNC, status = status, startedAt = now).apply {
         this.id =
             id
     }

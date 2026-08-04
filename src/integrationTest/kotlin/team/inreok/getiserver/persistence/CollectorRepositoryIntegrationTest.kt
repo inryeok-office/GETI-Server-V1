@@ -17,6 +17,7 @@ import org.testcontainers.utility.DockerImageName
 import team.inreok.getiserver.domain.collector.entity.CollectionRun
 import team.inreok.getiserver.domain.collector.entity.CollectionRunError
 import team.inreok.getiserver.domain.collector.entity.type.CollectionRunStatus
+import team.inreok.getiserver.domain.collector.entity.type.CollectorAction
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceApprovalStatus
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceCode
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceType
@@ -53,7 +54,7 @@ class CollectorRepositoryIntegrationTest
         }
 
         @Test
-        fun `V8 Migration이 확정된 7개 외부 수집원을 미승인·비활성 상태로 시드한다`() {
+        fun `V8 Migration이 확정된 7개 외부 수집원을 실제 승인 현황과 비활성 상태로 시드한다`() {
             val sources = jobSourceRepository.findAllByOrderBySourceCodeAsc()
 
             // sourceCode는 STRING Enum이라 정렬은 선언 순서가 아니라 알파벳순이다.
@@ -71,9 +72,16 @@ class CollectorRepositoryIntegrationTest
             assertThat(names).isEqualTo(names.sorted())
             assertThat(sources).allSatisfy { source ->
                 assertThat(source.enabled).isFalse()
-                assertThat(source.approvalStatus).isEqualTo(JobSourceApprovalStatus.PENDING_APPROVAL)
                 assertThat(source.sourceType).isEqualTo(JobSourceType.EXTERNAL_API)
             }
+            val approvalStatusByCode = sources.associate { it.sourceCode to it.approvalStatus }
+            assertThat(approvalStatusByCode[JobSourceCode.MMA]).isEqualTo(JobSourceApprovalStatus.READY)
+            assertThat(approvalStatusByCode[JobSourceCode.JOB_ALIO]).isEqualTo(JobSourceApprovalStatus.READY)
+            assertThat(approvalStatusByCode[JobSourceCode.CLEAN_EYE]).isEqualTo(JobSourceApprovalStatus.READY)
+            assertThat(approvalStatusByCode[JobSourceCode.NARA_ILTEO]).isEqualTo(JobSourceApprovalStatus.READY)
+            assertThat(approvalStatusByCode[JobSourceCode.SARAMIN]).isEqualTo(JobSourceApprovalStatus.PENDING_APPROVAL)
+            assertThat(approvalStatusByCode[JobSourceCode.IBK_ONE_JOB]).isEqualTo(JobSourceApprovalStatus.UNAVAILABLE)
+            assertThat(approvalStatusByCode[JobSourceCode.WORK24]).isEqualTo(JobSourceApprovalStatus.UNAVAILABLE)
         }
 
         @Test
@@ -169,7 +177,12 @@ class CollectorRepositoryIntegrationTest
             startedAt: LocalDateTime,
         ): CollectionRun =
             collectionRunRepository.saveAndFlush(
-                CollectionRun(sourceId = sourceId, action = "SCHEDULED_SYNC", status = status, startedAt = startedAt),
+                CollectionRun(
+                    sourceId = sourceId,
+                    action = CollectorAction.SYNC,
+                    status = status,
+                    startedAt = startedAt,
+                ),
             )
 
         companion object {

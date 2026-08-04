@@ -75,6 +75,22 @@ class JobSourceServiceImplTest {
     }
 
     @Test
+    fun `공개 목록은 activeOnly가 true면 활성화된 수집원만 반환한다`() {
+        given(jobSourceRepository.findAllByOrderBySourceCodeAsc()).willReturn(
+            listOf(
+                sourceOf(id = 1L, code = JobSourceCode.MMA, enabled = true),
+                sourceOf(id = 2L, code = JobSourceCode.SARAMIN, enabled = false),
+            ),
+        )
+        val service = serviceWith()
+
+        val result = service.listPublic(activeOnly = true)
+
+        assertThat(result.sources).hasSize(1)
+        assertThat(result.sources.single().active).isTrue()
+    }
+
+    @Test
     fun `존재하지 않는 수집원을 변경하려 하면 JobSourceNotFoundException이 발생한다`() {
         given(jobSourceRepository.findById(99L)).willReturn(Optional.empty())
         val service = serviceWith()

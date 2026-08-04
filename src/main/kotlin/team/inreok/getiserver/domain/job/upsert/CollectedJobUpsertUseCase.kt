@@ -46,12 +46,22 @@ data class CollectedJobUpsertCommand(
 )
 
 @NamedInterface
+enum class JobImportOutcome {
+    CREATED,
+    UPDATED,
+    UNCHANGED,
+
+    /** 이 Use Case 구현은 실패를 예외로 알리므로 실제로 반환하지는 않지만, 호출 측 계약 문서화를 위해 남긴다. */
+    FAILED,
+}
+
+@NamedInterface
 @Schema(description = "Job 반영 결과")
 data class CollectedJobUpsertResult(
     @param:Schema(description = "반영된 공고 ID")
     val jobId: Long,
-    @param:Schema(description = "이번 호출로 새로 생성되었는지 여부(false면 기존 공고를 갱신)")
-    val created: Boolean,
+    @param:Schema(description = "생성/갱신/변경 없음 여부")
+    val outcome: JobImportOutcome,
     @param:Schema(description = "실제로 PUBLISHED 상태로 반영되었는지 여부")
     val published: Boolean,
 )

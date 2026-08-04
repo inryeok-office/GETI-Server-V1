@@ -11,6 +11,7 @@ import jakarta.persistence.Table
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import team.inreok.getiserver.domain.collector.entity.type.CollectionRunStatus
+import team.inreok.getiserver.domain.collector.entity.type.CollectorAction
 import java.time.LocalDateTime
 
 // 기존 domain.collector.entity.JobCollectionRun(Foundation ERD Placeholder, PR #43)은 이미 병합된
@@ -22,8 +23,9 @@ import java.time.LocalDateTime
 class CollectionRun(
     @Column(name = "source_id", nullable = false)
     var sourceId: Long,
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    var action: String,
+    var action: CollectorAction,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     var status: CollectionRunStatus = CollectionRunStatus.PENDING,
