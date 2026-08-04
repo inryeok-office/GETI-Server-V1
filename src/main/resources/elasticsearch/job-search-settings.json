@@ -1,0 +1,21 @@
+{
+  "index": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "analysis": {
+    "tokenizer": {
+      "job_search_nori_tokenizer": {
+        "type": "nori_tokenizer",
+        "decompound_mode": "mixed"
+      }
+    },
+    "analyzer": {
+      "job_search_korean": {
+        "type": "custom",
+        "tokenizer": "job_search_nori_tokenizer",
+        "filter": ["nori_readingform", "lowercase"]
+      }
+    }
+  }
+}
