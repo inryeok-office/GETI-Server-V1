@@ -1,14 +1,9 @@
 package team.inreok.getiserver.domain.job.service
 
-import org.springframework.data.domain.Pageable
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
-import team.inreok.getiserver.domain.job.dto.JobSearchResponse
-import team.inreok.getiserver.domain.job.dto.JobSort
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
 import team.inreok.getiserver.domain.job.dto.JobUpdateRequest
-import team.inreok.getiserver.domain.job.dto.PublicJobStatus
-import team.inreok.getiserver.domain.job.entity.type.PostingType
 
 interface JobService {
     /** 공고를 등록하거나 임시저장한다. `status = PUBLISHED`면 게시 필수값을 모두 검증한다. */
@@ -37,14 +32,4 @@ interface JobService {
 
     /** 공개 상세 조회. 조회할 때마다 조회수를 1 증가시킨다. */
     fun getPublicDetail(jobId: Long): JobDetailResponse
-
-    /** 공개 목록 조회. 게시·마감 상태이면서 삭제되지 않은 공고만 반환한다. */
-    fun searchPublic(
-        query: String?,
-        postingType: PostingType?,
-        status: PublicJobStatus?,
-        openOnly: Boolean,
-        sort: JobSort,
-        pageable: Pageable,
-    ): JobSearchResponse
 }

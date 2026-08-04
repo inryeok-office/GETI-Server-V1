@@ -10,6 +10,7 @@ import org.mockito.Mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
+import org.springframework.context.ApplicationEventPublisher
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.entity.Job
@@ -28,10 +29,14 @@ class CollectedJobUpsertUseCaseImplTest {
     @Mock
     private lateinit var companyQuery: CompanyQuery
 
+    @Mock
+    private lateinit var eventPublisher: ApplicationEventPublisher
+
     private val useCase: CollectedJobUpsertUseCase by lazy {
         CollectedJobUpsertUseCaseImpl(
             jobRepository,
             companyQuery,
+            eventPublisher,
         )
     }
 
