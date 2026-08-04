@@ -93,6 +93,20 @@ sudo docker compose --profile app up -d
 
 `/actuator/info`의 `deployment.gitSha` Field가 실제로 `APP_GIT_SHA` 환경변수와 같은 값을 반환하는지는 Application Test([`DeploymentInfoContributorTest`](../../src/test/kotlin/team/inreok/getiserver/global/health/DeploymentInfoContributorTest.kt), [`HealthEndpointTest`](../../src/test/kotlin/team/inreok/getiserver/global/health/HealthEndpointTest.kt))가 보장한다.
 
+### Collector 신규 공고 Discord Webhook Secret 전달 (`DISCORD_JOB_WEBHOOK_URL`)
+
+Collector(Issue #62 확장 범위)가 실제 Provider 수집으로 새로 등록한 공고를 Discord Webhook으로 알리는 기능은 위 "Discord CD 배포 알림"과 완전히 별개의 Secret(`DISCORD_JOB_WEBHOOK_URL`)을 사용한다 — 같은 채널을 가리키더라도 `DISCORD_CD_WEBHOOK_URL`과 혼용하지 않는다.
+
+`APP_VERSION` 등 4개 배포 Metadata와 달리 이 값은 Build Time이 아니라 Container **Runtime**에 필요한 Secret이라 `--build-arg`로 전달할 수 없다. 대신:
+
+1. `deploy` Job의 `appleboy/ssh-action` Step이 `env: DISCORD_JOB_WEBHOOK_URL: ${{ secrets.DISCORD_JOB_WEBHOOK_URL }}`로 값을 받고, `with.envs: DISCORD_JOB_WEBHOOK_URL`로 SSH 세션에 그대로 export한다(Action이 공식 지원하는 방식).
+2. SSH Script는 `sudo docker compose ...` 명령 자체를 바꾸지 않고, 그 앞에서 `.env.collector-discord.local` 파일에 `DISCORD_JOB_WEBHOOK_URL=...` 한 줄만 쓴다(`umask 077`로 소유자만 읽도록 제한, Secret이 없으면 파일을 삭제). 값은 어떤 단계에서도 `echo`하지 않는다.
+3. `compose.yaml`의 `app` Service가 `env_file: [{ path: .env.collector-discord.local, required: false }]`로 이 파일을 읽어 Container 환경변수로 주입한다. `required: false`라 파일이 없는 Local 개발(`--profile app`)에서도 오류 없이 그냥 비활성 상태로 기동된다.
+
+`DISCORD_JOB_NOTIFICATION_ENABLED`/`DISCORD_JOB_NOTIFY_INITIAL_IMPORT`는 Secret이 아니므로 `compose.yaml`로 강제 전달하지 않는다 — `COLLECTOR_SEED_ENABLED`와 같은 이유로, Host에서 지정하지 않으면 `application-develop.yaml`의 기본값(`enabled=true`, `notify-initial-import`는 base 기본값 `false` 상속)을 그대로 쓴다. `DISCORD_JOB_WEBHOOK_URL`이 비어 있으면 `enabled=true`여도 `isConfigured()`가 false로 남아 실제 알림은 발생하지 않는다.
+
+**로컬 검증 한계**: `docker compose config --quiet`로 문법은 확인했지만, `env_file`의 `required: false` 필드는 비교적 최근 Compose Specification 기능이라 EC2 서버의 실제 `docker compose` 버전과의 호환 여부는 이번 PR에서 확인하지 못했다(서버 접근 권한 없음). 배포 후 최초 실행에서 문법 오류가 있다면 `sudo docker compose config` 단계에서 바로 드러난다.
+
 ## Discord CD 배포 알림
 
 CI의 `DISCORD_CI_WEBHOOK_URL` 기반 알림([`ci.md`](./ci.md#discord-ci-알림))과 동일한 안전한 JSON 생성 방식(jq, `allowed_mentions.parse: []`, Webhook Secret 없으면 Skip, 전송 실패가 결과를 바꾸지 않음)을 그대로 따르되, CD 전용 Secret을 분리해 사용한다.
@@ -138,7 +152,8 @@ Embed는 Repository/Environment(`develop`)/Branch/Commit/Actor/Workflow/Status/W
 | `EC2_HOST` | Secret | 기존(이미 등록됨) |
 | `EC2_USER` | Secret | 기존(이미 등록됨) |
 | `EC2_SSH_KEY` | Secret | 기존(이미 등록됨) |
-| `DISCORD_CD_WEBHOOK_URL` | Secret | **신규** — 미등록 시 알림만 Skip되고 배포는 정상 진행된다 |
+| `DISCORD_CD_WEBHOOK_URL` | Secret | 기존(이미 등록됨) — 미등록 시 알림만 Skip되고 배포는 정상 진행된다 |
+| `DISCORD_JOB_WEBHOOK_URL` | Secret | **신규** — Collector 신규 공고 알림 전용(위 "Collector 신규 공고 Discord Webhook Secret 전달" 참고). 미등록 시 알림만 비활성 상태로 남고 애플리케이션·Collector·공고 등록은 정상 동작한다 |
 
 Secret 실제 값은 이 문서에 기록하지 않는다. 존재 여부만 `gh secret list`로 확인한다.
 

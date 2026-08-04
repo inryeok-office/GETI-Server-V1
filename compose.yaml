@@ -82,8 +82,21 @@ services:
         APP_ENVIRONMENT: ${APP_ENVIRONMENT:-local}
     profiles:
       - app
+    # DISCORD_JOB_WEBHOOK_URL(Secret)만 이 파일로 주입한다. required: false라 파일이 없어도
+    # (Local 개발에서 이 파일을 만들지 않은 경우) Compose가 오류 없이 그냥 건너뛴다. CD가
+    # Deploy마다 이 파일을 갱신한다(.github/workflows/cd.yml). enabled/notify-initial-import
+    # 같은 비Secret 값은 여기서 강제로 넣지 않는다 — COLLECTOR_SEED_ENABLED와 같은 이유로
+    # Host에서 지정하지 않으면 application-develop.yaml의 기본값을 그대로 쓰게 비워 둔다.
+    env_file:
+      - path: .env.collector-discord.local
+        required: false
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      # CD(develop 배포)는 SPRING_PROFILES_ACTIVE를 별도로 넘기지 않으므로(docs/development/cd.md),
+      # 이 기본값이 실제 develop 서버에 적용되는 Profile이다. develop은 local의 Infra 기본값을
+      # Spring Profile Group으로 재사용하고(application.yaml) Collector Seed 기본값만 다르다.
+      # 로컬에서 `--profile app`으로 순수 local 동작을 확인하려면 SPRING_PROFILES_ACTIVE=local을
+      # 직접 지정한다.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-develop}
       SERVER_PORT: ${SERVER_PORT:-8080}
       # Host(localhost)가 아닌 Compose Service 이름으로 접속한다.
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-geti}
@@ -91,6 +104,13 @@ services:
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-geti-local-only}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      # Collector 비Secret 설정만 전달한다(Issue #62). 실제 서비스키(COLLECTOR_*_SERVICE_KEY 등)는
+      # 이 Compose 구성으로 전달하지 않는다 — develop 서버에는 실제 API Key를 배치하지 않는다.
+      # COLLECTOR_SEED_ENABLED는 여기서 강제로 값을 넣지 않는다 — Host에서 지정하지 않으면
+      # Spring이 application-develop.yaml의 기본값(true)을 그대로 쓰게 비워 둔다(빈 문자열을
+      # 넘기면 Boolean Binding에 실패해 기동이 깨진다). Host에서 재정의하려면 이 Compose를
+      # 실행하는 Shell/서버 .env에 COLLECTOR_SEED_ENABLED를 직접 export한다.
+      COLLECTOR_EXTERNAL_SCHEDULER_ENABLED: ${COLLECTOR_EXTERNAL_SCHEDULER_ENABLED:-false}
     ports:
       - "127.0.0.1:${SERVER_PORT:-8080}:8080"
     healthcheck:
