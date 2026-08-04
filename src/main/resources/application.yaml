@@ -22,6 +22,10 @@ app:
   oauth:
     google:
       scope: openid,email,profile
+  collector:
+    scheduler:
+      # 일일 수집 실행 시각(초 분 시 일 월 요일). 매일 03:00에 실행한다(Issue #62).
+      cron: "0 0 3 * * *"
 
 management:
   endpoints:

@@ -207,7 +207,9 @@ team.inreok.getiserver.DomainApplicationModuleDetectionStrategy   (src/test 전�
 
 Module 간 순환 의존성을 만들지 않고, 다른 Module의 내부 구현(비공개 Package)을 직접 참조하지 않는 것이 기본 원칙이다. 다른 Module에 공개해야 하는 타입만 공개 API 또는 Spring Modulith Named Interface로 노출한다.
 
-현재 유일한 예외는 `collector`(`JobCollectionRun.status`)가 `operation`의 `OperationStatus` Enum을 재사용하는 것이다. `job_collection_runs.status`와 `async_operations.status`가 ERD상 동일한 `operation_status` 값 집합을 쓰기 때문에([`erd.md`](./erd.md)의 "collector가 operation의 Enum을 재사용하는 이유" 참고), `domain.operation.entity.type` Package에 `@NamedInterface("type")`를 선언해 이 Package만 다른 Domain에 공개했다(`src/main/java/team/inreok/getiserver/domain/operation/entity/type/package-info.java`). `operation`의 다른 부분(`entity`의 `AsyncOperation`, `repository`)은 여전히 비공개다.
+`collector`(`JobCollectionRun.status`)가 `operation`의 `OperationStatus` Enum을 재사용하는 것이 첫 사례다. `job_collection_runs.status`와 `async_operations.status`가 ERD상 동일한 `operation_status` 값 집합을 쓰기 때문에([`erd.md`](./erd.md)의 "collector가 operation의 Enum을 재사용하는 이유" 참고), `domain.operation.entity.type` Package에 `@NamedInterface("type")`를 선언해 이 Package만 다른 Domain에 공개했다(`src/main/java/team/inreok/getiserver/domain/operation/entity/type/package-info.java`). `operation`의 다른 부분(`entity`의 `AsyncOperation`, `repository`)은 여전히 비공개다.
+
+두 번째 사례는 `collector`(`CollectorExecutionServiceImpl`)가 `job`이 공개한 `domain.job.upsert` Package(`CollectedJobUpsertUseCase`/`CollectedJobUpsertCommand`/`CollectedJobUpsertResult`, 각 Type에 `@NamedInterface` 직접 선언, `CompanyQuery`와 같은 방식)를 통해 외부 수집 공고를 반영하는 것이다(Issue #62). Collector는 이 Package를 통해서만 `job`에 접근하고, `Job` Entity나 `JobRepository`는 참조하지 않는다. `collector`의 새 CollectionRun 실행 상태(`CollectionRunStatus`)는 `operation.OperationStatus`와 값 집합이 달라(`PARTIAL_SUCCESS`/`CANCELED` 포함) 재사용하지 않고 `domain.collector.entity.type`에 새로 정의했다.
 
 새로운 Domain 간 의존이 필요해지면 이 방식(Named Interface로 필요한 Package만 명시적으로 공개)을 그대로 따르고, 이 문서에 근거를 추가한다.
 
