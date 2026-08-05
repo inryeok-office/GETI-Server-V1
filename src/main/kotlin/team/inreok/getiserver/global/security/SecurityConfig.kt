@@ -106,6 +106,10 @@ class SecurityConfig(
                 authorize("/api/v1/jobs/**", authenticated)
                 // 공개 공고 출처 목록(JobSourceController)도 인증된 사용자 모두 접근할 수 있다(Issue #62).
                 authorize("/api/v1/job-sources", authenticated)
+                // 지원서 초안 조회·임시저장은 인증만 요구한다(소유자 본인 검증은 Role로 알 수
+                // 없어 JobApplicationService가 별도로 수행한다, Application Epic #75 Issue #78).
+                authorize("/api/v1/job-applications", authenticated)
+                authorize("/api/v1/job-applications/**", authenticated)
                 authorize(anyRequest, permitAll)
             }
             exceptionHandling {
