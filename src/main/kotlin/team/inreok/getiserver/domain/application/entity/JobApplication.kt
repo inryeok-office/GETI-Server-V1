@@ -61,6 +61,41 @@ class JobApplication(
     @Column(name = "withdrawn_at")
     var withdrawnAt: LocalDateTime? = null
 
+    // 이 아래는 Application Phase 2(Epic #75, Issue #78)에서 추가한 Column이다(V12 Migration).
+    // 제출 당시 Form Snapshot 목적은 Phase 3(제출)에서 본격적으로 쓰이고, 이번 Phase는 초안
+    // 생성 시점에 연결된 Form의 id/version을 기록하는 데만 사용한다.
+    @Column(name = "form_id")
+    var formId: Long? = null
+
+    @Column(name = "form_version")
+    var formVersion: Int? = null
+
+    @Column(name = "privacy_consent", nullable = false)
+    var privacyConsent: Boolean = false
+
+    // 지원자 스냅샷(요구사항 8절·21절). 제출 시점이 아니라 이후 회원 프로필 수정에 영향받지
+    // 않도록 초안 생성 시점 값을 그대로 보존한다. contactEmail/contactPhone은 기존 Column을
+    // 연락처 스냅샷으로 그대로 쓴다.
+    @Column(name = "applicant_name", length = 100)
+    var applicantName: String? = null
+
+    @Column(name = "applicant_cohort")
+    var applicantCohort: Int? = null
+
+    @Column(name = "applicant_department", length = 30)
+    var applicantDepartment: String? = null
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "applicant_majors", columnDefinition = "jsonb")
+    var applicantMajors: String? = null
+
+    @Column(name = "applicant_desired_job", length = 255)
+    var applicantDesiredJob: String? = null
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "applicant_tech_stacks", columnDefinition = "jsonb")
+    var applicantTechStacks: String? = null
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     var createdAt: LocalDateTime? = null

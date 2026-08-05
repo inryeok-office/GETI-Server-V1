@@ -18,6 +18,7 @@ import org.testcontainers.utility.DockerImageName
 import team.inreok.getiserver.domain.ai.entity.JobAiAnalysis
 import team.inreok.getiserver.domain.ai.repository.JobAiAnalysisRepository
 import team.inreok.getiserver.domain.application.entity.JobApplication
+import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.audit.entity.AuditLog
 import team.inreok.getiserver.domain.audit.repository.AuditLogRepository
@@ -106,7 +107,7 @@ class CoreDomainSchemaIntegrationTest
         private val auditLogRepository: AuditLogRepository,
     ) {
         @Test
-        fun `Flyway로 생성한 Schema에는 정확히 31개의 비즈니스 Table이 있다`() {
+        fun `Flyway로 생성한 Schema에는 정확히 32개의 비즈니스 Table이 있다`() {
             // persistence_probe는 integrationTest 전용 기술 검증 Table(V1__create_persistence_probe.sql)이며
             // GETI 비즈니스 Domain을 나타내지 않으므로 집계에서 제외한다. 최소 19개 Table ERD 기준
             // (docs/architecture/erd.md) 이후 Member 도메인 전공/기술 스택 정규화를 위해
@@ -116,7 +117,9 @@ class CoreDomainSchemaIntegrationTest
             // 신규 공고 알림)를 위해 job_notification_deliveries 1개 Table을 추가해 27개가 되었다.
             // Search 도메인(Issue #69)의 색인 실패 재처리·재색인 실행 이력을 위해 search_index_failures,
             // search_reindex_runs 2개 Table을 추가해 29개가 되었고, Application 도메인 개인 신청
-            // 양식(Epic #75, Issue #76)을 위해 forms, form_versions 2개 Table을 추가해 31개가 되었다.
+            // 양식(Epic #75, Issue #76)을 위해 forms, form_versions 2개 Table을 추가해 31개가 되었으며,
+            // Application Phase 2(Issue #78) 공고-양식 연결을 위해 job_application_forms 1개
+            // Table을 추가해 32개가 되었다.
             @Suppress("UNCHECKED_CAST")
             val tableCount =
                 entityManager
@@ -129,7 +132,7 @@ class CoreDomainSchemaIntegrationTest
                         """.trimIndent(),
                     ).singleResult as Number
 
-            assertThat(tableCount.toInt()).isEqualTo(31)
+            assertThat(tableCount.toInt()).isEqualTo(32)
         }
 
         @Test
@@ -390,7 +393,12 @@ class CoreDomainSchemaIntegrationTest
             val company = persistCompany()
             val job = jobRepository.saveAndFlush(newJob(company.id!!))
 
-            jobApplicationRepository.saveAndFlush(newJobApplication(job.id!!, member.id!!, 1))
+            // uk_job_applications_active_singleton(V13 Migration, PR #79 Review 반영)이 같은
+            // (job_id, applicant_member_id) 조합에 활성 Row를 최대 1건으로 강제하므로, 재지원
+            // 시나리오와 동일하게 이전 attempt를 WITHDRAWN으로 만든 뒤 다음 attempt를 저장한다.
+            jobApplicationRepository.saveAndFlush(
+                newJobApplication(job.id!!, member.id!!, 1).apply { status = JobApplicationStatus.WITHDRAWN },
+            )
             jobApplicationRepository.saveAndFlush(newJobApplication(job.id!!, member.id!!, 2))
             val found =
                 jobApplicationRepository.findByJobIdAndApplicantMemberIdAndAttemptNumber(
