@@ -1,5 +1,7 @@
 package team.inreok.getiserver.domain.application.service.impl
 
+import org.slf4j.LoggerFactory
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.application.dto.ApplicationAnswer
@@ -35,6 +37,8 @@ class JobApplicationServiceImpl(
     private val memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort,
     private val objectMapper: ObjectMapper,
 ) : JobApplicationService {
+    private val log = LoggerFactory.getLogger(JobApplicationServiceImpl::class.java)
+
     @Transactional(readOnly = true)
     override fun checkEligibility(
         jobId: Long,
@@ -122,8 +126,7 @@ class JobApplicationServiceImpl(
                 }
             }
 
-        val saved = jobApplicationRepository.saveAndFlush(application)
-        return toDraftResponse(saved)
+        return toDraftResponse(saveNewApplication(application))
     }
 
     @Transactional
@@ -148,6 +151,22 @@ class JobApplicationServiceImpl(
         return toDraftResponse(application)
     }
 
+    // 호출부(createDraft)의 hasActiveApplication() 확인과 이 saveAndFlush 사이에는 DB 잠금이
+    // 없어(TOCTOU), 같은 학생이 같은 공고에 거의 동시에 두 번 요청하면(중복 클릭 등) 두 요청 모두
+    // 확인을 통과할 수 있다. uk_job_applications_active_singleton(활성 Row 최대 1건 Partial
+    // Unique Index, V13 Migration)이 최종 방어선이다 — 위반하면 DB가
+    // DataIntegrityViolationException을 던지고 여기서 ACTIVE_APPLICATION_EXISTS(409)로
+    // 변환한다(PR #79 Review 반영, SearchReindexServiceImpl.triggerReindex()와 동일한 패턴).
+    private fun saveNewApplication(application: JobApplication): JobApplication =
+        try {
+            jobApplicationRepository.saveAndFlush(application)
+        } catch (ex: DataIntegrityViolationException) {
+            // BusinessException은 cause를 받지 않아 원본 예외를 여기서 남긴다(detekt
+            // SwallowedException 반영) — 실제 제약 위반 여부를 나중에 DB 로그로도 추적할 수 있다.
+            log.warn("지원서 초안 동시 생성 요청이 DB 제약으로 차단됨(uk_job_applications_active_singleton)", ex)
+            throw ActiveApplicationExistsException()
+        }
+
     private fun activeLinkedForm(jobId: Long): Form? =
         jobApplicationFormRepository
             .findById(jobId)
@@ -159,11 +178,12 @@ class JobApplicationServiceImpl(
         jobId: Long,
         studentMemberId: Long,
     ): Boolean =
-        jobApplicationRepository.findByJobIdAndApplicantMemberIdAndStatusIn(
-            jobId,
-            studentMemberId,
-            ACTIVE_JOB_APPLICATION_STATUSES,
-        ) != null
+        jobApplicationRepository
+            .findByJobIdAndApplicantMemberIdAndStatusIn(
+                jobId,
+                studentMemberId,
+                ACTIVE_JOB_APPLICATION_STATUSES,
+            ).isNotEmpty()
 
     private fun toDraftResponse(application: JobApplication): JobApplicationDraftResponse =
         JobApplicationDraftResponse(

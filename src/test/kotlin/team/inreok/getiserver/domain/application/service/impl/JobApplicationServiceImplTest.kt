@@ -11,6 +11,7 @@ import org.mockito.Captor
 import org.mockito.Mock
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
+import org.springframework.dao.DataIntegrityViolationException
 import team.inreok.getiserver.domain.application.dto.ApplicationAnswer
 import team.inreok.getiserver.domain.application.dto.CreateJobApplicationRequest
 import team.inreok.getiserver.domain.application.dto.SaveJobApplicationDraftRequest
@@ -131,7 +132,7 @@ class JobApplicationServiceImplTest {
                 1L,
                 ACTIVE_JOB_APPLICATION_STATUSES,
             ),
-        ).willReturn(null)
+        ).willReturn(emptyList())
         given(
             jobApplicationRepository.findTopByJobIdAndApplicantMemberIdOrderByAttemptNumberDesc(1L, 1L),
         ).willReturn(null)
@@ -167,7 +168,7 @@ class JobApplicationServiceImplTest {
                 1L,
                 ACTIVE_JOB_APPLICATION_STATUSES,
             ),
-        ).willReturn(null)
+        ).willReturn(emptyList())
         given(
             jobApplicationRepository.findTopByJobIdAndApplicantMemberIdOrderByAttemptNumberDesc(1L, 1L),
         ).willReturn(null)
@@ -198,7 +199,7 @@ class JobApplicationServiceImplTest {
                 1L,
                 ACTIVE_JOB_APPLICATION_STATUSES,
             ),
-        ).willReturn(null)
+        ).willReturn(emptyList())
         given(jobApplicationRepository.findTopByJobIdAndApplicantMemberIdOrderByAttemptNumberDesc(1L, 1L))
             .willReturn(
                 JobApplication(
@@ -244,14 +245,40 @@ class JobApplicationServiceImplTest {
                 ACTIVE_JOB_APPLICATION_STATUSES,
             ),
         ).willReturn(
-            JobApplication(
-                jobId = 1L,
-                applicantMemberId = 1L,
-                attemptNumber = 1,
-                contactEmail = "x",
-                answers = "[]",
+            listOf(
+                JobApplication(
+                    jobId = 1L,
+                    applicantMemberId = 1L,
+                    attemptNumber = 1,
+                    contactEmail = "x",
+                    answers = "[]",
+                ),
             ),
         )
+
+        assertThatThrownBy { service.createDraft(1L, 1L, CreateJobApplicationRequest()) }
+            .isInstanceOf(ActiveApplicationExistsException::class.java)
+    }
+
+    @Test
+    fun `동시 요청으로 DB Unique 제약을 위반하면 ActiveApplicationExistsException으로 변환한다`() {
+        // uk_job_applications_active_singleton(V13 Migration)이 hasActiveApplication() 확인과
+        // saveAndFlush() 사이의 TOCTOU 경합을 막는 최종 방어선이다(PR #79 Review 반영).
+        given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf())
+        given(memberApplicantSnapshotQueryPort.findById(1L)).willReturn(memberOf())
+        stubActiveLink()
+        given(
+            jobApplicationRepository.findByJobIdAndApplicantMemberIdAndStatusIn(
+                1L,
+                1L,
+                ACTIVE_JOB_APPLICATION_STATUSES,
+            ),
+        ).willReturn(emptyList())
+        given(
+            jobApplicationRepository.findTopByJobIdAndApplicantMemberIdOrderByAttemptNumberDesc(1L, 1L),
+        ).willReturn(null)
+        given(jobApplicationRepository.saveAndFlush(anyJobApplication()))
+            .willThrow(DataIntegrityViolationException("uk_job_applications_active_singleton"))
 
         assertThatThrownBy { service.createDraft(1L, 1L, CreateJobApplicationRequest()) }
             .isInstanceOf(ActiveApplicationExistsException::class.java)

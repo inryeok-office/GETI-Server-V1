@@ -10,7 +10,10 @@ data class JobApplicationDraftResponse(
     val applicationId: Long,
     @param:Schema(description = "공고 ID", example = "1")
     val jobId: Long,
-    @param:Schema(description = "적용된 양식 ID. 공고에 연결된 양식이 없으면 null.", nullable = true)
+    // Phase 2에서는 AVAILABLE 판정(활성 양식 연결 필수, §6.5 8번)을 통과해야만 지원서가 생성되므로
+    // 이 Endpoint 응답에서 formId는 항상 값을 가진다. nullable로 둔 것은 Phase 3 이후 양식 연결
+    // 해제 등으로 null이 될 수 있는 경로가 생길 가능성을 열어두기 위함이다(PR #79 Review 반영).
+    @param:Schema(description = "적용된 양식 ID", nullable = true)
     val formId: Long?,
     @param:Schema(description = "적용된 Form Version", nullable = true)
     val formVersion: Int?,
