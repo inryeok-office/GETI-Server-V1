@@ -23,7 +23,8 @@ import tools.jackson.databind.ObjectMapper
  * 검색·프로필 조회, Issue #50 후속), `/api/v1/companies`(기업 조회, Issue #56), `/api/v1/jobs`
  * (공고 조회, Issue #60)는 인증을 요구하고, `/api/v1/admin/companies`(기업 등록·수정·삭제,
  * Issue #56)는 DEVELOPER 역할까지, `/api/v1/admin/jobs`(공고 관리, Issue #60)는 TEACHER 또는
- * DEVELOPER 역할까지 요구한다.
+ * DEVELOPER 역할까지, `/api/v1/me/forms`(개인 신청 양식 관리, Application Epic #75 Issue #76)도
+ * TEACHER 또는 DEVELOPER 역할까지 요구한다.
  * 전공/기술스택 메타데이터 조회 등 다른
  * Domain은 아직 Spring Security와 연동되지 않아
  * ([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport] 참고)
@@ -71,6 +72,12 @@ class SecurityConfig(
                 authorize("/actuator/info", permitAll)
                 authorize("/api/v1/auth/session", authenticated)
                 authorize("/api/v1/auth/logout", authenticated)
+                // 개인 신청 양식(Form) 관리는 교사·개발자만 접근한다(Application Epic #75, Issue #76).
+                // 소유자 본인 검증(다른 교사의 양식 차단)은 Role만으로 알 수 없어 FormService가
+                // 별도로 수행한다. 더 구체적인 경로를 먼저 선언해야 아래 /api/v1/me/** 규칙에
+                // 가려지지 않는다.
+                authorize("/api/v1/me/forms", hasAnyRole("TEACHER", "DEVELOPER"))
+                authorize("/api/v1/me/forms/**", hasAnyRole("TEACHER", "DEVELOPER"))
                 authorize("/api/v1/me/**", authenticated)
                 authorize("/api/v1/members", authenticated)
                 authorize("/api/v1/members/**", authenticated)
