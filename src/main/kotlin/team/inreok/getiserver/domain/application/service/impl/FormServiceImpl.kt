@@ -124,7 +124,8 @@ class FormServiceImpl(
         if (form.status == FormStatus.ARCHIVED) throw FormArchivedException()
 
         applyNameIfPresent(form, request.name)
-        request.description?.let { form.description = it }
+        // create()와 동일하게 정규화한다(공백만 있으면 null로 저장). 코드 리뷰 P3 반영(PR #77).
+        request.description?.let { form.description = it.trim().takeIf(String::isNotEmpty) }
         applyStatusIfPresent(form, request.status)
 
         // fields를 전달했을 때만 새 Form Version을 만든다(name/status만 바뀌는 경우는 제출된

@@ -211,6 +211,28 @@ class FormServiceImplTest {
     }
 
     @Test
+    fun `PATCH로 공백만 있는 description을 보내면 create()와 동일하게 null로 저장된다`() {
+        // create()는 request.description?.trim()?.takeIf { it.isNotEmpty() }로 정규화하는데
+        // update()는 예전엔 그대로 대입해 공백 문자열이 그대로 저장됐다(코드 리뷰 P3, PR #77).
+        given(formRepository.findById(1L)).willReturn(Optional.of(formOf()))
+
+        service.update(1L, 100L, UpdateFormRequest(description = "   "))
+        given(formVersionRepository.findByFormIdAndVersion(1L, 1)).willReturn(formVersionOf())
+
+        assertThat(service.get(1L, 100L).description).isNull()
+    }
+
+    @Test
+    fun `PATCH로 description의 앞뒤 공백을 제거한다`() {
+        given(formRepository.findById(1L)).willReturn(Optional.of(formOf()))
+
+        service.update(1L, 100L, UpdateFormRequest(description = "  새 설명  "))
+        given(formVersionRepository.findByFormIdAndVersion(1L, 1)).willReturn(formVersionOf())
+
+        assertThat(service.get(1L, 100L).description).isEqualTo("새 설명")
+    }
+
+    @Test
     fun `수정 결과는 공고-양식 연결 전이라 affectedJobIds가 항상 빈 배열이고 notificationCreated는 false다`() {
         given(formRepository.findById(1L)).willReturn(Optional.of(formOf()))
 
