@@ -4,7 +4,9 @@
 
 이 문서는 2026-08-05 사용자가 채팅으로 전달한 "GETI-Server Application 도메인 전체 개발 요구사항"을 실행 계획으로 옮긴 것이다. GETI Notion 원문에 직접 접근할 수 있는 도구가 없어(AI Harness에 Notion 연동 없음), 사용자 확인에 따라 **이 요구사항 문서 자체를 최종 API 명세·기능명세 기준으로 채택**했다. 문서 안에서 "노션 확인 후 결정"으로 남겨둔 항목은 이 문서 §4 "결정 필요 사항"에 그대로 옮기고, 코드는 그 항목에 대해 임의의 세부 규격을 발명하지 않는다.
 
-범위가 매우 커서 하나의 PR로 만들지 않는다. Epic Issue 아래 Phase별 하위 Issue로 나누고, 각 Phase는 `docs/job/job-core-plan.md` 선례처럼 필요 시 자체 상세 계획 문서를 갖는다. 이 문서는 전체 로드맵과 Phase 1(개인 신청 양식) 상세 설계를 담는다.
+범위가 매우 커서 하나의 PR로 만들지 않는다. Epic Issue 아래 Phase별 하위 Issue로 나누고, 각 Phase는 `docs/job/job-core-plan.md` 선례처럼 필요 시 자체 상세 계획 문서를 갖는다. 이 문서는 전체 로드맵과 Phase 1(개인 신청 양식)·Phase 2(공고-양식 연결·지원가능여부·초안·임시저장) 상세 설계를 담는다.
+
+**Phase 1 완료(PR #77, 2026-08-05 Merge) 후 로드맵 수정**: 원래 §2는 "공고-양식 연결"을 Phase 8로 미뤘으나, Phase 2(지원서 초안 생성)를 시작하려면 "공고에 어떤 Form이 연결되어 있는가"를 먼저 알아야 해 순서가 맞지 않았다. 공고-양식 연결(요구사항 6절)과 그 연결을 사용하는 지원 가능 여부 판단(7절)은 **Phase 2로 앞당기고**, Phase 8은 "이미 Phase 2가 계산하는 지원 가능 여부를 Job 상세·검색 결과에 노출하는 공개 Query Port"로 범위를 좁힌다(요구사항 7절 마지막 문단이 이 방향을 명시).
 
 ## 1. 기존 코드 대비 확인 사실
 
@@ -24,14 +26,14 @@
 ## 2. 전체 로드맵 (Epic 하위 Phase)
 
 ```
-Phase 1  Form 및 Form Version                         ← 이 문서 §3, 이번 작업 범위
-Phase 2  Application 초안·임시저장
+Phase 1  Form 및 Form Version                                    ← 완료(PR #77)
+Phase 2  공고-양식 연결, 학생 지원가능여부, 초안 생성·임시저장      ← 이 문서 §6, 이번 작업 범위
 Phase 3  제출 및 학생 Workflow (SUBMIT/REQUEST_EDIT/RESUBMIT/WITHDRAW)
 Phase 4  교사 조회·검토 Workflow (목록/상세/ALLOW_EDIT/REQUEST_REVISION/APPROVE/REJECT)
 Phase 5  상태 이력과 Snapshot 보강
 Phase 6  File 연동 (지원서 첨부파일 업로드·교체·삭제·다운로드)
 Phase 7  Notification 연동 지점
-Phase 8  Job canApply 연동, 공고-양식 연결
+Phase 8  Job/Search에 지원가능여부(canApply) 노출하는 공개 Query Port
 Phase 9  공개 신청자 목록
 Phase 10 지원자 자료 일괄 다운로드
 Phase 11 전체 회귀 검증
@@ -174,7 +176,11 @@ INVALID_FORM_FIELD    400
 3. **`fieldId`/`title`(5.4 응답) vs `key`/`label`(5.2 요청) 명칭 차이** — 같은 개념으로 간주해 매핑(§3.4 상세 조회).
 4. **PATCH가 항상 버전을 증가시키는지** — 요구사항 5.5는 "수정 시 새 Form Version 생성"이라고만 쓰여 있어 `name`/`status`만 바뀌어도 버전이 오르는지 불명확. 이번 구현은 `fields`가 실제로 전달될 때만 버전을 올린다(§3.4 PATCH).
 5. **FormAction의 영문 값(`DUPLICATE`/`ACTIVATE`/`ARCHIVE`)** — 원문은 "복제/활성화/보관" 한글 명사만 제시. 이번 PR에서 새로 이름 붙임.
-6. Phase 2 이후로 넘어가는 원문의 기존 미해결 항목(임시저장 Endpoint 존재 여부, APPROVED→WITHDRAWN 허용 여부, 공개 신청자 상태 기준, 일괄 다운로드 파일 형식)은 해당 Phase 착수 시점에 다시 확인한다.
+6. **(Phase 2) 학번(studentNumber) 부재** — `Member` 실제 스키마에 학번 Column이 없다. 요구사항 8절 자동입력 항목에서 명시적으로 제외했다(사용자 확인 완료, §6.1/§6.3). 실제 학번이 필요해지면 Member 도메인에 별도 Migration을 먼저 추가해야 한다.
+7. **(Phase 2) 공고-양식 연결 API 계약 신설** — 요구사항 6절은 검증 규칙만 나열하고 Endpoint를 정의하지 않아 `POST /api/v1/admin/jobs/{jobId}/application-form`을 이번 PR에서 새로 설계했다(§6.4).
+8. **(Phase 2) 임시저장 Endpoint** — 요구사항 9절도 별도 Endpoint Path를 주지 않아, 초안 생성과 같은 Resource를 `PATCH /api/v1/job-applications/{applicationId}`로 재사용하도록 설계했다(§6.6).
+9. **(Phase 2) Form 미연결 공고의 eligibilityReason** — 요구사항 4절 Enum에 "양식 미연결"에 대응하는 값이 없어 `JOB_NOT_PUBLISHED`로 재사용했다(§6.5 8번).
+10. Phase 3 이후로 넘어가는 원문의 기존 미해결 항목(APPROVED→WITHDRAWN 허용 여부, 공개 신청자 상태 기준, 일괄 다운로드 파일 형식)은 해당 Phase 착수 시점에 다시 확인한다.
 
 ## 5. Phase 1 테스트 계획
 
@@ -183,3 +189,173 @@ INVALID_FORM_FIELD    400
 - **OpenApiDocumentationTest**: 기존 Test가 자동으로 새 Endpoint를 검사하므로 별도 추가 없이 통과 여부만 확인
 - **구조 Test**: `ModularityTest`, `PackageArchitectureTest` 재실행(새 Package 추가 없음 — 기존 `domain.application.*` 재사용이라 영향 적음)
 - Docker가 필요한 Repository 통합 Test(Unique Constraint, JSONB 매핑)는 `src/integrationTest`(Phase 1 착수 시 Docker 사용 가능 여부에 따라 실행 여부 보고)
+
+## 6. Phase 2 상세 설계: 공고-양식 연결, 지원가능여부, 초안·임시저장
+
+### 6.1 착수 전 확인 사실
+
+- `jobs.application_form_schema JSONB`는 Job Service/Controller 어디서도 쓰이지 않는 죽은 Column이다(Job PR #60이 `formId` 자체를 범위 제외).
+- `jobs`에 Form 연결 Column이 전혀 없고, `jobs.target_grade`는 배열이 아니라 단일 `Int?`다.
+- Job이 공개한 계약은 Search 전용 `JobIndexQueryPort`(PUBLISHED/CLOSED가 아니면 null) 하나뿐이라 Application 용도로 재사용하기엔 목적이 다르다 — 새 Named Interface가 필요하다.
+- `Member`에 **학번(studentNumber) Column이 없다**. 요구사항 8절이 자동입력 항목으로 요구하지만 실제 스키마에 없다 — **사용자 확인에 따라 이번 Phase는 studentNumber를 자동입력·스냅샷에서 제외**한다(DECISION_REQUIRED, §4에 추가 기록).
+- `MemberSelectionQueryService`(전공/기술스택 이름 조회)는 있지만 `@NamedInterface`가 아니다. 이를 직접 공개하는 대신, Member 모듈 안에 새 `MemberApplicantSnapshotQueryPort`를 만들고 그 구현체가 내부적으로 기존 Service를 호출한다(같은 Module이라 경계 문제 없음, 기존 Service의 가시성은 바꾸지 않음).
+- `JobApplication`(Entity)에는 Form 연결 Column, 지원자 스냅샷 Column이 없다. `answers`는 이미 JSONB라 요구사항의 답변 배열 구조를 그대로 담을 수 있다.
+- **공고-양식 연결(6절)에 대한 REST Endpoint 계약이 요구사항 원문에 없다**(검증 규칙만 나열되어 있고 Path/Method/JSON 예시가 없음). 이번 Phase에서 새로 설계해야 한다(§6.4, DECISION_REQUIRED).
+- **임시저장(9절) 전용 Endpoint**도 원문에 Path가 없다. 이번 Phase에서 초안 생성 Endpoint의 후속 수정 Endpoint로 설계한다(§6.6, DECISION_REQUIRED, §4의 기존 항목과 동일 맥락).
+
+### 6.2 공고-양식 연결을 저장하는 위치 (사용자 확인 완료)
+
+`jobs` 테이블에 Column을 추가하지 않는다. Application 도메인에 새 매핑 테이블을 둔다 — Job Migration/Entity를 이번 PR에서 건드리지 않고, 요구사항 7절이 암시하는 방향(Application이 지원가능여부를 계산해 Job/Search가 그 결과를 소비, Phase 8)과도 맞는다.
+
+```sql
+-- job_application_forms: 공고 하나당 활성 양식 하나(1:1). 재연결은 UPSERT.
+CREATE TABLE job_application_forms (
+    job_id BIGINT PRIMARY KEY,
+    form_id BIGINT NOT NULL REFERENCES forms(id),
+    linked_by_member_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+```
+
+`job_id`는 Job 소유이므로 물리 FK를 걸지 않는다(다른 Domain FK와 동일한 관례, `docs/architecture/erd.md`). `form_id`는 같은 Application 모듈 안이라 물리 FK를 건다.
+
+### 6.3 새 Named Interface (Job, Member)
+
+**`domain.job.query.JobApplicationSnapshotQueryPort`(신규)**
+```kotlin
+@NamedInterface
+interface JobApplicationSnapshotQueryPort {
+    /** 존재하지 않거나 삭제됐으면 null. 상태(DRAFT 포함)는 그대로 반환 — 지원가능여부 판단은
+     *  Application이 이 값을 보고 직접 수행한다(JobIndexQueryPort와 달리 여기서 필터링하지 않음). */
+    fun findById(jobId: Long): JobApplicationSnapshot?
+}
+
+@NamedInterface
+data class JobApplicationSnapshot(
+    val jobId: Long,
+    val title: String,
+    val companyId: Long,
+    val postingType: String,           // PostingType.name
+    val applicationMethod: String,     // ApplicationMethod.name
+    val status: String,                // JobStatus.name
+    val targetGrade: Int?,
+    val recruitmentStartedAt: LocalDateTime?,
+    val recruitmentEndedAt: LocalDateTime?,
+    val createdByMemberId: Long?,
+    val managerMemberId: Long?,
+)
+```
+공고-양식 연결 권한 검증(등록자·담당 교사)과 지원가능여부 판단(§6.5) 양쪽에 이 하나로 충분하다.
+
+**`domain.member.query.MemberApplicantSnapshotQueryPort`(신규)**
+```kotlin
+@NamedInterface
+interface MemberApplicantSnapshotQueryPort {
+    /** 존재하지 않으면 null. */
+    fun findById(memberId: Long): MemberApplicantSnapshot?
+}
+
+@NamedInterface
+data class MemberApplicantSnapshot(
+    val memberId: Long,
+    val name: String?,
+    val email: String,
+    val phone: String?,
+    val academicStatus: String?,   // AcademicStatus.name
+    val grade: Int?,
+    val cohort: Int?,
+    val department: String?,       // DepartmentType.name
+    val majors: List<String>,
+    val techStacks: List<String>,
+    val desiredJob: String?,       // Member.desiredPositions(JSON 배열)의 첫 값 — MemberServiceImpl과 동일한 관례
+)
+```
+studentNumber는 §6.1 결정에 따라 포함하지 않는다.
+
+### 6.4 공고-양식 연결 API (신규 설계, 원문에 없어 이번 PR이 확정)
+
+```
+POST /api/v1/admin/jobs/{jobId}/application-form   → 200
+```
+권한: 해당 공고의 등록자(`createdByMemberId`) 또는 담당 교사(`managerMemberId`), 개발자.
+요청 `{ formId: Long }`. 검증: 공고 존재(`JOB_NOT_FOUND`), INTERNAL 지원방식(`JOB_APPLICATION_METHOD_NOT_INTERNAL`), 공고 상태가 DELETED가 아님, 양식 존재(`FORM_NOT_FOUND`), 양식 소유자 == 요청자(`FORM_NOT_OWNED`), `formType == JOB`(`INVALID_FORM_FIELD`), 양식 상태 `ACTIVE`(`FORM_NOT_ACTIVE`), 요청자가 공고 등록자·담당교사·개발자 중 하나(`JOB_MANAGE_FORBIDDEN`).
+응답 `JobApplicationFormLinkResponse(jobId, formId, formVersion, updatedAt)`.
+
+`DELETE /api/v1/admin/jobs/{jobId}/application-form`는 이번 Phase 범위에 넣지 않는다(요구사항에 언급 없음, 실제 필요성이 확인되면 후속).
+
+### 6.5 학생 지원 가능 여부 (요구사항 7절)
+
+```
+GET /api/v1/jobs/{jobId}/application-eligibility   → 200
+```
+권한: 인증된 사용자(STUDENT 기준으로 판단하되, TEACHER/DEVELOPER가 호출하면 `NOT_ENROLLED` 계열로 자연히 거부되도록 함 — 별도 Role 강제는 하지 않는다. 화면은 학생만 호출).
+
+판단 순서와 `JobApplicationEligibilityReason`(요구사항 4절 Enum 그대로) 매핑:
+1. Job 없음/삭제 → `JOB_NOT_PUBLISHED`
+2. `status != PUBLISHED` → `JOB_NOT_PUBLISHED`
+3. `applicationMethod != INTERNAL` → `NOT_INTERNAL`
+4. 요청자 `academicStatus != ENROLLED` → `NOT_ENROLLED`
+5. `targetGrade != null && targetGrade != member.grade` → `NOT_TARGET_GRADE`
+6. `recruitmentStartedAt != null && now < recruitmentStartedAt` → `BEFORE_START`
+7. `recruitmentEndedAt != null && now > recruitmentEndedAt` → `AFTER_END`
+8. `job_application_forms`에 연결된 Form이 없거나 그 Form이 `ACTIVE`가 아님 → `JOB_NOT_PUBLISHED`로 취급한다(요구사항이 별도 Reason을 정의하지 않아, "공고 자체가 아직 지원받을 준비가 안 됨"과 같은 의미로 기존 값을 재사용 — DECISION_REQUIRED로 기록)
+9. 이 학생의 활성(`DRAFT|SUBMITTED|EDIT_REQUESTED|EDIT_ALLOWED|REVISION_REQUESTED|APPROVED`) `job_applications` Row가 이미 있음 → `ALREADY_APPLIED`
+10. 위 전부 통과 → `AVAILABLE`
+
+응답 `JobEligibilityResponse(canApply: Boolean, eligibilityReason, eligibilityMessage, availableActions: List<String>)`. `availableActions`는 `canApply`면 `["CREATE_DRAFT"]`, 아니면 빈 배열.
+
+### 6.6 지원서 초안 생성과 임시저장
+
+`POST /api/v1/jobs/{jobId}/applications`(요구사항 8절)는 §6.5의 판정을 서버가 다시 수행하고(클라이언트가 이미 조회했더라도 신뢰하지 않음), `AVAILABLE`이 아니면 `JOB_NOT_APPLICABLE`로 거부한다. 통과하면:
+- `JobApplication(jobId, applicantMemberId, attemptNumber=이전 최대값+1, status=DRAFT, formId=연결된 Form, formVersion=그 Form의 currentVersion, contactEmail/contactPhone/스냅샷 Column=prefillProfileFields=true일 때 §6.3 Port 결과로 채움, answers="[]")` 저장.
+- `attemptNumber`는 기존 `uk_job_applications_job_applicant_attempt`(V2) Unique 제약을 그대로 활용한다 — 취소 후 재지원은 새 `attemptNumber`로 새 Row가 된다(요구사항 22절과 자동으로 맞음, 별도 이력 테이블 불필요).
+
+임시저장은 **별도 신규 Endpoint 없이 초안 생성과 같은 Endpoint를 `PATCH`로 재사용**한다(DECISION_REQUIRED, 노션 원문 확인 전 임시 결정):
+```
+PATCH /api/v1/job-applications/{applicationId}   → 200
+```
+요청 `{ contactPhone?, answers?: List<AnswerRequest>, privacyConsent? }`. 소유자 본인만, 상태가 `DRAFT`이거나 §6.7에서 정의할 "수정 허용" 상태일 때만 허용(Phase 2는 `DRAFT`만 해당 — 나머지 상태는 Phase 3). 필수값 누락 상태로도 저장 가능(요구사항 9절), 제출 일시는 만들지 않는다.
+
+### 6.7 JobApplication Entity 확장 (기존 Entity 유지, Column 추가)
+
+```sql
+-- V12__extend_job_applications_for_forms.sql
+ALTER TABLE job_applications ADD COLUMN form_id BIGINT REFERENCES forms(id);
+ALTER TABLE job_applications ADD COLUMN form_version INTEGER;
+ALTER TABLE job_applications ADD COLUMN privacy_consent BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE job_applications ADD COLUMN applicant_name VARCHAR(100);
+ALTER TABLE job_applications ADD COLUMN applicant_cohort INTEGER;
+ALTER TABLE job_applications ADD COLUMN applicant_department VARCHAR(30);
+ALTER TABLE job_applications ADD COLUMN applicant_majors JSONB;
+ALTER TABLE job_applications ADD COLUMN applicant_desired_job VARCHAR(255);
+ALTER TABLE job_applications ADD COLUMN applicant_tech_stacks JSONB;
+```
+`contactEmail`/`contactPhone`은 기존 Column을 그대로 연락처 스냅샷으로 쓴다. `answers`(기존 JSONB)에 담는 Kotlin 표현:
+```kotlin
+data class ApplicationAnswer(val fieldId: String, val value: JsonNode?, val fileIds: List<Long>?)
+```
+`fileIds`는 Phase 6(File 연동) 전까지 항상 비워 두되 구조는 미리 만들어 둔다(값을 검증하지 않고 그대로 왕복).
+
+### 6.8 ErrorCode 추가 (`ApplicationErrorCode`)
+
+```
+JOB_NOT_APPLICABLE            400
+ACTIVE_APPLICATION_EXISTS     409
+APPLICATION_NOT_FOUND         404
+APPLICATION_ACCESS_FORBIDDEN  403
+JOB_APPLICATION_METHOD_NOT_INTERNAL   400   (§6.4 연결 검증)
+FORM_NOT_ACTIVE                       400   (§6.4 연결 검증)
+JOB_MANAGE_FORBIDDEN                  403   (§6.4 연결 권한 — Job 도메인 JOB_MANAGE_FORBIDDEN과 별개로 Application이 자체 판정)
+```
+`JOB_NOT_FOUND`/`FORM_NOT_FOUND`/`FORM_NOT_OWNED`/`INVALID_FORM_FIELD`는 기존 Job/Application ErrorCode를 재사용한다.
+
+### 6.9 테스트 계획
+
+Phase 1과 동일한 층위(Service Unit/Controller WebMvc/OpenApiDocumentationTest/Modularity·PackageArchitectureTest)에 더해:
+- `JobApplicationSnapshotQueryPortImpl`, `MemberApplicantSnapshotQueryPortImpl` 자체 Unit Test(각 Domain 안에서)
+- 지원가능여부 판정 10가지 분기(§6.5) 각각의 Unit Test
+- 초안 생성: 정상 생성, 중복 활성 지원서 거부, 취소 후 재지원(새 attemptNumber), prefillProfileFields 스냅샷 확인
+- 임시저장: 소유자만 가능, DRAFT 상태만 가능, 필수값 누락 상태 저장 허용
+- 연결 API: 소유자 아닌 양식 연결 거부, ACTIVE 아닌 양식 연결 거부, 담당자 아닌 교사 연결 거부
+- `src/integrationTest`: `job_application_forms` FK/PK 제약, `job_applications` 신규 Column 매핑
