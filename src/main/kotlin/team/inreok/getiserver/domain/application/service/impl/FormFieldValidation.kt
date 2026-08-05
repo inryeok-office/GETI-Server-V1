@@ -4,6 +4,8 @@ import team.inreok.getiserver.domain.application.dto.FormFieldRequest
 import team.inreok.getiserver.domain.application.dto.FormFieldSchema
 import team.inreok.getiserver.domain.application.entity.Form
 import team.inreok.getiserver.domain.application.entity.type.FormFieldType
+import team.inreok.getiserver.domain.application.entity.type.FormStatus
+import team.inreok.getiserver.domain.application.exception.FormActionInvalidException
 import team.inreok.getiserver.domain.application.exception.InvalidFormFieldException
 
 /**
@@ -48,6 +50,24 @@ fun applyNameIfPresent(
     val trimmed = name?.trim() ?: return
     if (trimmed.isEmpty()) throw InvalidFormFieldException("양식 이름은 공백일 수 없습니다.")
     form.name = trimmed
+}
+
+// PATCH의 status Field가 POST .../actions(ACTIVATE/ARCHIVE)의 상태 전이 규칙을 우회하던
+// 문제를 고쳤다(코드 리뷰 Finding #1, PR #77). update()가 이미 ARCHIVED인 Form은 앞에서
+// 막으므로 여기 도달했다면 현재 상태는 DRAFT 또는 ACTIVE뿐이다. 그 두 상태에서 ACTIVE나
+// ARCHIVED로 가는 전이는 Action API로도 가능한 전이라 그대로 허용하고, Action API로는 절대
+// 만들 수 없는 "-> DRAFT" 전이만 명시적으로 막아 두 API의 규칙을 일치시킨다. 같은 상태를
+// 다시 보내는 것은 no-op으로 허용한다(다른 Field만 바꾸면서 status를 그대로 재전송하는
+// 사용을 막지 않기 위함). TooManyFunctions 회피를 위해 최상위 함수로 둔다.
+fun applyStatusIfPresent(
+    form: Form,
+    status: FormStatus?,
+) {
+    if (status == null || status == form.status) return
+    if (status == FormStatus.DRAFT) {
+        throw FormActionInvalidException("현재 상태(${form.status})에서 DRAFT로 되돌릴 수 없습니다.")
+    }
+    form.status = status
 }
 
 private fun requireNonBlank(

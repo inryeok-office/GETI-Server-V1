@@ -221,6 +221,37 @@ class FormServiceImplTest {
     }
 
     @Test
+    fun `PATCH로 DRAFT에서 ACTIVE로 status를 바꿀 수 있다`() {
+        given(formRepository.findById(1L)).willReturn(Optional.of(formOf(status = FormStatus.DRAFT)))
+
+        val result = service.update(1L, 100L, UpdateFormRequest(status = FormStatus.ACTIVE))
+
+        // FormUpdateResponse는 status를 직접 담지 않으므로 get()으로 실제 반영 여부를 확인한다.
+        assertThat(result.formId).isEqualTo(1L)
+        given(formVersionRepository.findByFormIdAndVersion(1L, 1)).willReturn(formVersionOf())
+        assertThat(service.get(1L, 100L).status).isEqualTo(FormStatus.ACTIVE)
+    }
+
+    @Test
+    fun `PATCH로 ACTIVE 양식을 DRAFT로 되돌리려 하면 FormActionInvalidException을 던진다`() {
+        // POST .../actions에는 ACTIVE를 DRAFT로 되돌리는 Action이 없다. PATCH의 status Field가
+        // 이 규칙을 우회하지 못하도록 막는다(코드 리뷰 Finding #1, PR #77).
+        given(formRepository.findById(1L)).willReturn(Optional.of(formOf(status = FormStatus.ACTIVE)))
+
+        assertThatThrownBy { service.update(1L, 100L, UpdateFormRequest(status = FormStatus.DRAFT)) }
+            .isInstanceOf(FormActionInvalidException::class.java)
+    }
+
+    @Test
+    fun `PATCH로 현재와 같은 status를 다시 보내면 아무 일도 일어나지 않는다`() {
+        given(formRepository.findById(1L)).willReturn(Optional.of(formOf(status = FormStatus.DRAFT)))
+
+        val result = service.update(1L, 100L, UpdateFormRequest(name = "새 이름", status = FormStatus.DRAFT))
+
+        assertThat(result.formId).isEqualTo(1L)
+    }
+
+    @Test
     fun `보관된 양식을 수정하면 FormArchivedException을 던진다`() {
         given(formRepository.findById(1L)).willReturn(Optional.of(formOf(status = FormStatus.ARCHIVED)))
 

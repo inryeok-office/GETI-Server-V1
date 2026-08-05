@@ -314,7 +314,7 @@ class FormControllerTest
         @Test
         fun `허용되지 않는 상태 전이면 400 FORM_ACTION_INVALID를 반환한다`() {
             given(formService.executeAction(anyLong(), anyLong(), anyFormActionRequest()))
-                .willThrow(FormActionInvalidException(FormAction.ARCHIVE, FormStatus.ARCHIVED))
+                .willThrow(FormActionInvalidException("현재 상태(ARCHIVED)에서는 ARCHIVE Action을 수행할 수 없습니다."))
 
             mockMvc
                 .perform(

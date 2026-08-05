@@ -125,7 +125,7 @@ class FormServiceImpl(
 
         applyNameIfPresent(form, request.name)
         request.description?.let { form.description = it }
-        request.status?.let { form.status = it }
+        applyStatusIfPresent(form, request.status)
 
         // fields를 전달했을 때만 새 Form Version을 만든다(name/status만 바뀌는 경우는 제출된
         // 지원서 Snapshot과 무관해 버전을 올리지 않는다 — 계획 문서 §3.4/§4 결정 사항 4).
@@ -222,7 +222,9 @@ class FormServiceImpl(
         allowedFrom: Set<FormStatus>,
         to: FormStatus,
     ): FormActionResponse {
-        if (form.status !in allowedFrom) throw FormActionInvalidException(action, form.status)
+        if (form.status !in allowedFrom) {
+            throw FormActionInvalidException("현재 상태(${form.status})에서는 $action Action을 수행할 수 없습니다.")
+        }
         form.status = to
         formRepository.flush()
 
