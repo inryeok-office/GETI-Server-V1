@@ -18,6 +18,7 @@ import org.testcontainers.utility.DockerImageName
 import team.inreok.getiserver.domain.ai.entity.JobAiAnalysis
 import team.inreok.getiserver.domain.ai.repository.JobAiAnalysisRepository
 import team.inreok.getiserver.domain.application.entity.JobApplication
+import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.audit.entity.AuditLog
 import team.inreok.getiserver.domain.audit.repository.AuditLogRepository
@@ -392,7 +393,12 @@ class CoreDomainSchemaIntegrationTest
             val company = persistCompany()
             val job = jobRepository.saveAndFlush(newJob(company.id!!))
 
-            jobApplicationRepository.saveAndFlush(newJobApplication(job.id!!, member.id!!, 1))
+            // uk_job_applications_active_singleton(V13 Migration, PR #79 Review 반영)이 같은
+            // (job_id, applicant_member_id) 조합에 활성 Row를 최대 1건으로 강제하므로, 재지원
+            // 시나리오와 동일하게 이전 attempt를 WITHDRAWN으로 만든 뒤 다음 attempt를 저장한다.
+            jobApplicationRepository.saveAndFlush(
+                newJobApplication(job.id!!, member.id!!, 1).apply { status = JobApplicationStatus.WITHDRAWN },
+            )
             jobApplicationRepository.saveAndFlush(newJobApplication(job.id!!, member.id!!, 2))
             val found =
                 jobApplicationRepository.findByJobIdAndApplicantMemberIdAndAttemptNumber(
