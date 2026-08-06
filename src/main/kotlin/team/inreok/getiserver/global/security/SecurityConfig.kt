@@ -24,7 +24,10 @@ import tools.jackson.databind.ObjectMapper
  * (공고 조회, Issue #60)는 인증을 요구하고, `/api/v1/admin/companies`(기업 등록·수정·삭제,
  * Issue #56)는 DEVELOPER 역할까지, `/api/v1/admin/jobs`(공고 관리, Issue #60)는 TEACHER 또는
  * DEVELOPER 역할까지, `/api/v1/me/forms`(개인 신청 양식 관리, Application Epic #75 Issue #76)도
- * TEACHER 또는 DEVELOPER 역할까지 요구한다.
+ * TEACHER 또는 DEVELOPER 역할까지 요구한다. `/api/v1/admin/programs`(프로그램 등록·수정·상태
+ * 관리, Program 도메인 전체 개발 요구사항 Phase 1~3)는 TEACHER 또는 DEVELOPER 역할까지,
+ * `POST /api/v1/programs/{id}/application-actions`(프로그램 신청·취소, 원본 요구사항 11절)는
+ * STUDENT 역할까지, 나머지 `/api/v1/programs`(프로그램 목록·상세 조회)는 인증만 요구한다.
  * 전공/기술스택 메타데이터 조회 등 다른
  * Domain은 아직 Spring Security와 연동되지 않아
  * ([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport] 참고)
@@ -110,6 +113,21 @@ class SecurityConfig(
                 // 없어 JobApplicationService가 별도로 수행한다, Application Epic #75 Issue #78).
                 authorize("/api/v1/job-applications", authenticated)
                 authorize("/api/v1/job-applications/**", authenticated)
+                // 프로그램 관리(등록·수정·상태 변경)는 교사와 개발자가 사용한다(Program 도메인
+                // 전체 개발 요구사항 3절). 등록자·담당 교사 본인만 수정할 수 있는지는 Role만으로
+                // 알 수 없어 ProgramService가 별도로 수행한다. 더 구체적인 admin 경로를 먼저
+                // 선언해야 아래 조회 규칙에 가려지지 않는다.
+                authorize("/api/v1/admin/programs", hasAnyRole("TEACHER", "DEVELOPER"))
+                authorize("/api/v1/admin/programs/**", hasAnyRole("TEACHER", "DEVELOPER"))
+                // 프로그램 신청·취소(원본 요구사항 문서 11절 권한: STUDENT)는 Role 자체가
+                // 학생으로 고정되므로 여기서 STUDENT Role을 요구한다. 재학 여부(NOT_ENROLLED)는
+                // Role이 아닌 학적 상태라 이것과 별개로 ProgramService가 추가로 판단한다. 더
+                // 구체적인 경로를 먼저 선언해야 아래 조회 규칙에 가려지지 않는다.
+                authorize(HttpMethod.POST, "/api/v1/programs/*/application-actions", hasRole("STUDENT"))
+                // 프로그램 목록·상세 조회는 학생·교사·개발자 모두 접근할 수 있으므로 인증만
+                // 요구한다.
+                authorize("/api/v1/programs", authenticated)
+                authorize("/api/v1/programs/**", authenticated)
                 authorize(anyRequest, permitAll)
             }
             exceptionHandling {
