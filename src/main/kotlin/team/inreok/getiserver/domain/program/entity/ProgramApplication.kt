@@ -10,6 +10,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.annotations.UpdateTimestamp
 import org.hibernate.type.SqlTypes
 import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationStatus
 import java.time.LocalDateTime
@@ -33,10 +34,22 @@ class ProgramApplication(
     @Column(columnDefinition = "jsonb")
     var answers: String? = null
 
+    // 신청 당시 연결된 Form의 id/버전 Snapshot이다(요구사항 11절/20절). 이후 Form이 바뀌거나
+    // 새 버전이 생겨도 이미 접수된 신청에는 영향을 주지 않는다.
+    @Column(name = "form_id")
+    var formId: Long? = null
+
+    @Column(name = "form_version")
+    var formVersion: Int? = null
+
     @CreationTimestamp
     @Column(name = "applied_at", nullable = false, updatable = false)
     var appliedAt: LocalDateTime? = null
 
     @Column(name = "canceled_at")
     var canceledAt: LocalDateTime? = null
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    var updatedAt: LocalDateTime? = null
 }
