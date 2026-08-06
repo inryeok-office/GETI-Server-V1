@@ -5,11 +5,19 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.anyBoolean
+import org.mockito.ArgumentMatchers.anyLong
+import org.mockito.ArgumentMatchers.isNull
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import team.inreok.getiserver.domain.application.query.ProgramFormLinkQueryPort
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshot
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
@@ -39,6 +47,7 @@ import team.inreok.getiserver.domain.program.exception.ProgramNotFoundException
 import team.inreok.getiserver.domain.program.exception.ProgramReopenNotAllowedException
 import team.inreok.getiserver.domain.program.exception.ProgramStatusTransitionNotAllowedException
 import team.inreok.getiserver.domain.program.exception.ProgramValidationFailedException
+import team.inreok.getiserver.domain.program.repository.ProgramApplicantCount
 import team.inreok.getiserver.domain.program.repository.ProgramApplicationRepository
 import team.inreok.getiserver.domain.program.repository.ProgramRepository
 import team.inreok.getiserver.domain.program.repository.ProgramTargetGradeRepository
@@ -165,6 +174,25 @@ class ProgramServiceImplTest {
         }.isInstanceOf(CapacityBelowCurrentApplicantsException::class.java)
     }
 
+    @Test
+    fun `clearFormId가 true면 formId 값과 무관하게 기존 Form 연결을 해제한다`() {
+        val program = programOf(createdByMemberId = 7L).apply { formId = 5L }
+        given(programRepository.findByIdForUpdate(1L)).willReturn(program)
+        given(programApplicationRepository.countByProgramIdAndStatus(1L, ProgramApplicationStatus.APPLIED))
+            .willReturn(0L)
+
+        service.update(
+            1L,
+            requesterMemberId = 7L,
+            isDeveloper = false,
+            // formId를 함께 보내도 clearFormId가 우선한다(ProgramUpdateRequest KDoc 참고).
+            request = ProgramUpdateRequest(formId = 99L, clearFormId = true),
+        )
+
+        assertThat(program.formId).isNull()
+        verify(programFormLinkQueryPort, never()).findLinkableProgramForm(anyLong(), anyLong())
+    }
+
     // --- 상태 변경 ---
 
     @Test
@@ -242,6 +270,61 @@ class ProgramServiceImplTest {
 
         assertThat(response.status).isEqualTo(ProgramStatus.DELETED)
         assertThat(program.deletedAt).isNotNull()
+    }
+
+    // --- 목록 조회 ---
+
+    // list()가 Page 항목마다 activeApplicantCount()/hasActiveApplication()을 개별 호출하던 N+1
+    // 쿼리를 배치 쿼리(countActiveApplicantsByProgramIds/findProgramIdsWithActiveApplication)로
+    // 바꿨는지 검증한다(PR #81 리뷰 지적). 단건 Method는 Stub하지 않으므로, 만약 구현이 다시
+    // 단건 Method를 호출하면 기본값(0/null)이 반환되어 아래 값 검증이 깨진다.
+    @Test
+    fun `목록 조회는 활성 신청자 수와 신청 여부를 배치 쿼리로 한 번에 가져온다`() {
+        val program1 =
+            programOf(status = ProgramStatus.PUBLISHED, createdByMemberId = 7L, capacity = 20).apply {
+                id =
+                    1L
+            }
+        val program2 =
+            programOf(status = ProgramStatus.PUBLISHED, createdByMemberId = 7L, capacity = 10).apply {
+                id =
+                    2L
+            }
+        val page = PageImpl(listOf(program1, program2), PageRequest.of(0, 20), 2)
+        given(
+            programRepository.search(
+                isNull(),
+                isNull(),
+                anyBoolean(),
+                any(ProgramStatus::class.java) ?: ProgramStatus.PUBLISHED,
+                any(LocalDateTime::class.java) ?: now,
+                any(Pageable::class.java) ?: PageRequest.of(0, 20),
+            ),
+        ).willReturn(page)
+        given(
+            programApplicationRepository.countActiveApplicantsByProgramIds(
+                listOf(1L, 2L),
+                ProgramApplicationStatus.APPLIED,
+            ),
+        ).willReturn(listOf(programApplicantCountOf(programId = 1L, activeApplicantCount = 5L)))
+        given(
+            programApplicationRepository.findProgramIdsWithActiveApplication(
+                listOf(1L, 2L),
+                9L,
+                ProgramApplicationStatus.APPLIED,
+            ),
+        ).willReturn(listOf(2L))
+
+        val response = service.list(null, null, false, requesterMemberId = 9L, pageable = PageRequest.of(0, 20))
+
+        val summary1 = response.content.single { it.programId == 1L }
+        val summary2 = response.content.single { it.programId == 2L }
+        // program1: 배치 Count 결과에 있음(5명), 배치 신청 목록에는 없음(applied=false)
+        assertThat(summary1.currentApplicants).isEqualTo(5)
+        assertThat(summary1.applied).isFalse()
+        // program2: 배치 Count 결과에 없음(0명 취급), 배치 신청 목록에 있음(applied=true)
+        assertThat(summary2.currentApplicants).isEqualTo(0)
+        assertThat(summary2.applied).isTrue()
     }
 
     // --- 상세 조회 ---
@@ -451,6 +534,15 @@ class ProgramServiceImplTest {
         programId: Long,
         vararg grades: Int,
     ) = grades.map { grade -> ProgramTargetGrade(ProgramTargetGradeId(programId, grade)) }
+
+    private fun programApplicantCountOf(
+        programId: Long,
+        activeApplicantCount: Long,
+    ): ProgramApplicantCount =
+        object : ProgramApplicantCount {
+            override val programId: Long = programId
+            override val activeApplicantCount: Long = activeApplicantCount
+        }
 
     private fun publishedProgramForApply(capacity: Int? = null) =
         programOf(status = ProgramStatus.PUBLISHED, capacity = capacity).apply {

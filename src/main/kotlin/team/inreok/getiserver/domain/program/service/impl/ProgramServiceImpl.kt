@@ -162,7 +162,7 @@ class ProgramServiceImpl(
             request.applicationStartAt?.let { applicationStartedAt = it }
             request.applicationEndAt?.let { applicationEndedAt = it }
         }
-        request.formId?.let { program.formId = linkForm(it, requesterMemberId) }
+        applyFormLinkUpdate(program, request, requesterMemberId)
 
         val currentApplicants = activeApplicantCount(programId)
         request.capacity?.let { newCapacity ->
@@ -209,7 +209,6 @@ class ProgramServiceImpl(
         )
     }
 
-    @Suppress("ThrowsCount")
     @Transactional
     override fun changeStatus(
         programId: Long,
@@ -221,11 +220,12 @@ class ProgramServiceImpl(
         requireManager(program, requesterMemberId, isDeveloper)
 
         val target = request.status
-        // 이 API로 지정할 수 있는 목표 상태는 PUBLISHED/DELETED뿐이다(PUBLISHED->CLOSED는
-        // Scheduler 전용, 원본 요구사항 문서 8절).
-        if (target != ProgramStatus.PUBLISHED && target != ProgramStatus.DELETED) {
-            throw ProgramStatusTransitionNotAllowedException(program.status, target)
-        }
+        // allowedTransitions()의 모든 전이 대상은 PUBLISHED/DELETED뿐이라(DRAFT/CLOSED로의 전이는
+        // 어떤 현재 상태에서도 이 Map에 없다), "이 API가 지정 가능한 목표 상태는 PUBLISHED/DELETED
+        // 뿐이다(PUBLISHED->CLOSED는 Scheduler 전용, 원본 요구사항 문서 8절)"라는 별도 검사는
+        // allowedTransitions 판정과 항상 같은 결과를 내 중복이었다(PR #81 리뷰 지적). Map 하나로
+        // 통합해도 아래 분기(허용/거부 조합)는 기존과 동일하다 — ProgramServiceImplTest 상태 전이
+        // Test 참고.
         if (target !in allowedTransitions(program.status)) {
             if (program.status == ProgramStatus.CLOSED && target == ProgramStatus.PUBLISHED) {
                 throw ProgramReopenNotAllowedException()
@@ -253,6 +253,13 @@ class ProgramServiceImpl(
             // Soft Delete: 실제 행을 지우지 않아 신청·이력이 보존된다(요구사항 8절/21절).
             ProgramStatus.DELETED -> {
                 program.deletedAt = now
+            }
+
+            // allowedTransitions()는 어떤 현재 상태에서도 DRAFT/CLOSED를 target으로 반환하지 않아
+            // (위 판정을 통과했다면 target은 항상 PUBLISHED/DELETED다) 실행되지 않지만, Kotlin이
+            // enum when을 Exhaustive하게 요구해 분기 자체는 남겨둔다.
+            ProgramStatus.DRAFT, ProgramStatus.CLOSED -> {
+                Unit
             }
         }
         program.status = target
@@ -288,10 +295,17 @@ class ProgramServiceImpl(
                 now = LocalDateTime.now(),
                 pageable = pageable,
             )
+        val programIds = page.content.map { requireNotNull(it.id) }
+        val currentApplicantsByProgramId = activeApplicantCounts(programIds)
+        val appliedProgramIds = programIdsWithActiveApplication(programIds, requesterMemberId)
         val content =
             page.content.map { program ->
-                val currentApplicants = activeApplicantCount(requireNotNull(program.id))
-                toSummary(program, currentApplicants, requesterMemberId)
+                val programId = requireNotNull(program.id)
+                toSummary(
+                    program = program,
+                    currentApplicants = currentApplicantsByProgramId[programId] ?: 0,
+                    applied = programId in appliedProgramIds,
+                )
             }
         return ProgramListResponse(
             content = content,
@@ -524,6 +538,22 @@ class ProgramServiceImpl(
         programFormLinkQueryPort.findLinkableProgramForm(formId, ownerMemberId)?.formId
             ?: throw ProgramFormNotLinkableException()
 
+    // update()의 Cyclomatic Complexity를 낮추기 위해 분리했다(PR #81 리뷰로 clearFormId 분기가
+    // 추가되며 detekt CyclomaticComplexMethod 임계값을 넘어섬). clearFormId=true가 formId보다
+    // 우선한다(명시적 해제 의도, ProgramUpdateRequest KDoc 참고). 그 외에는 기존 formId?.let 그대로
+    // "전달 안 함 = 유지"다.
+    private fun applyFormLinkUpdate(
+        program: Program,
+        request: ProgramUpdateRequest,
+        requesterMemberId: Long,
+    ) {
+        if (request.clearFormId) {
+            program.formId = null
+        } else {
+            request.formId?.let { program.formId = linkForm(it, requesterMemberId) }
+        }
+    }
+
     private fun saveTargetGrades(
         programId: Long,
         targetGrades: List<Int>,
@@ -550,12 +580,34 @@ class ProgramServiceImpl(
             ProgramApplicationStatus.APPLIED,
         ) != null
 
+    // list()가 Page 항목마다 activeApplicantCount()를 호출하면 N+1 쿼리가 발생하므로(PR #81 리뷰
+    // 지적), programId 목록을 한 번에 넘겨 단일 Query로 가져온다. 신청이 없는 Program은 결과에
+    // 없으므로 호출 측에서 없는 Key를 0으로 처리한다.
+    private fun activeApplicantCounts(programIds: List<Long>): Map<Long, Int> {
+        if (programIds.isEmpty()) return emptyMap()
+        return programApplicationRepository
+            .countActiveApplicantsByProgramIds(programIds, ProgramApplicationStatus.APPLIED)
+            .associate { it.programId to it.activeApplicantCount.toInt() }
+    }
+
+    // list()가 Page 항목마다 hasActiveApplication()을 호출하면 N+1 쿼리가 발생하므로(PR #81 리뷰
+    // 지적), 활성 신청이 있는 programId만 한 번에 조회한다.
+    private fun programIdsWithActiveApplication(
+        programIds: List<Long>,
+        memberId: Long,
+    ): Set<Long> {
+        if (programIds.isEmpty()) return emptySet()
+        return programApplicationRepository
+            .findProgramIdsWithActiveApplication(programIds, memberId, ProgramApplicationStatus.APPLIED)
+            .toSet()
+    }
+
     private fun memberName(memberId: Long): String? = memberApplicantSnapshotQueryPort.findById(memberId)?.name
 
     private fun toSummary(
         program: Program,
         currentApplicants: Int,
-        requesterMemberId: Long,
+        applied: Boolean,
     ): ProgramSummaryResponse =
         ProgramSummaryResponse(
             programId = requireNotNull(program.id),
@@ -570,7 +622,7 @@ class ProgramServiceImpl(
             currentApplicants = currentApplicants,
             remainingCapacity = program.capacity?.let { it - currentApplicants },
             firstComeServed = program.firstComeServed,
-            applied = hasActiveApplication(requireNotNull(program.id), requesterMemberId),
+            applied = applied,
         )
 
     private fun allowedTransitions(current: ProgramStatus): Set<ProgramStatus> =
