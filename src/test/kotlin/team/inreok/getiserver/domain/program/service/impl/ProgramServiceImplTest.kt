@@ -37,6 +37,7 @@ import team.inreok.getiserver.domain.program.exception.ActiveApplicationNotFound
 import team.inreok.getiserver.domain.program.exception.AlreadyAppliedException
 import team.inreok.getiserver.domain.program.exception.CapacityBelowCurrentApplicantsException
 import team.inreok.getiserver.domain.program.exception.DiscordChannelRequiredException
+import team.inreok.getiserver.domain.program.exception.InvalidCapacityException
 import team.inreok.getiserver.domain.program.exception.NotEnrolledException
 import team.inreok.getiserver.domain.program.exception.ProgramActionNotAvailableException
 import team.inreok.getiserver.domain.program.exception.ProgramDeletedException
@@ -172,6 +173,27 @@ class ProgramServiceImplTest {
                 request = ProgramUpdateRequest(capacity = 10),
             )
         }.isInstanceOf(CapacityBelowCurrentApplicantsException::class.java)
+    }
+
+    // PR #81 리뷰 MINOR 지적: capacity "형식" 검증(0 이하 → INVALID_CAPACITY, 400)이 "정원 <
+    // 활성 신청자 수" 비교(CapacityBelowCurrentApplicantsException, 409)보다 먼저 실행돼야 한다.
+    // 활성 신청자 수를 15명으로 스텁해 -5 < 15가 먼저 걸리는 예전 순서였다면
+    // CapacityBelowCurrentApplicantsException(409)이 던져졌을 상황에서, 여전히 형식 오류(400)가
+    // 먼저 반환되는지 확인한다.
+    @Test
+    fun `정원이 0 이하면 활성 신청자 수와 무관하게 형식 오류를 먼저 반환한다`() {
+        given(programRepository.findByIdForUpdate(1L)).willReturn(programOf(createdByMemberId = 7L, capacity = 20))
+        given(programApplicationRepository.countByProgramIdAndStatus(1L, ProgramApplicationStatus.APPLIED))
+            .willReturn(15L)
+
+        assertThatThrownBy {
+            service.update(
+                1L,
+                requesterMemberId = 7L,
+                isDeveloper = false,
+                request = ProgramUpdateRequest(capacity = -5),
+            )
+        }.isInstanceOf(InvalidCapacityException::class.java)
     }
 
     @Test
@@ -544,10 +566,15 @@ class ProgramServiceImplTest {
             override val activeApplicantCount: Long = activeApplicantCount
         }
 
+    // apply()/cancel()은 고정된 `now` Fixture가 아니라 실제 LocalDateTime.now()로 신청 기간을
+    // 판정한다. 신청 기간을 `now`(고정 Calendar 날짜) 기준으로 두면, 실제 벽시계 시각이 그
+    // 고정된 날짜를 지나는 순간부터 이 Fixture로 만든 Program이 "신청 종료"로 취급돼 이 Method를
+    // 쓰는 Test가 시간이 지나면 저절로 실패하는 Time-bomb이 된다(PR #81 코드 리뷰 중 발견).
+    // 실제 실행 시각 기준으로 넉넉한 여유(1년)를 둬 언제 실행해도 항상 신청 기간 안에 들게 한다.
     private fun publishedProgramForApply(capacity: Int? = null) =
         programOf(status = ProgramStatus.PUBLISHED, capacity = capacity).apply {
-            applicationStartedAt = now.minusDays(1)
-            applicationEndedAt = now.plusDays(1)
+            applicationStartedAt = LocalDateTime.now().minusYears(1)
+            applicationEndedAt = LocalDateTime.now().plusYears(1)
         }
 
     private fun teacherSnapshot(memberId: Long) =

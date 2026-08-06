@@ -25,6 +25,8 @@ data class ProgramCreateResponse(
     val manager: ProgramManagerSummary?,
     @param:Schema(description = "프로그램 상태", example = "DRAFT")
     val status: ProgramStatus,
+    // [DiscordDeliveryResult] KDoc 참고: Phase 7에서 공통 Discord Delivery 계약으로 교체 예정이며
+    // Breaking Change가 될 수 있다(PR #81 리뷰 MINOR 지적).
     val discordDelivery: DiscordDeliveryResult,
     @param:Schema(description = "생성 시각", example = "2026-08-01T09:00:00", nullable = true)
     val createdAt: LocalDateTime?,

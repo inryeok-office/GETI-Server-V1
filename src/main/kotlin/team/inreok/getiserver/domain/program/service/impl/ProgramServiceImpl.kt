@@ -164,12 +164,11 @@ class ProgramServiceImpl(
         }
         applyFormLinkUpdate(program, request, requesterMemberId)
 
-        val currentApplicants = activeApplicantCount(programId)
-        request.capacity?.let { newCapacity ->
-            if (newCapacity < currentApplicants) throw CapacityBelowCurrentApplicantsException()
-            program.capacity = newCapacity
-        }
-
+        // capacity "형식" 검증(0 이하 → INVALID_CAPACITY, 400)이 "정원 < 활성 신청자 수" 비교
+        // (CapacityBelowCurrentApplicantsException, 409)보다 항상 먼저 실행되어야 한다(PR #81
+        // 리뷰 MINOR 지적). validateProgramCommon을 아직 program에 반영하지 않은 후보 값
+        // (request.capacity ?: 기존 값)으로 먼저 호출해 형식을 검증한 뒤에만 활성 신청자 수와
+        // 비교하고 실제로 반영한다.
         val targetGrades = currentTargetGrades(programId)
         validateProgramCommon(
             startAt = program.eventStartedAt,
@@ -177,8 +176,15 @@ class ProgramServiceImpl(
             applicationStartAt = program.applicationStartedAt,
             applicationEndAt = program.applicationEndedAt,
             targetGrades = targetGrades.toList(),
-            capacity = program.capacity,
+            capacity = request.capacity ?: program.capacity,
         )
+
+        val currentApplicants = activeApplicantCount(programId)
+        request.capacity?.let { newCapacity ->
+            if (newCapacity < currentApplicants) throw CapacityBelowCurrentApplicantsException()
+            program.capacity = newCapacity
+        }
+
         if (program.status == ProgramStatus.PUBLISHED) {
             validateProgramForPublish(
                 content = program.bodyMarkdown,
