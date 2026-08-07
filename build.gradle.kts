@@ -32,6 +32,11 @@ dependencyManagement {
         // org.testcontainers:junit-jupiter Version이 해석되지 않음). Spring Boot 4.1.0이
         // 관리하는 것과 동일한 Version(testcontainers.version)을 직접 Import해 해결한다.
         mavenBom("org.testcontainers:testcontainers-bom:2.0.5")
+
+        // AWS SDK v2(S3). Spring Boot Dependency Management가 AWS SDK를 관리하지 않으므로
+        // BOM을 직접 Import해 s3/s3-presigner와 전이 의존(http-client, auth 등) Version을
+        // 한곳에서 맞춘다(File 도메인, Issue #85).
+        mavenBom("software.amazon.awssdk:bom:2.51.2")
     }
 }
 
@@ -96,6 +101,17 @@ dependencies {
     // 관리하는 값을 그대로 쓰고 임의로 고정하지 않는다.
     implementation("org.springframework.boot:spring-boot-starter-data-elasticsearch")
 
+    // Object Storage(S3 Compatible). Local은 MinIO, 운영은 AWS S3를 쓰지만 Adapter는 하나이며
+    // endpoint/path-style 설정으로만 구분한다(Issue #85). S3Client와 S3Presigner가 모두 필요해
+    // s3 Artifact 하나로 충분하다(Presigner는 s3에 포함되어 있다).
+    implementation("software.amazon.awssdk:s3")
+
+    // 업로드 파일의 실제 형식(Magic Number) 탐지. 확장자·선언 MIME만 믿으면 이름만 바꾼 실행
+    // 파일을 막을 수 없다(Issue #85). 문서 본문을 파싱하는 tika-parsers는 쓰지 않는다 —
+    // 형식 탐지에는 tika-core만 있으면 되고 Dependency도 훨씬 가볍다. Spring Boot Dependency
+    // Management가 Tika를 관리하지 않아 Version을 직접 고정한다(4.0.0은 아직 beta라 제외).
+    implementation("org.apache.tika:tika-core:3.3.2")
+
     // Kotlin / Jackson
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
@@ -122,6 +138,8 @@ dependencies {
     "integrationTestImplementation"("org.testcontainers:testcontainers-postgresql")
     "integrationTestImplementation"("com.redis:testcontainers-redis")
     "integrationTestImplementation"("org.testcontainers:testcontainers-elasticsearch")
+    // MinIO Container. Version은 위 testcontainers-bom(2.0.5)이 관리하므로 고정하지 않는다.
+    "integrationTestImplementation"("org.testcontainers:testcontainers-minio")
     "integrationTestRuntimeOnly"("org.junit.platform:junit-platform-launcher")
 }
 
