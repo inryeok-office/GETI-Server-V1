@@ -49,6 +49,13 @@ import java.util.concurrent.TimeUnit
         "app.jwt.secret=program-concurrency-integration-test-only-jwt-secret-value",
         "app.jwt.access-token-expiration-seconds=1800",
         "app.jwt.refresh-token-expiration-seconds=1209600",
+        // src/main/resources/application.yaml이 이 Classpath에서 우선하는데 app.file.storage는
+        // Profile별 파일(application-local/prod.yaml)에만 있어(Secret과 환경별 값이라) 여기서
+        // 채운다. 이 Test는 실제 Storage에 접속하지 않고 Bean 생성만 필요하다.
+        "app.file.storage.bucket=geti-integration-test",
+        "app.file.storage.region=us-east-1",
+        "app.file.storage.access-key=integration-test-only-access-key",
+        "app.file.storage.secret-key=integration-test-only-secret-key",
     ],
 )
 class ProgramApplicationConcurrencyIntegrationTest {
