@@ -29,7 +29,8 @@ import tools.jackson.databind.ObjectMapper
  * `POST /api/v1/programs/{id}/application-actions`(프로그램 신청·취소, 원본 요구사항 11절)는
  * STUDENT 역할까지, 나머지 `/api/v1/programs`(프로그램 목록·상세 조회)는 인증만 요구한다.
  * `/api/v1/notifications` 이하(인앱 알림 조회·읽음 처리, Notification Core)도 인증만 요구한다 —
- * 항상 요청자 본인의 알림만 다루기 때문이다.
+ * 항상 요청자 본인의 알림만 다루기 때문이다. `/api/v1/files` 이하(공통 파일 업로드·다운로드,
+ * File 도메인 Issue #85)도 인증만 요구하고, 파일별 소유권·접근 권한은 File 도메인이 판정한다.
  * 전공/기술스택 메타데이터 조회 등 다른
  * Domain은 아직 Spring Security와 연동되지 않아
  * ([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport] 참고)
@@ -135,6 +136,12 @@ class SecurityConfig(
                 // 검증은 Role로 알 수 없어 NotificationService가 별도로 수행한다.
                 authorize("/api/v1/notifications", authenticated)
                 authorize("/api/v1/notifications/**", authenticated)
+                // 파일 업로드·다운로드는 학생·교사·개발자가 모두 사용하므로 Role을 구분하지 않고
+                // 인증만 요구한다(File 도메인 요구사항 §5/§15). 로그인만으로 모든 파일을 받을 수
+                // 있다는 뜻은 아니다 -- 파일별 소유권과 대상 리소스 접근 권한은 Role로 알 수 없어
+                // File 도메인의 Service 계층이 별도로 판정한다(§16).
+                authorize("/api/v1/files", authenticated)
+                authorize("/api/v1/files/**", authenticated)
                 authorize(anyRequest, permitAll)
             }
             exceptionHandling {

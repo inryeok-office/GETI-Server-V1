@@ -192,6 +192,7 @@ class OpenApiDocumentationTest {
                 "/api/v1/companies",
                 "/api/v1/jobs",
                 "/api/v1/job-applications",
+                "/api/v1/files",
                 "/api/v1/admin/",
             )
 
