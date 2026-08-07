@@ -28,6 +28,8 @@ import tools.jackson.databind.ObjectMapper
  * 관리, Program 도메인 전체 개발 요구사항 Phase 1~3)는 TEACHER 또는 DEVELOPER 역할까지,
  * `POST /api/v1/programs/{id}/application-actions`(프로그램 신청·취소, 원본 요구사항 11절)는
  * STUDENT 역할까지, 나머지 `/api/v1/programs`(프로그램 목록·상세 조회)는 인증만 요구한다.
+ * `/api/v1/notifications` 이하(인앱 알림 조회·읽음 처리, Notification Core)도 인증만 요구한다 —
+ * 항상 요청자 본인의 알림만 다루기 때문이다.
  * 전공/기술스택 메타데이터 조회 등 다른
  * Domain은 아직 Spring Security와 연동되지 않아
  * ([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport] 참고)
@@ -128,6 +130,11 @@ class SecurityConfig(
                 // 요구한다.
                 authorize("/api/v1/programs", authenticated)
                 authorize("/api/v1/programs/**", authenticated)
+                // 인앱 알림은 항상 요청자 본인의 알림만 다루므로 Role 구분 없이 인증만 요구한다
+                // (Notification Core, docs/Notification/notification-core-plan.md). 본인 소유
+                // 검증은 Role로 알 수 없어 NotificationService가 별도로 수행한다.
+                authorize("/api/v1/notifications", authenticated)
+                authorize("/api/v1/notifications/**", authenticated)
                 authorize(anyRequest, permitAll)
             }
             exceptionHandling {

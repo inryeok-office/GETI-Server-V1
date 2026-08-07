@@ -64,10 +64,12 @@ ERD가 명시한 대로 PostgreSQL `timestamp`(Time Zone 없음) + Kotlin `Local
 
 ```text
 files.owner_type + files.owner_id
-notifications.resource_type + notifications.resource_id
+notifications.target_type + notifications.target_id
 async_operations.target_type + async_operations.target_id
 audit_logs.target_type + audit_logs.target_id
 ```
+
+`notifications`는 V2에서 `resource_type`/`resource_id`로 만들었고, 인앱 알림 API가 응답 필드명(`targetType`/`targetId`)과 어휘를 맞추기 위해 V16에서 `target_type`/`target_id`로 RENAME했다(`docs/Notification/notification-core-plan.md`). 다른 세 조합과 이름 규칙이 같아졌다.
 
 ## FK 삭제 정책
 
@@ -108,7 +110,7 @@ recommendations/job_applications/portfolio_submissions UNIQUE 제약
 files.size_bytes, async_operations.progress_percent, job_applications.attempt_number CHECK 제약
 member 삭제 시 member_roles/refresh_tokens CASCADE, files.uploader_member_id SET NULL
 JSONB(members.majors) 저장/조회
-다형적 참조 Column(files.owner_id, notifications.resource_id, async_operations.target_id, audit_logs.target_id)에 물리 FK가 없는지
+다형적 참조 Column(files.owner_id, notifications.target_id, async_operations.target_id, audit_logs.target_id)에 물리 FK가 없는지
 19개 Table 전체(company/job/ai/recommendation/application/program/portfolio/notification/inquiry/collector/operation/audit 포함)의 최소 저장·조회 경로
 ```
 
