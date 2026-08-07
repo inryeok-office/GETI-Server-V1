@@ -967,16 +967,30 @@ domain/company/dto/CompanyCreateRequest.kt, CompanyUpdateRequest.kt  logoFileId 
 
 인프라(4번)는 **운영 배포 시점에만 필요**하다. local은 `compose.yaml`의 MinIO를 그대로 쓰므로 4번 없이도 PR A 구현·테스트를 끝까지 진행할 수 있다.
 
-### 다음 작업: PR A 구현
+### PR A 구현 완료
 
-§16의 파일 목록 순서를 따른다. 권장 Commit 분할:
+Branch `feature/85-file-domain-core`에 9개 Commit으로 구현했다.
 
-1. `chore`: S3·Tika·Testcontainers MinIO 의존성 추가 **(적용 완료, 미커밋)**
-2. `feat`: V17 Migration과 `StoredFile`·Enum 확장
-3. `feat`: `FileStoragePort`와 S3 Adapter, Storage 설정
-4. `feat`: 정책·파일명 정규화·MIME 검증
-5. `feat`: 업로드 API
-6. `feat`: 공개 Port(`FileLinkPort`/`FileUrlPort`/`FileSnapshot`)
-7. `feat`: 다운로드 API와 `FileAccessChecker`/`FileAccessResolver`
-8. `test`: 단위·Controller·통합 테스트
-9. `docs`: `erd.md`·`persistence.md` 갱신
+| # | Commit | 내용 |
+| --- | --- | --- |
+| 1 | `docs` | 요구사항 문서와 이 명세 |
+| 2 | `chore` | S3·Tika·Testcontainers MinIO 의존성 |
+| 3 | `feat` | V17 Migration, `StoredFile` 확장, Enum 3종 |
+| 4 | `feat` | `FileStoragePort`와 S3 Adapter, Storage 설정 |
+| 5 | `feat` | 정책·파일명 정규화·MIME 검증 |
+| 6 | `feat` | 업로드 API |
+| 7 | `feat` | 공개 Port(`FileLinkPort`/`FileUrlPort`/`FileSnapshot`) |
+| 8 | `feat` | 다운로드 API와 `FileAccessChecker`/`FileAccessResolver` |
+| 9 | `test`/`docs` | Testcontainers 통합 테스트, `erd.md`·`persistence.md` 갱신 |
+
+계획과 달라진 점:
+
+- **`global.error.ErrorResponse`에 `@NamedInterface`를 추가했다.** `docs/development/web-api.md`가 "Domain Error Code는 그 Domain의 전용 `@ExceptionHandler`가 이 `ErrorResponse` 형식으로 변환한다"고 규정하는데 공개 선언이 빠져 있어 `ModularityTest`가 막았다. 지금까지 이 타입을 직접 만드는 Domain이 없어 드러나지 않았던 누락이다.
+- **`OpenApiDocumentationTest`가 성공 응답으로 3xx도 인정하게 했다.** 302 Redirect가 정상 동작인 다운로드 API에 실제로 반환하지 않는 200을 적는 것은 "Swagger는 실제 동작과 정확히 일치해야 한다"는 규칙에 어긋난다.
+- **Test Task에 `maxHeapSize = "2g"`를 지정했다.** Gradle Test Worker 기본 Heap(512MB)이 AWS SDK의 Class 그래프와 늘어난 `@WebMvcTest` Slice를 감당하지 못해 Test JVM이 `Java heap space`로 죽었다.
+- **기존 `@SpringBootTest` 2개에 `app.file.storage.*`를 추가했다.** `integrationTest` Classpath에서는 `src/main/resources/application.yaml`이 우선하는데 `app.file.storage`는 Profile별 파일에만 있어 Context가 뜨지 않았다.
+- **`OPERATION_RESULT` Purpose는 끝까지 추가하지 않았다.** `CoreDomainSchemaIntegrationTest`의 `async_operations.result_file_id` 경로는 유효한 Purpose 하나를 빌려 쓰고 주석으로 사유를 남겼다(Phase 6 범위).
+
+### 다음 작업: PR B (Issue #86)
+
+`feature/86-member-company-file-wiring` Branch에서 §12를 구현한다. PR A가 병합된 뒤 시작한다.
