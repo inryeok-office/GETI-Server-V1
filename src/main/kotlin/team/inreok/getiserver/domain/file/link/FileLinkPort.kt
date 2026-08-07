@@ -1,0 +1,71 @@
+package team.inreok.getiserver.domain.file.link
+
+import org.springframework.modulith.NamedInterface
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.entity.type.FilePurpose
+
+/**
+ * 다른 Domain이 업로드된 파일을 자기 리소스에 연결할 때 쓰는 공개 계약이다(요구사항 §12).
+ *
+ * 다른 Domain은 `StoredFileRepository`나 `StoredFile` Entity를 직접 만지지 않고 이 Port만
+ * 사용한다. 반대로 File 도메인은 대상 리소스의 **비즈니스 권한**을 판정하지 않는다.
+ *
+ * ```
+ * Application 도메인: "이 학생이 이 지원서를 수정할 수 있는가"
+ * File 도메인:        "이 파일이 이 학생 소유이며 JOB_APPLICATION 용도인가"
+ * ```
+ *
+ * 의존 방향은 항상 `domain.X -> domain.file` 한쪽이다. 파일 다운로드 권한을 판정할 때 필요한
+ * 반대 방향 정보는 각 Domain이
+ * [FileAccessChecker][team.inreok.getiserver.domain.file.access.FileAccessChecker]를 구현해
+ * 제공한다 -- 그래야 Spring Modulith가 순환 의존으로 실패하지 않는다.
+ */
+@NamedInterface
+interface FileLinkPort {
+    /**
+     * 소유권·목적·상태·개수를 검증하고 파일들을 대상 리소스에 연결한다.
+     *
+     * 연결 대상 종류는 [purpose]가 결정한다([FilePurpose.ownerType]). 호출자가 목적과 대상을
+     * 따로 넘겨 서로 어긋나는 상황 자체를 만들지 않기 위해서다.
+     *
+     * 검증 항목(요구사항 §12/§14/§24):
+     * 1. `fileIds`에 중복이 없다
+     * 2. 모든 파일이 존재한다 -> 없으면 `FILE_NOT_FOUND`
+     * 3. 업로드가 끝났고 아직 연결되지 않았다 -> 아니면 `FILE_NOT_FOUND` / `FILE_ALREADY_LINKED`
+     * 4. **요청자가 업로드한 파일이다** -> 아니면 `FILE_NOT_OWNED`
+     * 5. 파일의 목적이 [purpose]와 같다 -> 아니면 `FILE_PURPOSE_MISMATCH`
+     * 6. 연결 후 개수가 목적별 상한 이내다 -> 넘으면 `FILE_COUNT_EXCEEDED`
+     *
+     * 4번이 §14의 핵심 보안 요구사항이다. File ID는 단순 식별자일 뿐 권한 증명이 아니므로,
+     * 이 검사가 없으면 학생 A가 올린 파일을 학생 B가 자기 지원서에 붙일 수 있다.
+     *
+     * @return 연결된 파일들의 공개 Metadata. 순서는 [fileIds]와 같다.
+     */
+    fun validateAndLink(
+        requesterId: Long,
+        fileIds: Collection<Long>,
+        purpose: FilePurpose,
+        ownerId: Long,
+    ): List<FileSnapshot>
+
+    /**
+     * 대상 리소스에 연결된 파일을 모두 연결 해제한다. 리소스 수정으로 첨부가 교체되거나 빠질 때
+     * 사용한다.
+     *
+     * Storage Binary를 즉시 지우지 않는다(요구사항 §18/§39) -- 리소스 삭제와 파일 물리 삭제는
+     * 다른 사건이고 보존해야 할 이력이 남아 있을 수 있다. 실제 삭제는 Cleanup(Phase 5)이
+     * 보존 기간을 보고 판단한다.
+     */
+    fun unlinkAllOf(
+        ownerType: FileOwnerType,
+        ownerId: Long,
+    )
+
+    /**
+     * 파일들의 공개 Metadata를 읽는다. 존재하지 않거나 사용자에게 보이지 않는 상태
+     * (PENDING/FAILED/DELETED)의 fileId는 결과에서 빠진다.
+     *
+     * 목록 응답이 여러 파일을 함께 다루므로 단건 조회 반복(N+1)을 만들지 않도록 배치로 둔다.
+     */
+    fun snapshotsOf(fileIds: Collection<Long>): Map<Long, FileSnapshot>
+}

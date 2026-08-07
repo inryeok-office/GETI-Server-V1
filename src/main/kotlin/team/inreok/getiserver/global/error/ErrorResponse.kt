@@ -1,12 +1,18 @@
 package team.inreok.getiserver.global.error
 
 import io.swagger.v3.oas.annotations.media.Schema
+import org.springframework.modulith.NamedInterface
 import team.inreok.getiserver.global.web.ResponseMeta
 import java.time.Instant
 
 // GETI Notion API 명세서의 success/error/meta.requestId Wrapper 구조를 따른다
 // (docs/audit/notion-repository-sync.md DECISION_REQUIRED 반영). status/path/timestamp는
 // Notion 명세에는 없지만 Log/Trace 연계에 유용해 error 하위에 추가 Field로 유지한다.
+//
+// Domain Module의 전용 @ExceptionHandler가 Domain Error Code를 이 형식으로 변환해야 하므로
+// (docs/development/web-api.md "Domain Error Code ... 그 Domain의 Web Adapter가 이 ErrorResponse
+// 형식으로 변환한다") ApiResponse와 마찬가지로 global Module 밖으로 명시적으로 공개한다.
+@NamedInterface
 @Schema(description = "공통 오류 응답 Wrapper")
 data class ErrorResponse(
     @param:Schema(description = "요청 성공 여부(오류 응답은 항상 false)", example = "false")
@@ -14,6 +20,7 @@ data class ErrorResponse(
     val error: ErrorBody,
     val meta: ResponseMeta = ResponseMeta(),
 ) {
+    @NamedInterface
     companion object {
         fun of(
             errorCode: ErrorCode,
