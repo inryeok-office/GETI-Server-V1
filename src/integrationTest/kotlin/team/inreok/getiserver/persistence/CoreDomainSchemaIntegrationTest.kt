@@ -49,6 +49,7 @@ import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.member.repository.MemberRoleRepository
 import team.inreok.getiserver.domain.notification.entity.Notification
+import team.inreok.getiserver.domain.notification.entity.type.NotificationType
 import team.inreok.getiserver.domain.notification.repository.NotificationRepository
 import team.inreok.getiserver.domain.operation.entity.AsyncOperation
 import team.inreok.getiserver.domain.operation.entity.type.OperationType
@@ -480,7 +481,7 @@ class CoreDomainSchemaIntegrationTest
                 notificationRepository.saveAndFlush(
                     Notification(
                         recipientMemberId = member.id!!,
-                        type = "JOB_APPLICATION_APPROVED",
+                        type = NotificationType.JOB_APPLICATION_STATUS_CHANGED,
                         title = "지원이 승인되었습니다",
                         content = "지원하신 공고가 승인되었습니다.",
                     ),
@@ -546,9 +547,10 @@ class CoreDomainSchemaIntegrationTest
 
         @Test
         fun `다형적 참조 Column(files, notifications, async_operations, audit_logs)에는 물리 FK가 없다`() {
-            // files.owner_id, notifications.resource_id, async_operations.target_id, audit_logs.target_id는
-            // owner_type/resource_type/target_type과 함께 쓰이는 논리적 참조이며, 특정 Table을 가리키는
+            // files.owner_id, notifications.target_id, async_operations.target_id, audit_logs.target_id는
+            // owner_type/target_type과 함께 쓰이는 논리적 참조이며, 특정 Table을 가리키는
             // 물리 FK 제약을 만들지 않는다(docs/architecture/erd.md의 "다형적 참조" 참고).
+            // notifications는 V16에서 resource_type/resource_id -> target_type/target_id로 바뀌었다.
             @Suppress("UNCHECKED_CAST")
             val polymorphicForeignKeyCount =
                 entityManager
@@ -562,7 +564,7 @@ class CoreDomainSchemaIntegrationTest
                         WHERE tc.constraint_type = 'FOREIGN KEY'
                           AND (
                             (kcu.table_name = 'files' AND kcu.column_name = 'owner_id')
-                            OR (kcu.table_name = 'notifications' AND kcu.column_name = 'resource_id')
+                            OR (kcu.table_name = 'notifications' AND kcu.column_name = 'target_id')
                             OR (kcu.table_name = 'async_operations' AND kcu.column_name = 'target_id')
                             OR (kcu.table_name = 'audit_logs' AND kcu.column_name = 'target_id')
                           )
