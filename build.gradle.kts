@@ -197,4 +197,9 @@ kover {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+
+    // Gradle Test Worker의 기본 Heap은 512MB다. File 도메인이 AWS SDK(Class 그래프가 크다)를
+    // 들이고 @WebMvcTest Slice가 늘면서 이 한계를 넘어 "Java heap space"로 Test JVM이 죽었다
+    // (Issue #85 실측). Spring Context를 여러 개 띄우는 Test가 계속 늘어날 것이라 넉넉히 잡는다.
+    maxHeapSize = "2g"
 }

@@ -48,7 +48,12 @@ class InMemoryFileStoragePort : FileStoragePort {
         if (failOnPresign) throw FileStorageException(operation = "presign")
         // 실제 서명은 하지 않는다. Test는 "권한 검증을 통과해야 URL이 나온다"와 "어떤 값으로
         // 서명을 요청했는가"만 확인하면 된다.
-        return URI.create("https://storage.test/$key?disposition=$contentDisposition&ttl=${ttl.seconds}")
+        //
+        // Content-Disposition Header 값 전체를 Query에 넣으면 따옴표·공백 때문에 URI 파싱이
+        // 실패한다. 실제 SDK는 이 값을 Percent-Encoding하므로, 여기서는 검증에 필요한 처리
+        // 방식(inline/attachment)만 남긴다.
+        val dispositionType = contentDisposition.substringBefore(';').trim()
+        return URI.create("https://storage.test/$key?disposition=$dispositionType&ttl=${ttl.seconds}")
     }
 
     fun contains(key: String): Boolean = objects.containsKey(key)

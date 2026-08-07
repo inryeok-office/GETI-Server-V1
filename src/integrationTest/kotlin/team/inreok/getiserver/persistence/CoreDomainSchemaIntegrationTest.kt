@@ -31,6 +31,8 @@ import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.company.entity.type.MouStatus
 import team.inreok.getiserver.domain.company.repository.CompanyRepository
 import team.inreok.getiserver.domain.file.entity.StoredFile
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.entity.type.FilePurpose
 import team.inreok.getiserver.domain.file.repository.StoredFileRepository
 import team.inreok.getiserver.domain.inquiry.entity.Inquiry
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryType
@@ -250,13 +252,18 @@ class CoreDomainSchemaIntegrationTest
             val file =
                 fileRepository.saveAndFlush(
                     StoredFile(
-                        ownerType = "PORTFOLIO_SUBMISSION",
-                        ownerId = 1L,
-                        objectKey = "portfolio/1/file.pdf",
+                        purpose = FilePurpose.PORTFOLIO,
+                        objectKey = "PORTFOLIO/2026/08/portfolio-file",
                         originalName = "file.pdf",
                         contentType = "application/pdf",
                         sizeBytes = 1024L,
-                    ).apply { uploaderMemberId = member.id },
+                        uploaderMemberId = member.id,
+                    ).apply {
+                        // V17의 ck_files_link_state가 "연결된 파일만 owner_*를 가진다"를 강제하므로
+                        // 업로드 완료 -> 연결 순서를 그대로 거친다.
+                        markUploaded()
+                        linkTo(FileOwnerType.PORTFOLIO_SUBMISSION, 1L, LocalDateTime.now())
+                    },
                 )
 
             memberRepository.delete(member)
@@ -267,7 +274,7 @@ class CoreDomainSchemaIntegrationTest
 
             val found = fileRepository.findById(file.id!!).orElseThrow()
             assertThat(found.uploaderMemberId).isNull()
-            assertThat(found.ownerType).isEqualTo("PORTFOLIO_SUBMISSION")
+            assertThat(found.ownerType).isEqualTo(FileOwnerType.PORTFOLIO_SUBMISSION)
         }
 
         @Test
@@ -275,9 +282,8 @@ class CoreDomainSchemaIntegrationTest
             assertThatThrownBy {
                 fileRepository.saveAndFlush(
                     StoredFile(
-                        ownerType = "JOB",
-                        ownerId = 1L,
-                        objectKey = "invalid.pdf",
+                        purpose = FilePurpose.JOB_ATTACHMENT,
+                        objectKey = "JOB_ATTACHMENT/2026/08/invalid",
                         originalName = "invalid.pdf",
                         contentType = "application/pdf",
                         sizeBytes = -1L,
@@ -467,10 +473,12 @@ class CoreDomainSchemaIntegrationTest
             val member = persistMember("misc-subject")
             val file =
                 fileRepository.saveAndFlush(
+                    // 서버가 생성하는 Export 결과물에는 아직 전용 FilePurpose가 없다(일괄 다운로드,
+                    // Phase 6 범위). 이 Test는 async_operations.result_file_id FK 경로만 확인하므로
+                    // 유효한 Purpose 하나를 골라 쓰고 연결은 하지 않는다.
                     StoredFile(
-                        ownerType = "ASYNC_OPERATION_RESULT",
-                        ownerId = 1L,
-                        objectKey = "export/1/result.csv",
+                        purpose = FilePurpose.JOB_APPLICATION,
+                        objectKey = "JOB_APPLICATION/2026/08/export-result",
                         originalName = "result.csv",
                         contentType = "text/csv",
                         sizeBytes = 2048L,
