@@ -1,3 +1,20 @@
 spring:
   modulith:
     detection-strategy: team.inreok.getiserver.DomainApplicationModuleDetectionStrategy
+
+# 이 파일은 같은 파일 이름이라 src/main/resources/application.yaml을 완전히 대체한다
+# (GetiServerApplicationTests의 주석 참고). Secret 성격의 값(app.jwt.*)은 각 Test가
+# @SpringBootTest(properties = ...)로 직접 채우지만, 아래 값들은 Secret이 아니고 Context를
+# 띄우는 모든 Test에 공통으로 필요해 여기에 둔다.
+app:
+  file:
+    storage:
+      # 실제 Storage에 접속하지 않는다. Bean 생성과 Property Binding만 성공하면 되고, 실제
+      # 업로드·Presign 동작은 src/integrationTest가 Testcontainers MinIO로 검증한다.
+      # auto-create-bucket은 기본값(false)이라 Context 기동 중 네트워크 호출이 없다.
+      bucket: geti-test
+      region: us-east-1
+      endpoint: http://localhost:9000
+      path-style-access: true
+      access-key: test-only-access-key
+      secret-key: test-only-secret-key

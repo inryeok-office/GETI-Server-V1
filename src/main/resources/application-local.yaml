@@ -18,6 +18,20 @@ spring:
 # Local 전용 임시 Secret이다(운영에서 재사용 금지). 실제 값을 채운 .env는 Commit되지 않는다.
 # GOOGLE_CLIENT_ID/SECRET을 비워두면 Google 로그인 자체는 실패하지만 App은 정상 기동한다.
 app:
+  file:
+    storage:
+      # compose.yaml의 MinIO Container를 그대로 쓴다. Access Key를 명시하므로
+      # StaticCredentialsProvider가 선택된다(운영은 이 두 값을 주지 않아 IAM Role을 쓴다).
+      # 이 값들은 Local 전용이며 운영에서 재사용할 수 없다(docs/development/docker.md).
+      endpoint: http://localhost:${MINIO_API_PORT:9000}
+      region: us-east-1
+      bucket: ${FILE_STORAGE_BUCKET:geti-local}
+      path-style-access: true
+      access-key: ${MINIO_ROOT_USER:geti-local}
+      secret-key: ${MINIO_ROOT_PASSWORD:geti-local-minio}
+      # 개발자가 MinIO Console에서 Bucket을 수동으로 만들지 않아도 되게 한다. 운영에서는
+      # 기본값(false) 그대로 두어 앱이 Bucket을 만들지 않는다.
+      auto-create-bucket: true
   jwt:
     secret: ${JWT_SECRET:local-development-only-jwt-secret-please-do-not-use-in-production}
   oauth:
