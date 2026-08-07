@@ -54,6 +54,7 @@ class NotificationServiceImplTest {
         readAt: LocalDateTime? = null,
         targetType: NotificationTargetType? = NotificationTargetType.PROGRAM,
         targetId: Long? = 100L,
+        deletedAt: LocalDateTime? = null,
     ) = Notification(
         recipientMemberId = recipientMemberId,
         type = NotificationType.PROGRAM_PUBLISHED,
@@ -65,6 +66,7 @@ class NotificationServiceImplTest {
         this.targetType = targetType
         this.targetId = targetId
         this.readAt = readAt
+        this.deletedAt = deletedAt
         this.createdAt = LocalDateTime.of(2026, 8, 7, 10, 0)
     }
 
@@ -282,6 +284,34 @@ class NotificationServiceImplTest {
         given(notificationRepository.findById(99L)).willReturn(Optional.empty())
 
         assertThatThrownBy { service().markAsRead(ownerMemberId, 99L) }
+            .isInstanceOf(NotificationNotFoundException::class.java)
+    }
+
+    @Test
+    fun `삭제된 알림을 읽음 처리하면 NOTIFICATION_NOT_FOUND다`() {
+        val target = notification(1L, deletedAt = LocalDateTime.of(2026, 8, 5, 9, 0))
+        given(notificationRepository.findById(1L)).willReturn(Optional.of(target))
+
+        assertThatThrownBy { service().markAsRead(ownerMemberId, 1L) }
+            .isInstanceOf(NotificationNotFoundException::class.java)
+
+        // 삭제된 알림은 목록에도 나오지 않으므로 읽음 상태를 바꾸지 않는다.
+        assertThat(target.isRead).isFalse
+        assertThat(target.readAt).isNull()
+    }
+
+    @Test
+    fun `삭제된 타인의 알림은 403이 아니라 404로 감춘다`() {
+        // 소유권보다 삭제 여부를 먼저 확인해야 타인 알림의 존재 여부가 403으로 드러나지 않는다.
+        val target =
+            notification(
+                1L,
+                recipientMemberId = otherMemberId,
+                deletedAt = LocalDateTime.of(2026, 8, 5, 9, 0),
+            )
+        given(notificationRepository.findById(1L)).willReturn(Optional.of(target))
+
+        assertThatThrownBy { service().markAsRead(ownerMemberId, 1L) }
             .isInstanceOf(NotificationNotFoundException::class.java)
     }
 
