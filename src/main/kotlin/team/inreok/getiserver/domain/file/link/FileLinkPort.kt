@@ -68,4 +68,27 @@ interface FileLinkPort {
      * 목록 응답이 여러 파일을 함께 다루므로 단건 조회 반복(N+1)을 만들지 않도록 배치로 둔다.
      */
     fun snapshotsOf(fileIds: Collection<Long>): Map<Long, FileSnapshot>
+
+    /**
+     * 리소스에 현재 연결된(`LINKED`) 파일 전체를 조회한다.
+     *
+     * Member/Company처럼 리소스 하나가 파일을 최대 1개만 갖는 경우는 이 Method가 필요 없다 --
+     * 자기 Entity의 `profileImageFileId`/`logoFileId` 같은 단일 FK 컬럼을 그대로 읽으면 되기
+     * 때문이다. 이 Method는 **하나의 리소스가 여러 파일을 가질 수 있고, 그 목록 자체를 응답에
+     * 실어야 하는** 경우를 위해 추가했다(Inquiry 도메인이 문의/답변 첨부파일 목록을 §5/§17
+     * 응답에 실어야 하는 첫 사례, 요구사항 §7/§14/§45).
+     *
+     * 대안으로 소비 Domain이 자기 fileId 목록을 별도 연결 테이블에 중복 저장하는 방법도
+     * 검토했으나 채택하지 않았다 -- `files.owner_type`/`owner_id`가 이미 그 연결 관계의
+     * Source of Truth이고, 별도 테이블을 또 두면 두 저장소가 어긋날 수 있는 상태(연결은
+     * 됐는데 Join 테이블에 없거나, 그 반대인 상태)를 새로 만들 뿐이다. 다음에 같은 요구(리소스
+     * 하나가 여러 파일을 갖고 그 목록을 응답에 실어야 하는 경우)가 생기면 새 연결 테이블을
+     * 만들지 말고 이 Method를 그대로 재사용한다.
+     *
+     * [ownerType]/[ownerId] 조합은 [unlinkAllOf]와 같은 순서를 쓴다.
+     */
+    fun linkedFilesOf(
+        ownerType: FileOwnerType,
+        ownerId: Long,
+    ): List<FileSnapshot>
 }

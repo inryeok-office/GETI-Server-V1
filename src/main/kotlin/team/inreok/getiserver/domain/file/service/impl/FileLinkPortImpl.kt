@@ -91,6 +91,15 @@ class FileLinkPortImpl(
             .associate { requireNotNull(it.id) to it.toSnapshot() }
     }
 
+    @Transactional(readOnly = true)
+    override fun linkedFilesOf(
+        ownerType: FileOwnerType,
+        ownerId: Long,
+    ): List<FileSnapshot> =
+        storedFileRepository
+            .findAllByOwnerTypeAndOwnerIdAndStatus(ownerType, ownerId, FileStatus.LINKED)
+            .map { it.toSnapshot() }
+
     /**
      * 파일 하나가 연결 가능한지 본다. 실패 순서가 곧 정보 노출 정책이다 -- 존재하지 않는 파일과
      * 사용자에게 보이지 않는 상태의 파일을 똑같이 `FILE_NOT_FOUND`로 다뤄, 남의 파일 ID를
