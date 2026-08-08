@@ -42,7 +42,10 @@ class FileLinkPortImpl(
         }
 
         val ownerType = purpose.ownerType
-        val filesById = storedFileRepository.findAllByIdIn(distinctIds).associateBy { it.id }
+        // Lock을 거는 조회여야 한다. 아래 verifyLinkable의 상태 검사는 in-memory라, Lock 없이
+        // 읽으면 같은 파일에 대한 동시 연결 요청이 모두 검사를 통과해 나중 Commit이 먼저 것을
+        // 덮어쓴다(StoredFileRepository.findAllByIdInForUpdate 주석 참고).
+        val filesById = storedFileRepository.findAllByIdInForUpdate(distinctIds).associateBy { it.id }
         val files = fileIds.map { fileId -> filesById[fileId] ?: throw FileNotFoundException(fileId) }
 
         files.forEach { verifyLinkable(it, requesterId, purpose) }

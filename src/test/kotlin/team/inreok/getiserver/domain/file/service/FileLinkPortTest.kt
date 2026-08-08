@@ -213,12 +213,18 @@ class FileLinkPortTest {
         assertThat(snapshots.keys).containsExactly(1L)
     }
 
-    /** Mockito Matcher 대신 실제로 전달될 ID 집합으로 stub한다(mockito-kotlin 의존성이 없다). */
+    /**
+     * Mockito Matcher 대신 실제로 전달될 ID 집합으로 stub한다(mockito-kotlin 의존성이 없다).
+     *
+     * `findAllByIdIn`이 아니라 Lock을 거는 `findAllByIdInForUpdate`로 stub한다. 연결 경로가 Lock
+     * 없는 조회로 되돌아가면 stub이 걸리지 않아 빈 목록이 반환되고, 이 Class의 Test들이
+     * `FileNotFoundException`으로 깨진다 -- 동시성 방어가 사라진 것을 알아채는 장치다.
+     */
     private fun givenFiles(
         ids: Set<Long>,
         vararg files: StoredFile,
     ) {
-        given(storedFileRepository.findAllByIdIn(ids)).willReturn(files.toList())
+        given(storedFileRepository.findAllByIdInForUpdate(ids)).willReturn(files.toList())
     }
 
     private fun givenLinkedCount(count: Long) {
