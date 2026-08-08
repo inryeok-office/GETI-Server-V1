@@ -19,12 +19,20 @@ import org.springframework.modulith.NamedInterface
 @NamedInterface
 interface FileUrlPort {
     /**
-     * 이미지 파일 ID를 표시용 URL로 바꾼다.
+     * 이미지 파일 ID를 [requesterId]가 볼 수 있는 표시용 URL로 바꾼다.
      *
-     * 존재하지 않거나, 사용자에게 보이지 않는 상태이거나, 이미지가 아닌 파일의 ID는 결과 Map에서
-     * 빠진다(예외를 던지지 않는다) -- 호출 측은 "URL이 없으면 이미지가 없는 것"으로 다루면 된다.
+     * 존재하지 않거나, 사용자에게 보이지 않는 상태이거나, 이미지가 아니거나, **[requesterId]에게
+     * 접근 권한이 없는** 파일의 ID는 결과 Map에서 빠진다(예외를 던지지 않는다) -- 호출 측은
+     * "URL이 없으면 이미지가 없는 것"으로 다루면 된다.
+     *
+     * 권한 판정은 다운로드 API와 같은 [FileAccessResolver][team.inreok.getiserver.domain.file.access.FileAccessResolver]를
+     * 거친다. [requesterId]를 받지 않으면 이 Port가 `FileAccessChecker` 기반 접근 제어를 우회하는
+     * 통로가 되어, 예를 들어 비공개 프로필 이미지의 URL이 회원 목록 응답으로 나갈 수 있다.
      *
      * 회원 목록처럼 여러 명의 이미지를 한 번에 그리는 화면이 있으므로 배치로 둔다(N+1 방지).
      */
-    fun presignedImageUrls(fileIds: Collection<Long>): Map<Long, String>
+    fun presignedImageUrls(
+        requesterId: Long,
+        fileIds: Collection<Long>,
+    ): Map<Long, String>
 }
