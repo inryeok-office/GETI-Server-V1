@@ -1,3 +1,42 @@
 spring:
   modulith:
     detection-strategy: team.inreok.getiserver.DomainApplicationModuleDetectionStrategy
+  servlet:
+    multipart:
+      # app.file.policies의 어떤 max-size-bytes보다 커야 한다(FilePolicyMultipartGuard가 검증).
+      max-file-size: 20MB
+      max-request-size: 25MB
+
+# 이 파일은 같은 파일 이름이라 src/main/resources/application.yaml을 완전히 대체한다
+# (GetiServerApplicationTests의 주석 참고). Secret 성격의 값(app.jwt.*)은 각 Test가
+# @SpringBootTest(properties = ...)로 직접 채우지만, 아래 값들은 Secret이 아니고 Context를
+# 띄우는 모든 Test에 공통으로 필요해 여기에 둔다.
+app:
+  file:
+    storage:
+      # 실제 Storage에 접속하지 않는다. Bean 생성과 Property Binding만 성공하면 되고, 실제
+      # 업로드·Presign 동작은 src/integrationTest가 Testcontainers MinIO로 검증한다.
+      # auto-create-bucket은 기본값(false)이라 Context 기동 중 네트워크 호출이 없다.
+      bucket: geti-test
+      region: us-east-1
+      endpoint: http://localhost:9000
+      path-style-access: true
+      access-key: test-only-access-key
+      secret-key: test-only-secret-key
+    # FilePolicyProperties가 FilePurpose 8개 전부에 정책이 있어야 기동하므로 모두 선언한다.
+    # 여기 값은 운영 기본값(src/main/resources/application.yaml)을 그대로 옮긴 것이 아니라
+    # Binding만 통과시키는 최소값이다 — Context를 띄우는 Test(OpenApi, Health, Smoke)의 관심사가
+    # 파일 정책이 아니기 때문이다. 정책 로직 자체는 FileUploadPolicy를 직접 만들어 검증한다.
+    policies:
+      PROFILE_IMAGE: &test-file-policy
+        extensions: [png, jpg, jpeg, pdf]
+        mime-types: [image/png, image/jpeg, application/pdf]
+        max-size-bytes: 1048576
+        max-count: 3
+      COMPANY_LOGO: *test-file-policy
+      JOB_ATTACHMENT: *test-file-policy
+      PROGRAM_ATTACHMENT: *test-file-policy
+      JOB_APPLICATION: *test-file-policy
+      PROGRAM_APPLICATION: *test-file-policy
+      INQUIRY_ATTACHMENT: *test-file-policy
+      PORTFOLIO: *test-file-policy

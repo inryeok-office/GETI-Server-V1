@@ -21,7 +21,7 @@ MinIO 업로드, Discord 전송, Elasticsearch 색인, 비동기 Worker
 | --- | --- | --- |
 | `member` | `members`, `member_roles` | 회원, 내부 역할(다대다) |
 | `auth` | `refresh_tokens` | GETI 자체 Refresh Token |
-| `file` | `files` | MinIO 객체의 메타데이터(Entity 이름은 `StoredFile`, `java.io.File`와의 이름 충돌 회피). 실제 바이너리는 DB에 저장하지 않는다 |
+| `file` | `files` | Object Storage(local MinIO, 운영 AWS S3) 객체의 메타데이터(Entity 이름은 `StoredFile`, `java.io.File`와의 이름 충돌 회피). 실제 바이너리는 DB에 저장하지 않는다. V17이 업로드 생명주기(`purpose`/`status`/`extension`/`linked_at`/`updated_at`)를 추가했다 — 아래 "files의 업로드 생명주기" 참고 |
 | `company` | `companies` | 기업/MOU 정보 |
 | `job` | `jobs` | 채용 공고 |
 | `ai` | `job_ai_analyses` | 공고 AI 분석(공유 PK) |
@@ -52,7 +52,7 @@ Domain 경계를 넘는 FK(예: `jobs.company_id`, `job_applications.applicant_m
 
 ## 시간 타입과 Timestamp 자동화
 
-ERD가 명시한 대로 PostgreSQL `timestamp`(Time Zone 없음) + Kotlin `LocalDateTime`을 사용한다. 아직 저장소에 공용 BaseEntity/Auditing 표준이 없고(`docs/ai/coding-conventions.md`의 "아직 확정되지 않은 규칙" 참고), 19개 Table의 Timestamp Column 구성이 균일하지 않아(예: `files`는 `updated_at`이 없고, `job_ai_analyses`는 `requested_at`/`completed_at`이라는 고유한 이름을 쓴다) 새 BaseEntity 추상화를 도입하지 않고 각 Entity에 Hibernate `@CreationTimestamp`/`@UpdateTimestamp`를 필요한 곳에만 직접 붙였다.
+ERD가 명시한 대로 PostgreSQL `timestamp`(Time Zone 없음) + Kotlin `LocalDateTime`을 사용한다. 아직 저장소에 공용 BaseEntity/Auditing 표준이 없고(`docs/ai/coding-conventions.md`의 "아직 확정되지 않은 규칙" 참고), 19개 Table의 Timestamp Column 구성이 균일하지 않아(예: `job_ai_analyses`는 `requested_at`/`completed_at`이라는 고유한 이름을 쓴다. `files`도 V2에는 `updated_at`이 없었고 V17에서 추가했다) 새 BaseEntity 추상화를 도입하지 않고 각 Entity에 Hibernate `@CreationTimestamp`/`@UpdateTimestamp`를 필요한 곳에만 직접 붙였다.
 
 ## JSONB Mapping
 
@@ -70,6 +70,26 @@ audit_logs.target_type + audit_logs.target_id
 ```
 
 `notifications`는 V2에서 `resource_type`/`resource_id`로 만들었고, 인앱 알림 API가 응답 필드명(`targetType`/`targetId`)과 어휘를 맞추기 위해 V16에서 `target_type`/`target_id`로 RENAME했다(`docs/Notification/notification-core-plan.md`). 다른 세 조합과 이름 규칙이 같아졌다.
+
+## files의 업로드 생명주기 (V17)
+
+GETI의 파일 업로드는 "먼저 업로드 → 반환받은 `fileId`를 리소스에 연결"하는 2단계다. V2의 `files`는 `owner_type`/`owner_id`가 NOT NULL이라 "업로드는 끝났지만 아직 어디에도 연결되지 않은" 중간 상태를 표현할 수 없었다. V17이 두 Column을 NULLABLE로 완화하고 생명주기 Column을 추가했다([`docs/file/file-domain-plan.md`](../file/file-domain-plan.md)).
+
+`status`는 `PENDING`/`UPLOADED`/`LINKED`/`FAILED`/`DELETED`다. DB와 Object Storage는 하나의 ACID Transaction이 아니므로 "DB Row는 있는데 Storage Object가 없는" 중간 상태가 실재한다. 업로드는 `PENDING` Row를 먼저 커밋해 `object_key`를 선점한 뒤 Storage에 올리고 `UPLOADED`로 전환하므로, 어느 단계에서 실패해도 DB에 흔적이 남아 Cleanup이 고아를 찾을 수 있다.
+
+`purpose`(`FilePurpose`)와 `owner_type`(`FileOwnerType`)은 역할이 다르다. `purpose`는 업로드 시점에 정해지는 **불변 정책 키**(허용 확장자·MIME·크기·개수를 결정)이고, `owner_type`/`owner_id`는 연결 이후에 채워지는 **가변 상태**다. 두 값은 1:1로 대응하며 `FilePurpose.ownerType`이 그 대응을 코드로 고정한다.
+
+`ck_files_link_state` CHECK 제약이 이 관계를 DB 수준에서 강제한다.
+
+```sql
+(status IN ('PENDING', 'UPLOADED', 'FAILED') AND owner_type IS NULL AND owner_id IS NULL)
+OR
+(status IN ('LINKED', 'DELETED')            AND owner_type IS NOT NULL AND owner_id IS NOT NULL)
+```
+
+`file_links` 같은 별도 연결 Table은 만들지 않았다. 한 File은 한 리소스에만 연결된다는 전제이며, 다중 연결이나 연결 이력 추적이 요구사항으로 확정되면 그때 이관한다.
+
+`contains_personal_information`과 `expires_at`은 V2 그대로 두고 아직 사용하지 않는다(판단 주체와 보존 정책 미확정).
 
 ## FK 삭제 정책
 

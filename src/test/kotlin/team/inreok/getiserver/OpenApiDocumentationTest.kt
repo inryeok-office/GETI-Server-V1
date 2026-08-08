@@ -96,15 +96,19 @@ class OpenApiDocumentationTest {
                 .describedAs("$label 에 @Operation(description=...)가 없습니다")
                 .isNotBlank()
 
+            // 3xx도 성공으로 인정한다. 파일 다운로드(GET /api/v1/files/{fileId}/download)처럼
+            // 저장소의 짧은 유효기간 URL로 302 Redirect하는 것이 정상 동작인 Endpoint가 있고,
+            // 이런 API에 실제로 반환하지 않는 200을 문서에 적는 것은 "Swagger는 실제 동작과
+            // 정확히 일치해야 한다"는 규칙(docs/ai/openapi-documentation.md)에 어긋난다.
             val responses = operation.get("responses")
             val hasSuccessResponse =
                 responses != null &&
                     responses.propertyNames().asSequence().any { code ->
-                        code.toIntOrNull()?.let { it in 200..299 } ==
+                        code.toIntOrNull()?.let { it in 200..399 } ==
                             true
                     }
             assertThat(hasSuccessResponse)
-                .describedAs("$label 에 2xx 성공 @ApiResponse가 없습니다")
+                .describedAs("$label 에 2xx/3xx 성공 @ApiResponse가 없습니다")
                 .isTrue()
         }
     }
@@ -192,6 +196,7 @@ class OpenApiDocumentationTest {
                 "/api/v1/companies",
                 "/api/v1/jobs",
                 "/api/v1/job-applications",
+                "/api/v1/files",
                 "/api/v1/admin/",
             )
 

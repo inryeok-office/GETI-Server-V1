@@ -7,6 +7,12 @@ spring:
       ddl-auto: validate
   flyway:
     clean-disabled: true
+  servlet:
+    multipart:
+      # 미설정으로 두면 Spring 기본값이 1MB라 사실상 모든 업로드가 막힌다. 아래 app.file.policies의
+      # 어떤 max-size-bytes보다도 커야 하며, FilePolicyMultipartGuard가 기동 시점에 검증한다.
+      max-file-size: 20MB
+      max-request-size: 25MB
   profiles:
     # develop Profile은 local의 PostgreSQL/Redis/JWT 등 Infra 기본값을 그대로 재사용하고
     # Collector Seed 기본값만 다르게 둔다(Issue #62, docs/development/cd.md). Profile Group을
@@ -22,6 +28,61 @@ spring:
 # ClientRegistration을 만들려다 실패해 App 기동 자체가 막힌다(Google 미설정 상태에서도 App은
 # 정상 기동해야 하므로). ClientRegistration은 OAuthLoginServiceImpl이 이 값으로 직접 만든다.
 app:
+  # 목적별 업로드 정책이다(File 도메인 요구사항 §7, Issue #85).
+  #
+  # 아래 확장자·MIME·크기·개수는 모두 **잠정값**이다. GETI Notion에 확정된 숫자가 없어
+  # docs/file/file-domain-plan.md §17에 DECISION_REQUIRED로 남겼다. 값이 확정되면 이 설정만
+  # 교체하면 되고 코드 변경·재배포가 필요 없다.
+  #
+  # SVG는 어떤 목적에서도 허용하지 않는다 — 스크립트를 품을 수 있어 다운로드 시 attachment로
+  # 강등되는데, 로고·프로필처럼 화면에 표시해야 하는 용도와 모순되기 때문이다(§27/§28).
+  file:
+    # docx(및 hwpx 같은 다른 OOXML/ZIP Container 형식)는 의도적으로 빼 두었다. 지금 의존성
+    # (tika-core 단독)에는 Container 내부를 여는 판정기가 없어 확장자만 docx로 바꾼 임의의 ZIP이
+    # 내용 검증을 그대로 통과한다. "실제 파일 형식 검증"(요구사항 §8/§27)이 성립하지 않는 형식은
+    # 허용하지 않는다. 다시 허용하려면 tika-parsers-standard-package 도입 여부를 먼저 결정해야
+    # 한다(FileContentTypeValidator의 Class 주석 참고).
+    policies:
+      PROFILE_IMAGE:
+        extensions: [png, jpg, jpeg, webp]
+        mime-types: [image/png, image/jpeg, image/webp]
+        max-size-bytes: 5242880       # 5MB
+        max-count: 1
+      COMPANY_LOGO:
+        extensions: [png, jpg, jpeg, webp]
+        mime-types: [image/png, image/jpeg, image/webp]
+        max-size-bytes: 2097152       # 2MB
+        max-count: 1
+      JOB_ATTACHMENT:
+        extensions: [pdf, png, jpg, jpeg]
+        mime-types: [application/pdf, image/png, image/jpeg]
+        max-size-bytes: 10485760      # 10MB
+        max-count: 5
+      PROGRAM_ATTACHMENT:
+        extensions: [pdf, png, jpg, jpeg]
+        mime-types: [application/pdf, image/png, image/jpeg]
+        max-size-bytes: 10485760      # 10MB
+        max-count: 5
+      JOB_APPLICATION:
+        extensions: [pdf, png, jpg, jpeg]
+        mime-types: [application/pdf, image/png, image/jpeg]
+        max-size-bytes: 10485760      # 10MB
+        max-count: 5
+      PROGRAM_APPLICATION:
+        extensions: [pdf, png, jpg, jpeg]
+        mime-types: [application/pdf, image/png, image/jpeg]
+        max-size-bytes: 10485760      # 10MB
+        max-count: 5
+      INQUIRY_ATTACHMENT:
+        extensions: [png, jpg, jpeg, pdf]
+        mime-types: [image/png, image/jpeg, application/pdf]
+        max-size-bytes: 5242880       # 5MB
+        max-count: 3
+      PORTFOLIO:
+        extensions: [pdf, png, jpg, jpeg]
+        mime-types: [application/pdf, image/png, image/jpeg]
+        max-size-bytes: 20971520      # 20MB
+        max-count: 5
   jwt:
     access-token-expiration-seconds: 1800
     refresh-token-expiration-seconds: 1209600

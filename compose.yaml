@@ -127,6 +127,13 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       ELASTICSEARCH_URIS: http://elasticsearch:9200
+      # File 도메인 Object Storage(Issue #85). develop Profile은 local의 설정을 그대로
+      # 재사용하므로(application.yaml의 Profile Group) Container 안에서도 MinIO를 쓴다.
+      # Host(localhost) 대신 Compose Service 이름으로 접속해야 한다.
+      APP_FILE_STORAGE_ENDPOINT: http://minio:9000
+      APP_FILE_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-geti-local}
+      APP_FILE_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-geti-local-minio}
+      FILE_STORAGE_BUCKET: ${FILE_STORAGE_BUCKET:-geti-local}
       # Collector 비Secret 설정만 전달한다(Issue #62). 실제 서비스키(COLLECTOR_*_SERVICE_KEY 등)는
       # 이 Compose 구성으로 전달하지 않는다 — develop 서버에는 실제 API Key를 배치하지 않는다.
       # COLLECTOR_SEED_ENABLED는 여기서 강제로 값을 넣지 않는다 — Host에서 지정하지 않으면

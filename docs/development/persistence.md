@@ -101,6 +101,33 @@ src/integrationTest/resources/db/migration/
 1. Kover(Coverage 측정 Plugin)가 기본으로 등록된 모든 `Test` Task를 계측 대상에 포함시켜 `check`가 암묵적으로 `integrationTest`에 의존하게 된다. `build.gradle.kts`의 `kover { currentProject { instrumentation { disabledForTestTasks.add("integrationTest") } } }`로 명시적으로 제외했다.
 2. detekt는 새 Source Set을 자동 인식해 `detektIntegrationTest` Task를 만든다. 이 Task 자체는 Docker가 필요 없어 `check`에 포함되지만(정적 분석만 수행), Test **실행**(`integrationTest` Task)은 Docker가 필요하므로 `check`/`build`가 의존하지 않도록 별도로 유지한다.
 
+## Object Storage (S3 Compatible)
+
+파일 바이너리는 DB가 아니라 Object Storage에 저장한다. **local은 `compose.yaml`의 MinIO, 운영은 AWS S3**를 쓰지만 Adapter 구현은 하나이며 Endpoint와 Path Style 설정으로만 갈린다(File 도메인, Issue #85).
+
+```text
+domain.file.service    →  FileStoragePort        (Interface, SDK Type 없음)
+                       →  S3FileStorageAdapter   (AWS SDK v2가 등장하는 유일한 곳)
+                       →  MinIO / AWS S3
+```
+
+Application 계층은 `S3Client`·`PutObjectRequest` 같은 SDK Type을 직접 참조하지 않는다. 다른 Domain은 `FileStoragePort`조차 보지 못하고 `FileLinkPort`/`FileUrlPort` 같은 공개 계약만 사용한다 — Storage Key와 Bucket을 아는 것 자체가 File 도메인의 책임이다.
+
+설정은 `app.file.storage.*`다.
+
+| Profile | endpoint | path-style | 자격증명 |
+| --- | --- | --- | --- |
+| `local` | `http://localhost:9000`(MinIO) | `true` | `access-key`/`secret-key` 명시 → Static |
+| 운영(`prod`) | 비움(AWS 기본) | `false` | **선언하지 않음** → `DefaultCredentialsProvider`(EC2 IAM Role) |
+
+운영에서 자격증명을 선언하지 않는 것이 핵심이다. 장기 Access Key를 서버·Secret·Compose 어디에도 두지 않는다. 다만 앱이 **Container 안**에서 돌기 때문에 **EC2 Metadata hop limit이 2 이상이어야** IMDS에 닿는다. 기본값 1이면 자격증명 획득에 실패해 모든 S3 호출이 실패하며, 이것은 코드로 해결할 수 없는 인프라 선행 조건이다([`docs/file/file-domain-plan.md`](../file/file-domain-plan.md) §14.3).
+
+`auto-create-bucket`은 local 전용이다. 운영에서 앱이 Bucket을 만들면 Block Public Access와 암호화 설정이 빠진 채 생성될 수 있어 기본값이 `false`다.
+
+### Storage Integration Test
+
+실제 Storage 동작은 `src/integrationTest`의 `FileStorageIntegrationTest`가 Testcontainers MinIO로 검증한다(`org.testcontainers:testcontainers-minio`, Version은 기존 `testcontainers-bom`이 관리). Unit Test는 `InMemoryFileStoragePort` Fake를 쓰므로 SDK 설정(`endpointOverride`, `forcePathStyle`)과 Presigned URL 서명은 여기서만 확인된다.
+
 ## Docker Compose 연계
 
 `compose.yaml`의 `app` Service(`--profile app`)에 Container 내부 접속 정보를 환경 변수로 이미 구성해 두었다(Host `localhost` 대신 Compose Service 이름 `postgres`/`redis` 사용). `docker compose --profile app up -d --build`로 전체 Container 환경을 실행하면 Spring Boot Container가 별도 설정 없이 PostgreSQL/Redis에 연결된다. 실제로 실행해 Hikari Connection Pool 생성, Flyway Schema History 생성, Hibernate `EntityManagerFactory` 초기화, Tomcat 정상 기동까지 확인했다(Domain Migration이 없어 "No migrations found" Warning은 예상된 정상 상태다).
