@@ -56,8 +56,13 @@ class MemberProfileController(
         description = """
             요청 Body에 포함된 Field만 수정한다(부분 수정, PATCH). Field를 아예 보내지 않으면 값을
             그대로 유지하고, `null`을 명시적으로 보내면 값을 지운다. 허용되지 않은 Field가 포함되면
-            요청 전체를 거부한다. `profileImageUrl`은 응답 Field로는 존재하지만 File 업로드 연동 전이라
-            요청으로 값을 보내면 항상 거부된다(PROFILE_VALIDATION_FAILED).
+            요청 전체를 거부한다.
+
+            프로필 이미지는 `profileImageFileId`로 지정한다 — `POST /api/v1/files`에
+            purpose=PROFILE_IMAGE로 업로드해 받은 File ID다. 본인이 올린 파일만 연결할 수 있고,
+            이미 등록된 이미지가 있으면 자동으로 교체된다. `null`을 보내면 이미지를 제거한다.
+            URL 문자열을 받는 `profileImageUrl`은 요청 Field로 지원하지 않으며 보내면
+            PROFILE_VALIDATION_FAILED로 거부된다(응답 Field로는 계속 존재한다).
         """,
     )
     @ApiResponses(
@@ -66,10 +71,17 @@ class MemberProfileController(
             responseCode = "400",
             description =
                 "요청 값 형식 오류, 허용되지 않은 Field 포함, department 값 오류, " +
-                    "profileImageUrl 미지원 (PROFILE_VALIDATION_FAILED)",
+                    "profileImageUrl 미지원 (PROFILE_VALIDATION_FAILED). " +
+                    "profileImageFileId가 본인 파일이 아니면 403 FILE_NOT_OWNED, " +
+                    "용도가 다르면 400 FILE_PURPOSE_MISMATCH로 거부된다.",
         ),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
-        SwaggerApiResponse(responseCode = "404", description = "회원을 찾을 수 없음 (PROFILE_NOT_FOUND)"),
+        SwaggerApiResponse(responseCode = "403", description = "본인이 업로드하지 않은 파일을 연결하려 함 (FILE_NOT_OWNED)"),
+        SwaggerApiResponse(
+            responseCode = "404",
+            description = "회원을 찾을 수 없음(PROFILE_NOT_FOUND), 파일이 없거나 사용할 수 없는 상태(FILE_NOT_FOUND)",
+        ),
+        SwaggerApiResponse(responseCode = "409", description = "이미 다른 리소스에 연결된 파일 (FILE_ALREADY_LINKED)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @SwaggerRequestBody(
@@ -118,7 +130,15 @@ private data class MemberProfileUpdateRequestExample(
     @param:Schema(description = "프로필 공개 여부. 학생만 false로 설정할 수 있다.", nullable = true, example = "true")
     val isPublic: Boolean?,
     @param:Schema(
-        description = "아직 지원하지 않는 Field다. 값을 보내면 항상 400으로 거부된다(File 업로드 연동 전).",
+        description =
+            "프로필 이미지 File ID. POST /api/v1/files에 purpose=PROFILE_IMAGE로 업로드해 받는다. " +
+                "본인이 올린 파일만 연결할 수 있고, null을 보내면 현재 이미지를 제거한다.",
+        nullable = true,
+        example = "42",
+    )
+    val profileImageFileId: Long?,
+    @param:Schema(
+        description = "지원하지 않는 Field다. 값을 보내면 항상 400으로 거부된다. profileImageFileId를 사용한다.",
         nullable = true,
     )
     val profileImageUrl: String?,

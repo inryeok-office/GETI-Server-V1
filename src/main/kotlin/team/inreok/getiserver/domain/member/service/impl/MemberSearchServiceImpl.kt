@@ -3,6 +3,7 @@ package team.inreok.getiserver.domain.member.service.impl
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import team.inreok.getiserver.domain.file.link.FileUrlPort
 import team.inreok.getiserver.domain.member.dto.MemberSearchItemResponse
 import team.inreok.getiserver.domain.member.dto.MemberSearchResponse
 import team.inreok.getiserver.domain.member.entity.Member
@@ -18,9 +19,11 @@ import team.inreok.getiserver.domain.member.service.escapeLikePattern
 @Service
 class MemberSearchServiceImpl(
     private val memberRepository: MemberRepository,
+    private val fileUrlPort: FileUrlPort,
 ) : MemberSearchService {
     @Transactional(readOnly = true)
     override fun search(
+        requesterId: Long,
         name: String?,
         academicStatus: AcademicStatus?,
         cohort: Int?,
@@ -46,8 +49,12 @@ class MemberSearchServiceImpl(
                 techStackId,
                 pageable,
             )
+        // 목록의 이미지를 한 번에 URL로 바꾼다. 항목마다 단건 조회하면 Presigned URL 발급이
+        // 회원 수만큼 반복된다(N+1).
+        val imageUrls =
+            fileUrlPort.presignedImageUrls(requesterId, page.content.mapNotNull { it.profileImageFileId })
         return MemberSearchResponse(
-            content = page.content.map(::toItem),
+            content = page.content.map { toItem(it, imageUrls) },
             page = page.number,
             size = page.size,
             totalElements = page.totalElements,
@@ -57,11 +64,14 @@ class MemberSearchServiceImpl(
         )
     }
 
-    private fun toItem(member: Member): MemberSearchItemResponse =
+    private fun toItem(
+        member: Member,
+        imageUrls: Map<Long, String>,
+    ): MemberSearchItemResponse =
         MemberSearchItemResponse(
             memberId = requireNotNull(member.id) { "저장된 Member는 id를 가져야 합니다." },
             name = member.name.orEmpty(),
-            profileImageUrl = null,
+            profileImageUrl = member.profileImageFileId?.let { imageUrls[it] },
             cohort = member.cohort,
             department = member.department,
             isPublic = member.profilePublic,
