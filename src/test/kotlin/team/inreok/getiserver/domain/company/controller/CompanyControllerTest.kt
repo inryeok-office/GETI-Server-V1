@@ -73,7 +73,7 @@ class CompanyControllerTest
 
         @Test
         fun `기업 상세를 조회하면 200과 함께 기업 정보를 반환한다`() {
-            given(companyService.get(1L)).willReturn(companyResponse())
+            given(companyService.get(1L, 1L)).willReturn(companyResponse())
 
             mockMvc
                 .perform(get("/api/v1/companies/1").with(authOf(1L, "STUDENT")))
@@ -94,7 +94,8 @@ class CompanyControllerTest
 
         @Test
         fun `교사도 기업 상세를 조회할 수 있다`() {
-            given(companyService.get(1L)).willReturn(companyResponse())
+            // requesterId는 인증 주체(여기서는 교사 2L)가 그대로 전달되어야 한다.
+            given(companyService.get(1L, 2L)).willReturn(companyResponse())
 
             mockMvc
                 .perform(get("/api/v1/companies/1").with(authOf(2L, "TEACHER")))
@@ -104,7 +105,7 @@ class CompanyControllerTest
 
         @Test
         fun `존재하지 않는 기업을 조회하면 404 COMPANY_NOT_FOUND를 반환한다`() {
-            given(companyService.get(999L)).willThrow(CompanyNotFoundException(999L))
+            given(companyService.get(999L, 1L)).willThrow(CompanyNotFoundException(999L))
 
             mockMvc
                 .perform(get("/api/v1/companies/999").with(authOf(1L, "STUDENT")))
@@ -123,7 +124,7 @@ class CompanyControllerTest
 
         @Test
         fun `기업 목록을 조회하면 200과 함께 Page 정보를 반환한다`() {
-            given(companyService.search(null, null, null, null, PageRequest.of(0, 20)))
+            given(companyService.search(1L, null, null, null, null, PageRequest.of(0, 20)))
                 .willReturn(
                     CompanySearchResponse(
                         content =
@@ -160,6 +161,7 @@ class CompanyControllerTest
         fun `검색 조건을 Query Parameter로 전달하면 Service에 그대로 전달된다`() {
             given(
                 companyService.search(
+                    1L,
                     "인력",
                     CompanyType.PUBLIC_ENTERPRISE,
                     MouStatus.ACTIVE,

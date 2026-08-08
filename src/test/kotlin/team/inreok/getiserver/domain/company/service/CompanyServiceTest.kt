@@ -7,8 +7,11 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentMatchers.any
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.never
+import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
@@ -23,6 +26,10 @@ import team.inreok.getiserver.domain.company.exception.DuplicateCompanyException
 import team.inreok.getiserver.domain.company.exception.MouPeriodInvalidException
 import team.inreok.getiserver.domain.company.repository.CompanyRepository
 import team.inreok.getiserver.domain.company.service.impl.CompanyServiceImpl
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.entity.type.FilePurpose
+import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.file.link.FileUrlPort
 import java.time.LocalDate
 
 @ExtendWith(MockitoExtension::class)
@@ -30,8 +37,18 @@ class CompanyServiceTest {
     @Mock
     private lateinit var companyRepository: CompanyRepository
 
-    private val service: CompanyService by lazy { CompanyServiceImpl(companyRepository) }
+    @Mock
+    private lateinit var fileLinkPort: FileLinkPort
 
+    @Mock
+    private lateinit var fileUrlPort: FileUrlPort
+
+    private val service: CompanyService by lazy {
+        CompanyServiceImpl(companyRepository, fileLinkPort, fileUrlPort)
+    }
+
+    // 이 Class의 기존 Test는 로고를 다루지 않는다. 로고 연결·URL 발급은 아래 별도 Test들에서
+    // 검증하며, 그 외 경로에서는 fileUrlPort가 빈 Map을 돌려주므로 logoUrl이 null이다.
     private fun companyOf(
         id: Long = 1L,
         name: String = "인력개발원",
@@ -76,7 +93,7 @@ class CompanyServiceTest {
             (invocation.arguments[0] as Company).apply { id = 10L }
         }
 
-        val result = service.create(request)
+        val result = service.create(request, REQUESTER_ID)
 
         assertThat(result.companyId).isEqualTo(10L)
         assertThat(result.name).isEqualTo("인력개발원")
@@ -96,7 +113,7 @@ class CompanyServiceTest {
     fun `기업명이 공백만 있으면 CompanyNameRequiredException을 던진다`() {
         val request = CompanyCreateRequest(name = "   ", companyType = CompanyType.GENERAL)
 
-        assertThatThrownBy { service.create(request) }
+        assertThatThrownBy { service.create(request, REQUESTER_ID) }
             .isInstanceOf(CompanyNameRequiredException::class.java)
 
         verify(companyRepository, never()).saveAndFlush(anyCompany())
@@ -107,7 +124,7 @@ class CompanyServiceTest {
         val request = CompanyCreateRequest(name = "인력개발원", companyType = CompanyType.GENERAL)
         givenDuplicateCheck("인력개발원", CompanyType.GENERAL).willReturn(true)
 
-        assertThatThrownBy { service.create(request) }
+        assertThatThrownBy { service.create(request, REQUESTER_ID) }
             .isInstanceOf(DuplicateCompanyException::class.java)
 
         verify(companyRepository, never()).saveAndFlush(anyCompany())
@@ -123,7 +140,7 @@ class CompanyServiceTest {
                 mouEndDate = LocalDate.of(2026, 2, 28),
             )
 
-        assertThatThrownBy { service.create(request) }
+        assertThatThrownBy { service.create(request, REQUESTER_ID) }
             .isInstanceOf(MouPeriodInvalidException::class.java)
 
         verify(companyRepository, never()).saveAndFlush(anyCompany())
@@ -137,7 +154,7 @@ class CompanyServiceTest {
             (invocation.arguments[0] as Company).apply { id = 11L }
         }
 
-        val result = service.create(request)
+        val result = service.create(request, REQUESTER_ID)
 
         assertThat(result.name).isEqualTo("인력개발원")
     }
@@ -146,7 +163,7 @@ class CompanyServiceTest {
     fun `기업을 단건 조회하면 기업 정보를 반환한다`() {
         given(companyRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(companyOf())
 
-        val result = service.get(1L)
+        val result = service.get(1L, REQUESTER_ID)
 
         assertThat(result.companyId).isEqualTo(1L)
         assertThat(result.name).isEqualTo("인력개발원")
@@ -156,7 +173,7 @@ class CompanyServiceTest {
     fun `존재하지 않거나 삭제된 기업을 조회하면 CompanyNotFoundException을 던진다`() {
         given(companyRepository.findByIdAndDeletedAtIsNull(999L)).willReturn(null)
 
-        assertThatThrownBy { service.get(999L) }
+        assertThatThrownBy { service.get(999L, REQUESTER_ID) }
             .isInstanceOf(CompanyNotFoundException::class.java)
     }
 
@@ -166,7 +183,7 @@ class CompanyServiceTest {
         given(companyRepository.search("인력", null, null, null, pageable))
             .willReturn(PageImpl(listOf(companyOf()), pageable, 1))
 
-        val result = service.search("인력", null, null, null, pageable)
+        val result = service.search(REQUESTER_ID, "인력", null, null, null, pageable)
 
         assertThat(result.content).hasSize(1)
         assertThat(result.content[0].companyId).isEqualTo(1L)
@@ -182,7 +199,7 @@ class CompanyServiceTest {
         given(companyRepository.search("없는기업", null, null, null, pageable))
             .willReturn(PageImpl(emptyList(), pageable, 0))
 
-        val result = service.search("없는기업", null, null, null, pageable)
+        val result = service.search(REQUESTER_ID, "없는기업", null, null, null, pageable)
 
         assertThat(result.content).isEmpty()
         assertThat(result.totalElements).isZero()
@@ -194,7 +211,7 @@ class CompanyServiceTest {
         given(companyRepository.search(null, null, null, null, pageable))
             .willReturn(PageImpl(listOf(companyOf()), pageable, 1))
 
-        val result = service.search("   ", null, null, null, pageable)
+        val result = service.search(REQUESTER_ID, "   ", null, null, null, pageable)
 
         assertThat(result.content).hasSize(1)
     }
@@ -205,7 +222,7 @@ class CompanyServiceTest {
         given(companyRepository.search("100\\%", null, null, null, pageable))
             .willReturn(PageImpl(emptyList(), pageable, 0))
 
-        val result = service.search("100%", null, null, null, pageable)
+        val result = service.search(REQUESTER_ID, "100%", null, null, null, pageable)
 
         assertThat(result.content).isEmpty()
     }
@@ -218,7 +235,7 @@ class CompanyServiceTest {
         ).willReturn(PageImpl(emptyList(), pageable, 0))
 
         val result =
-            service.search(null, CompanyType.PUBLIC_ENTERPRISE, MouStatus.ACTIVE, "collector", pageable)
+            service.search(REQUESTER_ID, null, CompanyType.PUBLIC_ENTERPRISE, MouStatus.ACTIVE, "collector", pageable)
 
         assertThat(result.content).isEmpty()
     }
@@ -232,7 +249,7 @@ class CompanyServiceTest {
             }
         given(companyRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(company)
 
-        val result = service.update(1L, CompanyUpdateRequest(description = "새 소개"))
+        val result = service.update(1L, CompanyUpdateRequest(description = "새 소개"), REQUESTER_ID)
 
         assertThat(result.description).isEqualTo("새 소개")
         assertThat(result.homepageUrl).isEqualTo("https://old.example.com")
@@ -251,6 +268,7 @@ class CompanyServiceTest {
                     mouStartDate = LocalDate.of(2026, 3, 1),
                     mouEndDate = LocalDate.of(2027, 2, 28),
                 ),
+                REQUESTER_ID,
             )
 
         assertThat(result.mouStatus).isEqualTo(MouStatus.ACTIVE)
@@ -264,7 +282,7 @@ class CompanyServiceTest {
         given(companyRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(company)
 
         assertThatThrownBy {
-            service.update(1L, CompanyUpdateRequest(mouStartDate = LocalDate.of(2027, 3, 1)))
+            service.update(1L, CompanyUpdateRequest(mouStartDate = LocalDate.of(2027, 3, 1)), REQUESTER_ID)
         }.isInstanceOf(MouPeriodInvalidException::class.java)
     }
 
@@ -272,7 +290,7 @@ class CompanyServiceTest {
     fun `수정 시 기업명을 공백으로 보내면 CompanyNameRequiredException을 던진다`() {
         given(companyRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(companyOf())
 
-        assertThatThrownBy { service.update(1L, CompanyUpdateRequest(name = "   ")) }
+        assertThatThrownBy { service.update(1L, CompanyUpdateRequest(name = "   "), REQUESTER_ID) }
             .isInstanceOf(CompanyNameRequiredException::class.java)
     }
 
@@ -281,7 +299,7 @@ class CompanyServiceTest {
         given(companyRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(companyOf())
         givenDuplicateCheckExcludingSelf("다른기업", CompanyType.GENERAL, 1L).willReturn(true)
 
-        assertThatThrownBy { service.update(1L, CompanyUpdateRequest(name = "다른기업")) }
+        assertThatThrownBy { service.update(1L, CompanyUpdateRequest(name = "다른기업"), REQUESTER_ID) }
             .isInstanceOf(DuplicateCompanyException::class.java)
     }
 
@@ -289,7 +307,7 @@ class CompanyServiceTest {
     fun `이름과 유형을 바꾸지 않으면 중복 검사를 하지 않는다`() {
         given(companyRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(companyOf())
 
-        service.update(1L, CompanyUpdateRequest(description = "새 소개"))
+        service.update(1L, CompanyUpdateRequest(description = "새 소개"), REQUESTER_ID)
 
         verify(companyRepository, never())
             .existsByNameIgnoreCaseAndTypeAndDeletedAtIsNullAndIdNot("인력개발원", CompanyType.GENERAL, 1L)
@@ -299,7 +317,7 @@ class CompanyServiceTest {
     fun `존재하지 않는 기업을 수정하면 CompanyNotFoundException을 던진다`() {
         given(companyRepository.findByIdAndDeletedAtIsNull(999L)).willReturn(null)
 
-        assertThatThrownBy { service.update(999L, CompanyUpdateRequest(description = "새 소개")) }
+        assertThatThrownBy { service.update(999L, CompanyUpdateRequest(description = "새 소개"), REQUESTER_ID) }
             .isInstanceOf(CompanyNotFoundException::class.java)
     }
 
@@ -319,5 +337,93 @@ class CompanyServiceTest {
 
         assertThatThrownBy { service.delete(999L) }
             .isInstanceOf(CompanyNotFoundException::class.java)
+    }
+
+    @Test
+    fun `로고 파일 ID를 보내면 기업을 저장한 뒤 그 기업에 연결한다`() {
+        val request =
+            CompanyCreateRequest(
+                name = "인력개발원",
+                companyType = CompanyType.GENERAL,
+                logoFileId = LOGO_FILE_ID,
+            )
+        givenDuplicateCheck("인력개발원", CompanyType.GENERAL).willReturn(false)
+        given(companyRepository.saveAndFlush(anyCompany())).willAnswer { invocation ->
+            (invocation.arguments[0] as Company).apply { id = 10L }
+        }
+        given(fileUrlPort.presignedImageUrls(REQUESTER_ID, listOf(LOGO_FILE_ID)))
+            .willReturn(mapOf(LOGO_FILE_ID to LOGO_URL))
+
+        val result = service.create(request, REQUESTER_ID)
+
+        // 연결 대상 ID(ownerId)는 저장 후에야 생긴다. 저장 전 연결은 불가능하다.
+        verify(fileLinkPort).validateAndLink(REQUESTER_ID, listOf(LOGO_FILE_ID), FilePurpose.COMPANY_LOGO, 10L)
+        assertThat(result.logoUrl).isEqualTo(LOGO_URL)
+    }
+
+    @Test
+    fun `로고를 교체하면 기존 연결을 먼저 해제한다`() {
+        val company = companyOf().apply { logoFileId = OLD_LOGO_FILE_ID }
+        given(companyRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(company)
+
+        service.update(1L, CompanyUpdateRequest(logoFileId = LOGO_FILE_ID), REQUESTER_ID)
+
+        // 순서가 중요하다. 해제보다 연결이 먼저면 새 파일이 이미 연결된 상태에서 방금 붙인
+        // 연결까지 함께 풀려 로고가 사라진다(unlinkAllOf는 해당 기업의 파일을 모두 푼다).
+        val ordered = inOrder(fileLinkPort)
+        ordered.verify(fileLinkPort).unlinkAllOf(FileOwnerType.COMPANY, 1L)
+        ordered.verify(fileLinkPort).validateAndLink(
+            REQUESTER_ID,
+            listOf(LOGO_FILE_ID),
+            FilePurpose.COMPANY_LOGO,
+            1L,
+        )
+        assertThat(company.logoFileId).isEqualTo(LOGO_FILE_ID)
+    }
+
+    @Test
+    fun `로고를 보내지 않으면 기존 로고를 그대로 두고 연결을 건드리지 않는다`() {
+        val company = companyOf().apply { logoFileId = OLD_LOGO_FILE_ID }
+        given(companyRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(company)
+
+        service.update(1L, CompanyUpdateRequest(description = "새 소개"), REQUESTER_ID)
+
+        verifyNoInteractions(fileLinkPort)
+        assertThat(company.logoFileId).isEqualTo(OLD_LOGO_FILE_ID)
+    }
+
+    @Test
+    fun `목록의 로고 URL은 한 번의 배치 호출로 변환한다`() {
+        val pageable = PageRequest.of(0, 20)
+        val withLogo = companyOf(id = 1L, name = "로고있음").apply { logoFileId = LOGO_FILE_ID }
+        val withoutLogo = companyOf(id = 2L, name = "로고없음")
+        given(companyRepository.search(null, null, null, null, pageable))
+            .willReturn(PageImpl(listOf(withLogo, withoutLogo), pageable, 2))
+        given(fileUrlPort.presignedImageUrls(REQUESTER_ID, listOf(LOGO_FILE_ID)))
+            .willReturn(mapOf(LOGO_FILE_ID to LOGO_URL))
+
+        val result = service.search(REQUESTER_ID, null, null, null, null, pageable)
+
+        assertThat(result.content[0].logoUrl).isEqualTo(LOGO_URL)
+        assertThat(result.content[1].logoUrl).isNull()
+        // 기업마다 단건 발급하면 목록 크기만큼 반복된다(N+1). 정확히 한 번이어야 한다.
+        verify(fileUrlPort, times(1)).presignedImageUrls(REQUESTER_ID, listOf(LOGO_FILE_ID))
+    }
+
+    @Test
+    fun `권한이 없어 URL이 발급되지 않으면 logoUrl은 null이다`() {
+        // FileUrlPort는 접근할 수 없는 파일을 결과 Map에서 빼고 예외를 던지지 않는다.
+        val company = companyOf().apply { logoFileId = LOGO_FILE_ID }
+        given(companyRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(company)
+        given(fileUrlPort.presignedImageUrls(REQUESTER_ID, listOf(LOGO_FILE_ID))).willReturn(emptyMap())
+
+        assertThat(service.get(1L, REQUESTER_ID).logoUrl).isNull()
+    }
+
+    private companion object {
+        private const val REQUESTER_ID = 7L
+        private const val LOGO_FILE_ID = 43L
+        private const val OLD_LOGO_FILE_ID = 42L
+        private const val LOGO_URL = "https://storage.example/company-logo?signature=test"
     }
 }

@@ -57,7 +57,7 @@ class MemberControllerTest
 
         @Test
         fun `학생 프로필을 조회하면 200과 함께 프로필을 반환한다`() {
-            given(memberService.getProfile(1L)).willReturn(
+            given(memberService.getProfile(1L, 1L)).willReturn(
                 MemberProfileResponse(
                     memberId = 1L,
                     name = "홍길동",
@@ -89,7 +89,7 @@ class MemberControllerTest
 
         @Test
         fun `존재하지 않는 회원이면 404 MEMBER_NOT_FOUND를 반환한다`() {
-            given(memberService.getProfile(999L)).willThrow(MemberNotFoundException(999L))
+            given(memberService.getProfile(999L, 1L)).willThrow(MemberNotFoundException(999L))
 
             mockMvc
                 .perform(get("/api/v1/members/999").with(authOf(1L, "STUDENT")))
@@ -116,7 +116,7 @@ class MemberControllerTest
         @Test
         fun `이름으로 검색하면 200과 함께 목록을 반환한다`() {
             given(
-                memberSearchService.search("홍길동", null, null, null, null, null, PageRequest.of(0, 20)),
+                memberSearchService.search(1L, "홍길동", null, null, null, null, null, PageRequest.of(0, 20)),
             ).willReturn(
                 MemberSearchResponse(
                     content =
@@ -154,7 +154,7 @@ class MemberControllerTest
 
         @Test
         fun `name이 없으면 400 NAME_REQUIRED를 반환한다`() {
-            given(memberSearchService.search(null, null, null, null, null, null, PageRequest.of(0, 20)))
+            given(memberSearchService.search(1L, null, null, null, null, null, null, PageRequest.of(0, 20)))
                 .willThrow(NameRequiredException())
 
             mockMvc

@@ -39,4 +39,13 @@ data class CompanyUpdateRequest(
     val mouStartDate: LocalDate? = null,
     @param:Schema(description = "MOU 협약 종료일", example = "2027-02-28", nullable = true)
     val mouEndDate: LocalDate? = null,
+    @param:Schema(
+        description =
+            "교체할 로고 파일 ID. `POST /api/v1/files`에 purpose=COMPANY_LOGO로 업로드해 받은 값이다. " +
+                "전달하면 기존 로고 연결을 해제하고 이 파일로 교체한다. 다른 Field와 마찬가지로 " +
+                "생략하거나 null이면 기존 로고를 유지하며, 로고를 제거하는 동작은 지원하지 않는다.",
+        example = "43",
+        nullable = true,
+    )
+    val logoFileId: Long? = null,
 )

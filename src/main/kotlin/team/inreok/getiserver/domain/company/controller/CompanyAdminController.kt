@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -48,18 +49,32 @@ class CompanyAdminController(
             responseCode = "400",
             description =
                 "기업명이 공백(COMPANY_NAME_REQUIRED), MOU 기간 역전(MOU_PERIOD_INVALID), " +
-                    "길이 등 요청 값 형식 오류(VALIDATION_FAILED), 필수 Field 누락(MALFORMED_JSON)",
+                    "길이 등 요청 값 형식 오류(VALIDATION_FAILED), 필수 Field 누락(MALFORMED_JSON), " +
+                    "logoFileId가 COMPANY_LOGO 용도로 업로드되지 않음(FILE_PURPOSE_MISMATCH)",
         ),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
-        SwaggerApiResponse(responseCode = "403", description = "개발자 권한이 없음 (FORBIDDEN)"),
-        SwaggerApiResponse(responseCode = "409", description = "이름과 유형이 같은 기업이 이미 존재 (DUPLICATE_COMPANY)"),
+        SwaggerApiResponse(
+            responseCode = "403",
+            description = "개발자 권한이 없음(FORBIDDEN), 본인이 업로드하지 않은 로고 파일(FILE_NOT_OWNED)",
+        ),
+        SwaggerApiResponse(
+            responseCode = "404",
+            description = "logoFileId에 해당하는 파일이 없거나 사용할 수 없는 상태 (FILE_NOT_FOUND)",
+        ),
+        SwaggerApiResponse(
+            responseCode = "409",
+            description =
+                "이름과 유형이 같은 기업이 이미 존재(DUPLICATE_COMPANY), " +
+                    "로고 파일이 이미 다른 리소스에 연결됨(FILE_ALREADY_LINKED)",
+        ),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     fun createCompany(
+        authentication: Authentication,
         @Valid @RequestBody request: CompanyCreateRequest,
-    ): ApiResponse<CompanyResponse> = ApiResponse.of(companyService.create(request))
+    ): ApiResponse<CompanyResponse> = ApiResponse.of(companyService.create(request, authentication.principal as Long))
 
     @Operation(
         summary = "기업 부분 수정",
@@ -75,19 +90,35 @@ class CompanyAdminController(
             responseCode = "400",
             description =
                 "기업명이 공백(COMPANY_NAME_REQUIRED), MOU 기간 역전(MOU_PERIOD_INVALID), " +
-                    "요청 값 형식 오류(VALIDATION_FAILED)",
+                    "요청 값 형식 오류(VALIDATION_FAILED), " +
+                    "logoFileId가 COMPANY_LOGO 용도로 업로드되지 않음(FILE_PURPOSE_MISMATCH)",
         ),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
-        SwaggerApiResponse(responseCode = "403", description = "개발자 권한이 없음 (FORBIDDEN)"),
-        SwaggerApiResponse(responseCode = "404", description = "기업이 없거나 삭제됨 (COMPANY_NOT_FOUND)"),
-        SwaggerApiResponse(responseCode = "409", description = "이름과 유형이 같은 다른 기업이 이미 존재 (DUPLICATE_COMPANY)"),
+        SwaggerApiResponse(
+            responseCode = "403",
+            description = "개발자 권한이 없음(FORBIDDEN), 본인이 업로드하지 않은 로고 파일(FILE_NOT_OWNED)",
+        ),
+        SwaggerApiResponse(
+            responseCode = "404",
+            description =
+                "기업이 없거나 삭제됨(COMPANY_NOT_FOUND), " +
+                    "logoFileId에 해당하는 파일이 없거나 사용할 수 없는 상태(FILE_NOT_FOUND)",
+        ),
+        SwaggerApiResponse(
+            responseCode = "409",
+            description =
+                "이름과 유형이 같은 다른 기업이 이미 존재(DUPLICATE_COMPANY), " +
+                    "로고 파일이 이미 다른 리소스에 연결됨(FILE_ALREADY_LINKED)",
+        ),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @PatchMapping("/{companyId}")
     fun updateCompany(
+        authentication: Authentication,
         @Parameter(description = "수정할 기업 ID", example = "1") @PathVariable companyId: Long,
         @Valid @RequestBody request: CompanyUpdateRequest,
-    ): ApiResponse<CompanyResponse> = ApiResponse.of(companyService.update(companyId, request))
+    ): ApiResponse<CompanyResponse> =
+        ApiResponse.of(companyService.update(companyId, request, authentication.principal as Long))
 
     @Operation(
         summary = "기업 Soft Delete",

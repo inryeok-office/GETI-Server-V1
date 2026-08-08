@@ -3,6 +3,7 @@ package team.inreok.getiserver.domain.company.controller
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyLong
+import org.mockito.ArgumentMatchers.eq
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.willThrow
 import org.mockito.Mockito.never
@@ -93,7 +94,7 @@ class CompanyAdminControllerTest
 
         @Test
         fun `개발자가 기업을 등록하면 201과 함께 등록된 기업을 반환한다`() {
-            given(companyService.create(anyCreateRequest())).willReturn(companyResponse())
+            given(companyService.create(anyCreateRequest(), eq(1L))).willReturn(companyResponse())
 
             mockMvc
                 .perform(
@@ -122,7 +123,7 @@ class CompanyAdminControllerTest
         fun `기업명이 공백이면 400 COMPANY_NAME_REQUIRED를 반환한다`() {
             // 공백 판정은 Bean Validation이 아니라 Service가 수행하므로(API 명세서의 Error Code를
             // 맞추기 위함) Controller 계층에서는 예외가 올바른 Error Code로 변환되는지만 검증한다.
-            given(companyService.create(anyCreateRequest()))
+            given(companyService.create(anyCreateRequest(), eq(1L)))
                 .willThrow(CompanyNameRequiredException())
 
             mockMvc
@@ -138,7 +139,7 @@ class CompanyAdminControllerTest
 
         @Test
         fun `이미 등록된 기업이면 409 DUPLICATE_COMPANY를 반환한다`() {
-            given(companyService.create(anyCreateRequest()))
+            given(companyService.create(anyCreateRequest(), eq(1L)))
                 .willThrow(DuplicateCompanyException())
 
             mockMvc
@@ -156,7 +157,7 @@ class CompanyAdminControllerTest
 
         @Test
         fun `MOU 기간이 역전되면 400 MOU_PERIOD_INVALID를 반환한다`() {
-            given(companyService.create(anyCreateRequest())).willThrow(MouPeriodInvalidException())
+            given(companyService.create(anyCreateRequest(), eq(1L))).willThrow(MouPeriodInvalidException())
 
             mockMvc
                 .perform(
@@ -188,7 +189,7 @@ class CompanyAdminControllerTest
                 ).andExpect(status().isForbidden)
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"))
 
-            verify(companyService, never()).create(anyCreateRequest())
+            verify(companyService, never()).create(anyCreateRequest(), anyLong())
         }
 
         @Test
@@ -215,7 +216,7 @@ class CompanyAdminControllerTest
 
         @Test
         fun `개발자가 기업을 수정하면 200과 함께 수정된 기업을 반환한다`() {
-            given(companyService.update(anyLong(), anyUpdateRequest()))
+            given(companyService.update(anyLong(), anyUpdateRequest(), anyLong()))
                 .willReturn(companyResponse(name = "인력개발원 본원"))
 
             mockMvc
@@ -230,7 +231,7 @@ class CompanyAdminControllerTest
 
         @Test
         fun `존재하지 않는 기업을 수정하면 404 COMPANY_NOT_FOUND를 반환한다`() {
-            given(companyService.update(anyLong(), anyUpdateRequest()))
+            given(companyService.update(anyLong(), anyUpdateRequest(), anyLong()))
                 .willThrow(CompanyNotFoundException(999L))
 
             mockMvc
@@ -253,7 +254,7 @@ class CompanyAdminControllerTest
                         .content("""{ "name": "인력개발원 본원" }"""),
                 ).andExpect(status().isForbidden)
 
-            verify(companyService, never()).update(anyLong(), anyUpdateRequest())
+            verify(companyService, never()).update(anyLong(), anyUpdateRequest(), anyLong())
         }
 
         @Test

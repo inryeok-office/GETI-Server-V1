@@ -34,19 +34,22 @@ data class CompanySummaryResponse(
     @param:Schema(description = "MOU 협약 상태", example = "ACTIVE")
     val mouStatus: MouStatus,
     @param:Schema(
-        description = "로고 이미지 URL. File 도메인 연동 전이라 항상 null이다.",
+        description = "로고 이미지 URL. 서버가 서명한 짧은 유효기간의 URL이다. 로고가 없으면 null이다.",
         nullable = true,
     )
     val logoUrl: String?,
 ) {
     companion object {
-        fun from(company: Company): CompanySummaryResponse =
+        fun from(
+            company: Company,
+            logoUrl: String?,
+        ): CompanySummaryResponse =
             CompanySummaryResponse(
                 companyId = requireNotNull(company.id) { "저장된 Company는 id를 가져야 합니다." },
                 name = company.name,
                 companyType = company.type,
                 mouStatus = company.mouStatus,
-                logoUrl = null,
+                logoUrl = logoUrl,
             )
     }
 }
