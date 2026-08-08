@@ -110,9 +110,6 @@ class InquiryAnswerConcurrencyIntegrationTest {
                 }
 
             assertThat(lockAcquired.await(AWAIT_SECONDS, TimeUnit.SECONDS)).isTrue()
-            // ExecutorService.submit은 Runnable/Callable<T> 두 Overload가 있어, 값을 반환하는
-            // Lambda를 바로 넘기면 Kotlin이 Runnable로 잘못 골라 반환 Type이 Any?로 좁아진다.
-            // Callable로 명시해 Callable<T> Overload가 선택되게 한다.
             val answerFuture =
                 executor.submit(
                     Callable {
