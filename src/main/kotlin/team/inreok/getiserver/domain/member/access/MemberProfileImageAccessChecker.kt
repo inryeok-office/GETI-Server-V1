@@ -22,6 +22,17 @@ class MemberProfileImageAccessChecker(
 ) : FileAccessChecker {
     override val ownerType: FileOwnerType = FileOwnerType.MEMBER
 
+    /**
+     * 목록 조회에서 이 Method는 파일마다 호출된다. 그래도 회원 수만큼 SELECT가 나가지는 않는데,
+     * `MemberSearchServiceImpl.search`가 `@Transactional(readOnly = true)` 안에서 JPQL로 managed
+     * `Member`를 이미 읽어 두었고 [MemberRepository.findById]가 같은 영속성 Context의 1차 캐시에서
+     * 해결되기 때문이다. `MemberSearchImageUrlQueryCountIntegrationTest`가 실제 Statement 수를
+     * 세어 이 사실을 고정한다(회원 2명/6명 모두 2건).
+     *
+     * **`MemberRepository.search`를 DTO Projection으로 바꾸면 이 전제가 깨진다.** 1차 캐시가 비어
+     * 회원 수만큼 SELECT가 늘고 위 Test가 깨지며, 그때가 `FileAccessChecker`에 배치 판정을 도입할
+     * 시점이다.
+     */
     override fun canDownload(
         requesterId: Long,
         ownerId: Long,
