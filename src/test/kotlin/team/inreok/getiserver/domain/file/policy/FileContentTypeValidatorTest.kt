@@ -8,6 +8,9 @@ import team.inreok.getiserver.domain.file.exception.FileTypeNotAllowedException
 import team.inreok.getiserver.domain.file.exception.MimeMismatchException
 import java.io.BufferedInputStream
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /**
  * 요구사항 §8. 확장자·선언 MIME·실제 내용의 교차 검증이 핵심이며, 특히 "이름만 바꾼 파일"이
@@ -155,7 +158,58 @@ class FileContentTypeValidatorTest {
         assertThat(detected).isEqualTo("application/pdf")
     }
 
+    @Test
+    fun `내용이 ZIP인 파일은 docx 이름을 달아도 확장자 정책에 막힌다`() {
+        // ZIP Container 형식을 내용으로 구분할 수 없는 것이 지금 의존성(tika-core 단독)의 한계라,
+        // 방어선은 "허용 목록에 Container 형식을 넣지 않는 것" 하나뿐이다. 아래 Test가 그 이유다.
+        assertThatThrownBy {
+            validator.detectAndValidate(
+                inputStream = stream(zipBytes()),
+                sanitizedFileName = SanitizedFileName("resume.docx", "docx"),
+                declaredContentType = OOXML_WORD,
+                purpose = FilePurpose.JOB_APPLICATION,
+                policy = documentPolicy,
+            )
+        }.isInstanceOf(FileTypeNotAllowedException::class.java)
+    }
+
+    @Test
+    fun `docx를 허용하면 이름만 바꾼 ZIP이 통과한다 - tika-core의 한계를 고정한다`() {
+        // 내용은 그냥 ZIP인데 Word 문서로 판정된다. tika-core에는 ZipContainerDetector가 없어
+        // 파일명 Hint(glob) 결과가 그대로 채택되기 때문이다.
+        //
+        // 이 Test가 깨진다면 Container 판정기가 Classpath에 들어왔다는 뜻이다. 그때는
+        // application.yaml의 허용 목록에 docx를 다시 넣을지 검토한다.
+        val detected =
+            validator.detectAndValidate(
+                inputStream = stream(zipBytes()),
+                sanitizedFileName = SanitizedFileName("resume.docx", "docx"),
+                declaredContentType = OOXML_WORD,
+                purpose = FilePurpose.JOB_APPLICATION,
+                policy =
+                    FileUploadPolicy(
+                        extensions = setOf("docx"),
+                        mimeTypes = setOf(OOXML_WORD),
+                        maxSizeBytes = 1024 * 1024,
+                        maxCount = 1,
+                    ),
+            )
+
+        assertThat(detected).isEqualTo(OOXML_WORD)
+    }
+
     private fun stream(bytes: ByteArray) = BufferedInputStream(ByteArrayInputStream(bytes))
+
+    /** Entry 하나짜리 실제 ZIP. `PK`로 시작해 Tika가 application/zip으로 인식한다. */
+    private fun zipBytes(): ByteArray =
+        ByteArrayOutputStream()
+            .also { out ->
+                ZipOutputStream(out).use { zip ->
+                    zip.putNextEntry(ZipEntry("hello.txt"))
+                    zip.write("hello".toByteArray())
+                    zip.closeEntry()
+                }
+            }.toByteArray()
 
     private companion object {
         /** PNG Signature + 최소 IHDR. Tika가 image/png로 판정하기에 충분하다. */
@@ -222,5 +276,8 @@ class FileContentTypeValidatorTest {
             )
 
         private val PDF_BYTES = "%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF\n".toByteArray()
+
+        private const val OOXML_WORD =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     }
 }

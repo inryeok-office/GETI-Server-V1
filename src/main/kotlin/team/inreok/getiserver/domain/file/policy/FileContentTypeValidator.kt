@@ -20,6 +20,13 @@ import java.io.BufferedInputStream
  *
  * Tika는 파일 전체가 아니라 Magic Number가 있는 앞부분만 읽으므로 큰 파일도 메모리에 올리지
  * 않는다(§8/§42). `mark`/`reset`으로 되감아 같은 Stream을 그대로 Storage에 흘려보낸다.
+ *
+ * **한계 -- ZIP/OLE2 Container 형식은 내용으로 판정되지 않는다.** `tika-parsers` 없이 `tika-core`만
+ * 있으면 `ZipContainerDetector` 같은 Container 판정기가 없어, docx/hwpx처럼 ZIP을 껍데기로 쓰는
+ * 형식은 Magic Number가 모두 `application/zip`으로 같아 결국 파일명 Hint(glob) 결과가 채택된다.
+ * 즉 임의의 ZIP을 `resume.docx`로 바꾸면 아래 세 검사를 모두 통과한다. 그래서 `application.yaml`의
+ * 허용 목록에는 Container 형식을 넣지 않는다. 넣어야 한다면 `tika-parsers-standard-package` 도입을
+ * 먼저 결정한다. PDF/PNG/JPEG처럼 고유 Magic Number가 있는 형식은 의도대로 내용으로 판정된다.
  */
 @Component
 class FileContentTypeValidator {
@@ -85,8 +92,9 @@ class FileContentTypeValidator {
     ): String {
         inputStream.mark(DETECTION_BUFFER_BYTES)
         return try {
-            // 파일명을 Hint로 함께 준다. Container 기반 형식(docx/hwpx는 ZIP, hwp는 OLE2)은
-            // Magic Number만으로는 구분이 애매해 Tika가 이름까지 보고 판정한다.
+            // 파일명을 Hint로 함께 준다. Magic Number가 같은 계열 안에서 갈리는 형식(text/plain
+            // 계열 등)을 Tika가 이름까지 보고 좁혀 준다. Container 형식에는 이 Hint가 그대로
+            // 결론이 되어 버리므로 허용 목록에서 제외한다(Class 주석의 "한계" 참고).
             val metadata = Metadata().apply { set(TikaCoreProperties.RESOURCE_NAME_KEY, fileName) }
             tika.detect(inputStream, metadata)
         } finally {

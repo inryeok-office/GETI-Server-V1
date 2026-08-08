@@ -91,7 +91,7 @@ CREATE TABLE files (
 | 4 | File ↔ Target 관계 | **`files.owner_type` / `owner_id` 단일 연결**. `file_links` 미생성 | §13이 "한 File은 반드시 한 Resource에만"이면 단순화 가능하다고 했고, V2가 이미 이 구조다. 다중 연결·연결 이력 요구가 확정되면 그때 `file_links`로 이관 |
 | 5 | Storage SDK | **AWS SDK v2 (`software.amazon.awssdk:s3`) 단일 Adapter** | 사용자 확정. endpoint·path-style 설정만으로 local=MinIO / prod=AWS S3를 모두 처리. §2 "특정 환경에 강결합하지 않는다" |
 | 6 | 업로드 정합성 | **DB 선행 2단계 커밋** (`PENDING` → S3 → `UPLOADED`) | 사용자 확정. Cleanup이 없는 이번 PR에서도 모든 고아가 DB에 흔적을 남겨 §30의 "관측 가능해야 한다"를 만족 |
-| 7 | MIME 실제 검증 | **`org.apache.tika:tika-core` 추가** | 사용자 확정. docx/hwpx는 ZIP, hwp는 OLE2 Container라 수작업 시그니처로는 구분 불가 |
+| 7 | MIME 실제 검증 | **`org.apache.tika:tika-core` 추가** | 사용자 확정. ~~docx/hwpx는 ZIP, hwp는 OLE2 Container라 수작업 시그니처로는 구분 불가~~ **정정(PR #87 리뷰)**: `tika-core` 단독에는 `ZipContainerDetector`가 없어 Container 형식은 오히려 파일명 Hint로 판정된다. 이 근거는 성립하지 않으며, 그래서 허용 목록에서 `docx`를 제외했다. PDF/PNG/JPEG의 Magic Number 판정에는 그대로 유효하다 |
 | 8 | FilePurpose | **8개 확정**(§4 후보 6 + `PROFILE_IMAGE` + `COMPANY_LOGO`) | 사용자 확정. 뒤 둘은 기존 FK가 이미 있어 추측이 아니다. `OPERATION_RESULT`는 Upload API를 경유하지 않아 제외 |
 | 9 | 정책(확장자·MIME·크기·개수) | **`@ConfigurationProperties`로 외부화**, 값은 잠정값 + `DECISION_REQUIRED` | 사용자 확정. §7이 허용하고 `app.collector.provider.*` 선례와 동일 |
 | 10 | 다운로드 구현 | **302 Redirect → 단기 Presigned URL** | 사용자 확정. §15가 "Presigned URL을 우선 검토할 수 있다"고 명시 |
@@ -393,6 +393,8 @@ app:
         mime-types: [image/png, image/jpeg, image/webp]
         max-size-bytes: 2097152            # 2MB
         max-count: 1
+      # 아래는 계획 시점의 초안이다. 실제 구현에서는 docx/hwp 같은 Container 형식을 제외했다
+      # (표 7번 정정 참고 -- tika-core만으로는 내용 검증이 성립하지 않는다).
       JOB_APPLICATION:
         extensions: [pdf, docx, hwp, png, jpg, jpeg]
         mime-types: [application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document, application/x-hwp, image/png, image/jpeg]

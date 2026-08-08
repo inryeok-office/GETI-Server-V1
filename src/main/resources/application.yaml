@@ -37,6 +37,11 @@ app:
   # SVG는 어떤 목적에서도 허용하지 않는다 — 스크립트를 품을 수 있어 다운로드 시 attachment로
   # 강등되는데, 로고·프로필처럼 화면에 표시해야 하는 용도와 모순되기 때문이다(§27/§28).
   file:
+    # docx(및 hwpx 같은 다른 OOXML/ZIP Container 형식)는 의도적으로 빼 두었다. 지금 의존성
+    # (tika-core 단독)에는 Container 내부를 여는 판정기가 없어 확장자만 docx로 바꾼 임의의 ZIP이
+    # 내용 검증을 그대로 통과한다. "실제 파일 형식 검증"(요구사항 §8/§27)이 성립하지 않는 형식은
+    # 허용하지 않는다. 다시 허용하려면 tika-parsers-standard-package 도입 여부를 먼저 결정해야
+    # 한다(FileContentTypeValidator의 Class 주석 참고).
     policies:
       PROFILE_IMAGE:
         extensions: [png, jpg, jpeg, webp]
@@ -59,21 +64,13 @@ app:
         max-size-bytes: 10485760      # 10MB
         max-count: 5
       JOB_APPLICATION:
-        extensions: [pdf, docx, png, jpg, jpeg]
-        mime-types:
-          - application/pdf
-          - application/vnd.openxmlformats-officedocument.wordprocessingml.document
-          - image/png
-          - image/jpeg
+        extensions: [pdf, png, jpg, jpeg]
+        mime-types: [application/pdf, image/png, image/jpeg]
         max-size-bytes: 10485760      # 10MB
         max-count: 5
       PROGRAM_APPLICATION:
-        extensions: [pdf, docx, png, jpg, jpeg]
-        mime-types:
-          - application/pdf
-          - application/vnd.openxmlformats-officedocument.wordprocessingml.document
-          - image/png
-          - image/jpeg
+        extensions: [pdf, png, jpg, jpeg]
+        mime-types: [application/pdf, image/png, image/jpeg]
         max-size-bytes: 10485760      # 10MB
         max-count: 5
       INQUIRY_ATTACHMENT:
@@ -82,12 +79,8 @@ app:
         max-size-bytes: 5242880       # 5MB
         max-count: 3
       PORTFOLIO:
-        extensions: [pdf, docx, png, jpg, jpeg]
-        mime-types:
-          - application/pdf
-          - application/vnd.openxmlformats-officedocument.wordprocessingml.document
-          - image/png
-          - image/jpeg
+        extensions: [pdf, png, jpg, jpeg]
+        mime-types: [application/pdf, image/png, image/jpeg]
         max-size-bytes: 20971520      # 20MB
         max-count: 5
   jwt:
