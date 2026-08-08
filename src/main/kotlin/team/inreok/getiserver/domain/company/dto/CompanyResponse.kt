@@ -22,7 +22,9 @@ data class CompanyResponse(
     @param:Schema(description = "홈페이지 URL", example = "https://example.com", nullable = true)
     val homepageUrl: String?,
     @param:Schema(
-        description = "로고 이미지 URL. File 도메인 연동 전이라 항상 null이다.",
+        description =
+            "로고 이미지 URL. 서버가 서명한 짧은 유효기간의 URL이며 브라우저가 바로 표시할 수 있다. " +
+                "로고가 없으면 null이다.",
         nullable = true,
     )
     val logoUrl: String?,
@@ -42,7 +44,15 @@ data class CompanyResponse(
     val updatedAt: LocalDateTime?,
 ) {
     companion object {
-        fun from(company: Company): CompanyResponse =
+        /**
+         * [logoUrl]은 호출 측이 `FileUrlPort`로 변환해 넘긴다. 이 DTO가 직접 발급하지 않는 것은
+         * 발급에 요청자 ID와 권한 판정이 필요하고, 목록 응답에서는 여러 건을 한 번에 변환해야
+         * 하기 때문이다(N+1 방지).
+         */
+        fun from(
+            company: Company,
+            logoUrl: String?,
+        ): CompanyResponse =
             CompanyResponse(
                 companyId = requireNotNull(company.id) { "저장된 Company는 id를 가져야 합니다." },
                 name = company.name,
@@ -50,9 +60,7 @@ data class CompanyResponse(
                 mouStatus = company.mouStatus,
                 sourceName = company.source,
                 homepageUrl = company.websiteUrl,
-                // File 도메인 연동 전이라 logoFileId를 실제 URL로 변환할 수 없다(Member의
-                // profileImageUrl과 동일한 처리).
-                logoUrl = null,
+                logoUrl = logoUrl,
                 description = company.description,
                 industry = company.industry,
                 address = company.address,

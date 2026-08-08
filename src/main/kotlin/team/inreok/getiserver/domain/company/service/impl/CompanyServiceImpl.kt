@@ -20,15 +20,24 @@ import team.inreok.getiserver.domain.company.exception.MouPeriodInvalidException
 import team.inreok.getiserver.domain.company.repository.CompanyRepository
 import team.inreok.getiserver.domain.company.service.CompanyService
 import team.inreok.getiserver.domain.company.service.escapeLikePattern
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.entity.type.FilePurpose
+import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.file.link.FileUrlPort
 import java.time.LocalDate
 import java.time.LocalDateTime
 
 @Service
 class CompanyServiceImpl(
     private val companyRepository: CompanyRepository,
+    private val fileLinkPort: FileLinkPort,
+    private val fileUrlPort: FileUrlPort,
 ) : CompanyService {
     @Transactional
-    override fun create(request: CompanyCreateRequest): CompanyResponse {
+    override fun create(
+        request: CompanyCreateRequest,
+        requesterId: Long,
+    ): CompanyResponse {
         val name = request.name.trim()
         if (name.isEmpty()) throw CompanyNameRequiredException()
         validateMouPeriod(request.mouStartDate, request.mouEndDate)
@@ -53,18 +62,31 @@ class CompanyServiceImpl(
 
         // @CreationTimestamp/@UpdateTimestamp는 Flush 시점에 채워진다. 응답의 createdAt/updatedAt이
         // null로 나가지 않도록 저장과 동시에 Flush한다.
-        return try {
-            CompanyResponse.from(companyRepository.saveAndFlush(company))
-        } catch (ex: DataIntegrityViolationException) {
-            throwDuplicateOrRethrow(ex)
-        }
+        val saved =
+            try {
+                companyRepository.saveAndFlush(company)
+            } catch (ex: DataIntegrityViolationException) {
+                throwDuplicateOrRethrow(ex)
+            }
+
+        // 로고 연결은 저장 이후다 -- 연결 대상(ownerId)으로 쓸 companyId가 저장 전에는 없다.
+        // 연결이 거부되면 예외가 Transaction을 되돌려 기업도 만들어지지 않는다.
+        linkLogo(saved, request.logoFileId, requesterId)
+        return CompanyResponse.from(saved, logoUrl(saved, requesterId))
     }
 
     @Transactional(readOnly = true)
-    override fun get(companyId: Long): CompanyResponse = CompanyResponse.from(findActive(companyId))
+    override fun get(
+        companyId: Long,
+        requesterId: Long,
+    ): CompanyResponse {
+        val company = findActive(companyId)
+        return CompanyResponse.from(company, logoUrl(company, requesterId))
+    }
 
     @Transactional(readOnly = true)
     override fun search(
+        requesterId: Long,
         query: String?,
         companyType: CompanyType?,
         mouStatus: MouStatus?,
@@ -81,8 +103,13 @@ class CompanyServiceImpl(
                 sourceName?.trim()?.takeIf { it.isNotEmpty() },
                 pageable,
             )
+        // 목록의 로고를 한 번에 URL로 바꾼다. 항목마다 단건 발급하면 기업 수만큼 반복된다(N+1).
+        val logoUrls = fileUrlPort.presignedImageUrls(requesterId, page.content.mapNotNull { it.logoFileId })
         return CompanySearchResponse(
-            content = page.content.map(CompanySummaryResponse::from),
+            content =
+                page.content.map { company ->
+                    CompanySummaryResponse.from(company, company.logoFileId?.let { logoUrls[it] })
+                },
             page = page.number,
             size = page.size,
             totalElements = page.totalElements,
@@ -96,6 +123,7 @@ class CompanyServiceImpl(
     override fun update(
         companyId: Long,
         request: CompanyUpdateRequest,
+        requesterId: Long,
     ): CompanyResponse {
         val company = findActive(companyId)
 
@@ -116,6 +144,7 @@ class CompanyServiceImpl(
         }
 
         applyChanges(company, request, newName)
+        linkLogo(company, request.logoFileId, requesterId)
         // @UpdateTimestamp가 Flush 시점에 갱신되므로, 응답에 낡은 updatedAt이 담기지 않도록
         // 응답을 만들기 전에 Flush한다.
         try {
@@ -123,7 +152,7 @@ class CompanyServiceImpl(
         } catch (ex: DataIntegrityViolationException) {
             throwDuplicateOrRethrow(ex)
         }
-        return CompanyResponse.from(company)
+        return CompanyResponse.from(company, logoUrl(company, requesterId))
     }
 
     @Transactional
@@ -135,6 +164,41 @@ class CompanyServiceImpl(
 
     private fun findActive(companyId: Long): Company =
         companyRepository.findByIdAndDeletedAtIsNull(companyId) ?: throw CompanyNotFoundException(companyId)
+
+    /**
+     * 로고를 등록하거나 교체한다. 전달하지 않았거나(`null`) 현재와 같은 파일이면 아무 일도
+     * 하지 않는다 -- 로고 제거는 [CompanyUpdateRequest]가 지원하지 않는 동작이다.
+     *
+     * 소유권·목적·상태 검증은 [FileLinkPort.validateAndLink]가 수행한다. 남이 올린 파일이면
+     * `FILE_NOT_OWNED`, `COMPANY_LOGO` 용도로 올리지 않은 파일이면 `FILE_PURPOSE_MISMATCH`로
+     * 거부되어 이 Transaction 전체가 되돌아간다.
+     */
+    private fun linkLogo(
+        company: Company,
+        newFileId: Long?,
+        requesterId: Long,
+    ) {
+        if (newFileId == null || newFileId == company.logoFileId) return
+        val companyId = requireNotNull(company.id) { "저장된 Company는 id를 가져야 합니다." }
+
+        // 교체 시 기존 로고는 연결만 해제한다. Storage Binary 삭제는 Cleanup(Phase 5) 범위다.
+        if (company.logoFileId != null) fileLinkPort.unlinkAllOf(FileOwnerType.COMPANY, companyId)
+        fileLinkPort.validateAndLink(
+            requesterId = requesterId,
+            fileIds = listOf(newFileId),
+            purpose = FilePurpose.COMPANY_LOGO,
+            ownerId = companyId,
+        )
+        company.logoFileId = newFileId
+    }
+
+    private fun logoUrl(
+        company: Company,
+        requesterId: Long,
+    ): String? {
+        val fileId = company.logoFileId ?: return null
+        return fileUrlPort.presignedImageUrls(requesterId, listOf(fileId))[fileId]
+    }
 
     /**
      * 사전 중복 검사와 저장 사이의 경쟁 조건으로 Unique Index(`uk_companies_name_type_active`,
