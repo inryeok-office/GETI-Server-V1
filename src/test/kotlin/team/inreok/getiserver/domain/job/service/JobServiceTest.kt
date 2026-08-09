@@ -33,6 +33,7 @@ import team.inreok.getiserver.domain.job.exception.JobStatusTransitionInvalidExc
 import team.inreok.getiserver.domain.job.exception.JobValidationFailedException
 import team.inreok.getiserver.domain.job.repository.JobRepository
 import team.inreok.getiserver.domain.job.service.impl.JobServiceImpl
+import team.inreok.getiserver.global.discord.DiscordChannelResolver
 import java.time.LocalDateTime
 import java.util.Optional
 
@@ -53,11 +54,14 @@ class JobServiceTest {
     @Mock
     private lateinit var eventPublisher: ApplicationEventPublisher
 
+    @Mock
+    private lateinit var discordChannelResolver: DiscordChannelResolver
+
     @Captor
     private lateinit var jobCaptor: ArgumentCaptor<Job>
 
     private val service: JobService by lazy {
-        JobServiceImpl(jobRepository, companyQuery, eventPublisher)
+        JobServiceImpl(jobRepository, companyQuery, eventPublisher, discordChannelResolver)
     }
 
     private val companySummary = CompanySummary(companyId = 1L, name = "인력개발원")
