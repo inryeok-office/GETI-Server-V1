@@ -12,7 +12,9 @@ import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
 import org.springframework.context.ApplicationEventPublisher
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.file.link.FileSnapshot
 import team.inreok.getiserver.domain.file.link.FileUrlPort
 import team.inreok.getiserver.domain.inquiry.dto.InquiryAnswerCreateRequest
 import team.inreok.getiserver.domain.inquiry.dto.InquiryAssigneeUpdateRequest
@@ -104,6 +106,31 @@ class InquiryServiceImplTest {
         val response = service.getDetail(1L, requesterMemberId = 9L, isDeveloper = true)
 
         assertThat(response.assignee?.memberId).isEqualTo(5L)
+    }
+
+    // --- 상세 조회: 답변 첨부파일 배치 조회(N+1 방지) ---
+
+    @Test
+    fun `상세 조회는 배치로 받은 답변 첨부파일을 answerId별로 매칭한다`() {
+        given(inquiryRepository.findById(1L)).willReturn(Optional.of(inquiryOf()))
+        given(inquiryDiscordDeliveryQueryPort.statusOf(anyLong())).willReturn(InquiryDiscordDeliveryStatus.PENDING)
+        val firstAnswer = answerOf(id = 10L, content = "첫 번째 답변")
+        val secondAnswer = answerOf(id = 20L, content = "두 번째 답변")
+        given(inquiryAnswerRepository.findAllByInquiryIdOrderByCreatedAtAscIdAsc(1L))
+            .willReturn(listOf(firstAnswer, secondAnswer))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.INQUIRY_ANSWER, listOf(10L, 20L)))
+            .willReturn(mapOf(20L to listOf(fileSnapshotOf(fileId = 99L))))
+
+        val response = service.getDetail(1L, requesterMemberId = 1L, isDeveloper = false)
+
+        assertThat(response.answers).hasSize(2)
+        assertThat(response.answers[0].files).isEmpty()
+        assertThat(
+            response.answers[1]
+                .files
+                .single()
+                .fileId,
+        ).isEqualTo(99L)
     }
 
     // --- 상태 전이 화이트리스트 ---
@@ -230,6 +257,17 @@ class InquiryServiceImplTest {
         createdAt = now
         updatedAt = now
     }
+
+    private fun answerOf(
+        id: Long,
+        content: String,
+    ) = InquiryAnswer(inquiryId = 1L, authorMemberId = 9L, content = content).apply {
+        this.id = id
+        createdAt = now
+    }
+
+    private fun fileSnapshotOf(fileId: Long) =
+        FileSnapshot(fileId = fileId, originalName = "file.png", contentType = "image/png", size = 100L)
 
     private fun assigneeCandidateOf(
         role: String,

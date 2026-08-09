@@ -91,4 +91,21 @@ interface FileLinkPort {
         ownerType: FileOwnerType,
         ownerId: Long,
     ): List<FileSnapshot>
+
+    /**
+     * [linkedFilesOf]의 배치 버전이다. 여러 리소스에 연결된 파일을 한 번에 조회해
+     * `ownerId -> 파일 목록` Map으로 돌려준다.
+     *
+     * 문의 상세처럼 답변 여러 건의 첨부파일 목록을 한 응답에 함께 실어야 하는 경우, 답변 수만큼
+     * [linkedFilesOf]를 반복 호출하면 N+1이 된다.
+     * [team.inreok.getiserver.domain.member.query.InquiryMemberSnapshotQueryPort.findAllByIds]와
+     * 같은 배치 원칙을 따른다.
+     *
+     * 첨부파일이 없는 [ownerId]는 결과 Map에서 빠진다(빈 List Entry를 만들지 않는다) -- 호출
+     * 측이 `map[ownerId].orEmpty()`로 다루면 된다.
+     */
+    fun linkedFilesOf(
+        ownerType: FileOwnerType,
+        ownerIds: Collection<Long>,
+    ): Map<Long, List<FileSnapshot>>
 }

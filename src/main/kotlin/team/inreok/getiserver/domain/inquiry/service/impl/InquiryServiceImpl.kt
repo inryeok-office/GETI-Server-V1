@@ -178,10 +178,14 @@ class InquiryServiceImpl(
         }
 
         val files = fileLinkPort.linkedFilesOf(FileOwnerType.INQUIRY, inquiryId).map { it.toResponse() }
-        val answers =
-            inquiryAnswerRepository
-                .findAllByInquiryIdOrderByCreatedAtAscIdAsc(inquiryId)
-                .map { it.toResponse() }
+        val answerEntities = inquiryAnswerRepository.findAllByInquiryIdOrderByCreatedAtAscIdAsc(inquiryId)
+        // 답변마다 첨부파일을 개별 조회하면 답변 수만큼 Query가 늘어난다(N+1). 이 상세 응답에
+        // 등장하는 모든 answerId를 한 번에 모아 배치로 조회한다(listAdmin의 Member Snapshot 배치
+        // 조회와 동일한 원칙).
+        val answerIds = answerEntities.mapNotNull { it.id }
+        val filesByAnswerId =
+            if (answerIds.isEmpty()) emptyMap() else fileLinkPort.linkedFilesOf(FileOwnerType.INQUIRY_ANSWER, answerIds)
+        val answers = answerEntities.map { it.toResponse(filesByAnswerId) }
         // 담당 개발자의 운영 정보는 개발자 응답에만 노출한다(요구사항 17절).
         val assignee = if (isDeveloper) assigneeResponseOf(inquiry.assigneeMemberId) else null
 
@@ -499,14 +503,14 @@ class InquiryServiceImpl(
         )
     }
 
-    private fun InquiryAnswer.toResponse(): InquiryAnswerItemResponse {
+    private fun InquiryAnswer.toResponse(filesByAnswerId: Map<Long, List<FileSnapshot>>): InquiryAnswerItemResponse {
         val answerId = requireNotNull(id) { "저장된 InquiryAnswer는 id를 가져야 합니다." }
         return InquiryAnswerItemResponse(
             answerId = answerId,
             inquiryId = inquiryId,
             authorMemberId = authorMemberId,
             content = content,
-            files = fileLinkPort.linkedFilesOf(FileOwnerType.INQUIRY_ANSWER, answerId).map { it.toResponse() },
+            files = filesByAnswerId[answerId].orEmpty().map { it.toResponse() },
             createdAt = requireNotNull(createdAt) { "저장된 InquiryAnswer는 createdAt을 가져야 합니다." },
         )
     }
