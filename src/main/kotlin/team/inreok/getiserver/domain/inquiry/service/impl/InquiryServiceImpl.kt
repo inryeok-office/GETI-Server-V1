@@ -221,7 +221,11 @@ class InquiryServiceImpl(
         // 검색 대상은 title/content/author name이다(요구사항 28절, studentNumber 제외). 작성자
         // 이름 매치는 Member 도메인 Port로 미리 id 집합만 받아 IN 조건으로 쓴다(Module 경계 유지,
         // InquiryAuthorSearchQueryPort KDoc 참고). 검색어가 없으면 이 Port 자체를 호출하지 않는다.
-        val authorIds = trimmedQuery?.let { inquiryAuthorSearchQueryPort.findIdsByNameContaining(it) } ?: emptySet()
+        // escapeLikePattern은 한 번만 계산해 searchForAdmin과 findIdsByNameContaining에 동일하게
+        // 넘긴다(MemberRepository.findIdsByNameContaining KDoc 계약 -- 호출 측이 LIKE Wildcard를
+        // 이스케이프해 전달해야 함). 두 곳에서 각각 이스케이프하면 값이 어긋날 여지가 생긴다.
+        val escapedQuery = trimmedQuery?.let(::escapeLikePattern)
+        val authorIds = escapedQuery?.let { inquiryAuthorSearchQueryPort.findIdsByNameContaining(it) } ?: emptySet()
         val mineOnlyMemberId = if (mineOnly) requesterMemberId else null
 
         val page =
@@ -233,7 +237,7 @@ class InquiryServiceImpl(
                 // :query를 null로 바인딩하지 않는 이유는 InquiryRepository.searchForAdmin KDoc 참고
                 // (PostgreSQL의 NULL 문자열 Parameter Type 추론 문제, 실측으로 발견).
                 hasQuery = trimmedQuery != null,
-                query = trimmedQuery?.let(::escapeLikePattern) ?: "",
+                query = escapedQuery ?: "",
                 authorIds = authorIds,
                 pageable = pageable,
             )

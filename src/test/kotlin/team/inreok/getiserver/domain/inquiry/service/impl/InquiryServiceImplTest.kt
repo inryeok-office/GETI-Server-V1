@@ -8,10 +8,13 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.PageRequest
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.link.FileLinkPort
 import team.inreok.getiserver.domain.file.link.FileSnapshot
@@ -217,6 +220,54 @@ class InquiryServiceImplTest {
 
         assertThat(inquiry.answeredAt).isEqualTo(originalAnsweredAt)
         assertThat(response.inquiryStatus).isEqualTo(InquiryStatus.ANSWERED)
+    }
+
+    // --- 목록 조회(관리자): 작성자 이름 검색어 LIKE 이스케이프(AI 코드리뷰 P2) ---
+
+    // 검색어에 %/_가 포함되면 이스케이프 없이 findIdsByNameContaining에 넘길 경우
+    // MemberRepository.findIdsByNameContaining의 LIKE 계약을 어겨 Wildcard로 해석된다. 두 경로에
+    // 같은 이스케이프 값이 전달되는지 검증한다.
+    @Test
+    fun `listAdmin은 검색어의 LIKE Wildcard를 이스케이프해 작성자 이름 검색과 목록 검색에 동일한 값으로 전달한다`() {
+        val rawQuery = "50%_off"
+        val escapedQuery = "50\\%\\_off"
+        val authorIds = setOf(3L, 7L)
+        val pageable = PageRequest.of(0, 20)
+        given(inquiryAuthorSearchQueryPort.findIdsByNameContaining(escapedQuery)).willReturn(authorIds)
+        given(
+            inquiryRepository.searchForAdmin(
+                type = null,
+                status = null,
+                assigneeId = null,
+                mineOnlyMemberId = null,
+                hasQuery = true,
+                query = escapedQuery,
+                authorIds = authorIds,
+                pageable = pageable,
+            ),
+        ).willReturn(PageImpl(emptyList(), pageable, 0))
+
+        service.listAdmin(
+            inquiryType = null,
+            status = null,
+            query = rawQuery,
+            assigneeId = null,
+            mineOnly = false,
+            requesterMemberId = 1L,
+            pageable = pageable,
+        )
+
+        verify(inquiryAuthorSearchQueryPort).findIdsByNameContaining(escapedQuery)
+        verify(inquiryRepository).searchForAdmin(
+            type = null,
+            status = null,
+            assigneeId = null,
+            mineOnlyMemberId = null,
+            hasQuery = true,
+            query = escapedQuery,
+            authorIds = authorIds,
+            pageable = pageable,
+        )
     }
 
     // --- 등록: 초기 상태 ---
