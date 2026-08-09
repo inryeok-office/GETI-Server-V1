@@ -344,6 +344,48 @@ class DiscordDeliveryServiceImplTest {
     }
 
     @Test
+    fun `수동 재시도로 예약된 첫 전송은 MANUAL로 기록한다`() {
+        val delivery = claimable(delivery(id = 1L).apply { manualRetryPending = true })
+        botClient.willReturn(DiscordBotResult.Success("discord-99"))
+
+        service().processDueDeliveries()
+
+        assertThat(captureAttempt().attemptType).isEqualTo(DiscordDeliveryAttemptType.MANUAL)
+    }
+
+    @Test
+    fun `수동 재시도 첫 전송이 끝나면 이후 전송은 다시 AUTOMATIC으로 기록한다`() {
+        // 수동으로 시작한 시도가 재시도 가능 실패로 끝나면, 이어지는 백오프 재시도는 자동이다.
+        val delivery = claimable(delivery(id = 1L).apply { manualRetryPending = true })
+        botClient.willReturn(DiscordBotResult.Failure("RATE_LIMITED", retryable = true, message = null))
+
+        service().processDueDeliveries()
+
+        assertThat(delivery.manualRetryPending).isFalse()
+    }
+
+    @Test
+    fun `자동 재시도로 예약된 전송은 AUTOMATIC으로 기록한다`() {
+        claimable(delivery(id = 1L))
+        botClient.willReturn(DiscordBotResult.Success("discord-99"))
+
+        service().processDueDeliveries()
+
+        assertThat(captureAttempt().attemptType).isEqualTo(DiscordDeliveryAttemptType.AUTOMATIC)
+    }
+
+    @Test
+    fun `수동 재시도를 요청하면 다음 전송이 수동임을 표시한다`() {
+        val delivery =
+            delivery(id = 1L, status = DiscordDeliveryStatus.FAILED, automaticRetryCount = 3)
+        given(deliveryRepository.findById(1L)).willReturn(Optional.of(delivery))
+
+        service().retryManually(1L)
+
+        assertThat(delivery.manualRetryPending).isTrue()
+    }
+
+    @Test
     fun `FAILED가 아니면 수동 재시도를 거부한다`() {
         val delivery = delivery(id = 1L, status = DiscordDeliveryStatus.DELIVERED)
         given(deliveryRepository.findById(1L)).willReturn(Optional.of(delivery))

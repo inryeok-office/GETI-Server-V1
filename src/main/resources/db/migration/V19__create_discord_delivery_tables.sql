@@ -27,7 +27,14 @@
 --    Runner 방식(기동 시 PROCESSING 전부 되돌리기)은 단일 인스턴스 전제라 쓰지 않는다 --
 --    인스턴스가 둘 이상이면 재기동한 쪽이 다른 인스턴스의 전송 중인 Row를 침범한다.
 --
--- 5) Discord Snowflake(channel_id, discord_message_id, role_ids)는 숫자가 아닌 문자열이다(§8).
+-- 5) manual_retry_pending
+--    수동 재시도는 상태만 PENDING으로 되돌리고 실제 전송은 다음 Sweep이 수행한다. 그래서
+--    "이번 시도가 사람이 요청한 것인지"를 Worker가 알 방법이 필요하다. 이 Flag가 없으면 수동
+--    재시도로 발생한 Bot 호출까지 discord_delivery_attempts에 AUTOMATIC으로 남아, 감사에서
+--    자동/수동 시도를 구분할 수 없다(§12). 첫 시도가 끝나면 해제되므로 그 뒤 이어지는 백오프
+--    재시도는 다시 AUTOMATIC으로 기록된다.
+--
+-- 6) Discord Snowflake(channel_id, discord_message_id, role_ids)는 숫자가 아닌 문자열이다(§8).
 --    길이 64는 GETI-Bot-V1 idSchema 상한과 같다.
 --
 -- Index는 §13이 지정한 4종과 대응한다.
@@ -50,6 +57,7 @@ CREATE TABLE discord_deliveries
     idempotency_key       VARCHAR(200) NOT NULL,
     automatic_retry_count INTEGER      NOT NULL DEFAULT 0,
     manual_retry_count    INTEGER      NOT NULL DEFAULT 0,
+    manual_retry_pending  BOOLEAN      NOT NULL DEFAULT FALSE,
     next_retry_at         TIMESTAMP,
     processing_started_at TIMESTAMP,
     last_attempt_at       TIMESTAMP,

@@ -127,7 +127,7 @@ class DiscordDeliveryServiceImpl(
                 pageable = PageRequest.of(0, properties.batchSize),
             )
 
-        return dueIds.count { deliveryId -> processOne(deliveryId, DiscordDeliveryAttemptType.AUTOMATIC) }
+        return dueIds.count { deliveryId -> processOne(deliveryId) }
     }
 
     @Transactional
@@ -177,10 +177,7 @@ class DiscordDeliveryServiceImpl(
      * 건의 `RuntimeException`은 여기서 넓게 잡아 로그로 남긴다(`JobNotificationServiceImpl`과 동일).
      */
     @Suppress("ReturnCount", "TooGenericExceptionCaught")
-    private fun processOne(
-        deliveryId: Long,
-        attemptType: DiscordDeliveryAttemptType,
-    ): Boolean {
+    private fun processOne(deliveryId: Long): Boolean {
         val claimedAt = LocalDateTime.now()
         val claimed =
             deliveryRepository.claim(
@@ -192,6 +189,13 @@ class DiscordDeliveryServiceImpl(
         if (claimed != 1) return false
 
         val delivery = deliveryRepository.findById(deliveryId).orElse(null) ?: return false
+        // 수동 재시도로 예약된 첫 시도만 MANUAL로 남긴다. 이후 백오프 재시도는 다시 AUTOMATIC이다.
+        val attemptType =
+            if (delivery.manualRetryPending) {
+                DiscordDeliveryAttemptType.MANUAL
+            } else {
+                DiscordDeliveryAttemptType.AUTOMATIC
+            }
         return try {
             send(delivery, attemptType)
             true

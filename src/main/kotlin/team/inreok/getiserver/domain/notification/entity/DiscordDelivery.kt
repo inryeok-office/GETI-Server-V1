@@ -75,6 +75,17 @@ class DiscordDelivery(
     @Column(name = "manual_retry_count", nullable = false)
     var manualRetryCount: Int = 0
 
+    /**
+     * 다음 시도가 사람이 요청한 수동 재시도인지다.
+     *
+     * 수동 재시도는 상태만 PENDING으로 되돌리고 실제 전송은 다음 Sweep이 수행하므로(§18),
+     * 이 Flag가 없으면 Worker가 그 시도를 자동 재시도와 구별할 수 없어 시도 이력이 전부
+     * AUTOMATIC으로 남는다. 첫 시도가 끝나면 해제되어, 그 뒤 이어지는 백오프 재시도는 다시
+     * AUTOMATIC으로 기록된다.
+     */
+    @Column(name = "manual_retry_pending", nullable = false)
+    var manualRetryPending: Boolean = false
+
     @Column(name = "next_retry_at")
     var nextRetryAt: LocalDateTime? = null
 
@@ -131,6 +142,7 @@ class DiscordDelivery(
         discordMessageId = messageId
         status = DiscordDeliveryStatus.DELIVERED
         deliveredAt = now
+        manualRetryPending = false
         lastAttemptAt = now
         processingStartedAt = null
         nextRetryAt = null
@@ -147,6 +159,7 @@ class DiscordDelivery(
     ) {
         status = DiscordDeliveryStatus.PENDING
         automaticRetryCount += 1
+        manualRetryPending = false
         nextRetryAt = retryAt
         processingStartedAt = null
         lastAttemptAt = now
@@ -167,6 +180,7 @@ class DiscordDelivery(
         now: LocalDateTime,
     ) {
         status = DiscordDeliveryStatus.FAILED
+        manualRetryPending = false
         nextRetryAt = null
         processingStartedAt = null
         lastAttemptAt = now
@@ -185,6 +199,7 @@ class DiscordDelivery(
     fun markManualRetryRequested() {
         manualRetryCount += 1
         automaticRetryCount = 0
+        manualRetryPending = true
         status = DiscordDeliveryStatus.PENDING
         nextRetryAt = null
         processingStartedAt = null

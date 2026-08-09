@@ -259,6 +259,7 @@ enum class DiscordDeliveryAttemptResult { SUCCESS, FAILURE }
 | `idempotencyKey` | `String` | VARCHAR(200) **UNIQUE** — Bot 상한과 일치 |
 | `automaticRetryCount` | `Int` | 기본 0 |
 | `manualRetryCount` | `Int` | 기본 0 |
+| `manualRetryPending` | `Boolean` | 다음 시도가 수동 재시도인지. 첫 시도가 끝나면 해제 |
 | `nextRetryAt` | `LocalDateTime?` | |
 | `processingStartedAt` | `LocalDateTime?` | **Stale 판정용**(결정 7) |
 | `lastAttemptAt` | `LocalDateTime?` | |
@@ -295,7 +296,7 @@ UPDATE                                  {targetType}:{targetId}:UPDATE:{원본 u
 | --- | --- | --- |
 | `id` | `Long?` | |
 | `discordDeliveryId` | `Long` | FK. **연관 객체가 아닌 ID 참조** |
-| `attemptType` | `DiscordDeliveryAttemptType` | AUTOMATIC / MANUAL |
+| `attemptType` | `DiscordDeliveryAttemptType` | AUTOMATIC / MANUAL. Delivery의 `manualRetryPending`으로 판별한다 |
 | `attemptNumber` | `Int` | 해당 Delivery의 누적 시도 순번 |
 | `requestId` | `String` | VARCHAR(64). `X-Request-Id`로 보낸 값 |
 | `startedAt` / `finishedAt` | `LocalDateTime` | |
