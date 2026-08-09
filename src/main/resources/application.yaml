@@ -134,6 +134,28 @@ app:
       notify-initial-import: ${DISCORD_JOB_NOTIFY_INITIAL_IMPORT:false}
       # 재시도 대기 중인 Delivery를 다시 살펴보는 주기(ms). 기본 5분.
       retry-interval-ms: 300000
+    # Job/Program/Inquiry 업무 알림을 별도 서비스 GETI-Bot-V1의 Internal REST API로 보내는
+    # 설정이다(docs/notification/discord-delivery-plan.md). 위 job-notification(수집 공고용
+    # Discord Webhook)과는 전달 방식도 Secret도 완전히 별개다 — 절대 같은 값으로 가정하지 않는다.
+    #
+    # base-url이나 internal-api-key가 비어 있으면 Worker가 즉시 반환하고 Delivery는 PENDING으로
+    # 쌓인다. 애플리케이션 기동과 공고/프로그램/문의 등록 API는 그대로 정상 동작한다(Fail-Fast
+    # 아님). Secret에는 안전하지 않은 기본값을 주지 않는다.
+    bot:
+      enabled: ${DISCORD_BOT_ENABLED:false}
+      base-url: ${DISCORD_BOT_BASE_URL:}
+      internal-api-key: ${DISCORD_BOT_INTERNAL_API_KEY:}
+      connect-timeout-ms: 2000
+      # Bot 자체 Command Timeout(10초)보다 길게 잡아, Bot이 판단한 retryable을 받아 쓴다.
+      # 짧게 잡으면 Bot이 실제로 게시했는데 서버만 실패로 처리하는 구간이 생긴다.
+      read-timeout-ms: 12000
+      # 자동 재시도 최소 백오프가 1분이라 그보다 촘촘하게 돌 이유가 없다.
+      sweep-interval-ms: 60000
+      # 이 시간을 넘도록 PROCESSING에 머문 Delivery를 재시도 대기로 되돌린다.
+      stale-processing-threshold-ms: 300000
+      max-automatic-retry-count: 3
+      max-manual-retry-count: 3
+      batch-size: 50
   # /actuator/info의 "deployment" 필드(DeploymentInfoContributor)가 사용하는 배포 메타데이터다.
   # CD가 Docker Build/Runtime 시점에 APP_VERSION/APP_GIT_SHA/APP_BUILD_TIME/APP_ENVIRONMENT를
   # 주입한다(docs/development/cd.md 참고). version의 "0.0.1-SNAPSHOT" 기본값은 build.gradle.kts의

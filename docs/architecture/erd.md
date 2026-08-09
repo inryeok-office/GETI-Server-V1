@@ -29,7 +29,7 @@ MinIO 업로드, Discord 전송, Elasticsearch 색인, 비동기 Worker
 | `application` | `job_applications` | 내부 지원 |
 | `program` | `programs`, `program_applications` | 취업 프로그램과 신청 |
 | `portfolio` | `portfolio_requests`, `portfolio_submissions` | 포트폴리오 제출 요청과 제출 |
-| `notification` | `notifications` | 인앱 알림 |
+| `notification` | `notifications`, `discord_deliveries`, `discord_delivery_attempts` | 인앱 알림과 Discord 전달 상태·시도 이력(V19) |
 | `inquiry` | `inquiries`, `inquiry_answers` | 문의와 답변(1:N, V18) |
 | `collector` | `job_collection_runs` | 공고 수집 실행 이력(아래 "collector가 operation의 Enum을 재사용하는 이유" 참고) |
 | `operation` | `async_operations` | 비동기 작업 |
@@ -65,11 +65,14 @@ ERD가 명시한 대로 PostgreSQL `timestamp`(Time Zone 없음) + Kotlin `Local
 ```text
 files.owner_type + files.owner_id
 notifications.target_type + notifications.target_id
+discord_deliveries.target_type + discord_deliveries.target_id
 async_operations.target_type + async_operations.target_id
 audit_logs.target_type + audit_logs.target_id
 ```
 
-`notifications`는 V2에서 `resource_type`/`resource_id`로 만들었고, 인앱 알림 API가 응답 필드명(`targetType`/`targetId`)과 어휘를 맞추기 위해 V16에서 `target_type`/`target_id`로 RENAME했다(`docs/Notification/notification-core-plan.md`). 다른 세 조합과 이름 규칙이 같아졌다.
+`notifications`는 V2에서 `resource_type`/`resource_id`로 만들었고, 인앱 알림 API가 응답 필드명(`targetType`/`targetId`)과 어휘를 맞추기 위해 V16에서 `target_type`/`target_id`로 RENAME했다([`notification-core-plan.md`](../notification/notification-core-plan.md)). 다른 조합과 이름 규칙이 같아졌다.
+
+`discord_deliveries`도 같은 규칙을 따른다(V19). 다만 값 집합은 `notifications.target_type`(6종)보다 좁은 `JOB`/`PROGRAM`/`INQUIRY` 3종이다 — GETI-Bot-V1이 이 세 종류만 렌더링하기 때문이다([`discord-delivery-plan.md`](../notification/discord-delivery-plan.md)).
 
 ## files의 업로드 생명주기 (V17)
 
