@@ -38,6 +38,22 @@ class DiscordPayloadFactoryTest {
     }
 
     @Test
+    fun `공고 수정 Payload에는 companyName과 deadline을 담지 않는다`() {
+        // jobUpdatedDataSchema는 jobId/title/changes/url만 받는다.
+        val data = factory.forJob(DiscordMessageTemplate.JOB_UPDATED, jobSnapshot())
+
+        assertThat(data).containsOnlyKeys("jobId", "title")
+    }
+
+    @Test
+    fun `공고 마감 Payload에는 companyName과 deadline을 담지 않는다`() {
+        // jobClosedDataSchema는 jobId/title/reason/url만 받는다.
+        val data = factory.forJob(DiscordMessageTemplate.JOB_CLOSED, jobSnapshot())
+
+        assertThat(data).containsOnlyKeys("jobId", "title")
+    }
+
+    @Test
     fun `제목이 200자를 넘으면 잘라서 상한을 지킨다`() {
         // jobs_title은 DB에서 500자까지 허용되지만 Bot titleSchema는 200자다.
         val data = factory.forJob(DiscordMessageTemplate.JOB_PUBLISHED, jobSnapshot(title = "가".repeat(500)))

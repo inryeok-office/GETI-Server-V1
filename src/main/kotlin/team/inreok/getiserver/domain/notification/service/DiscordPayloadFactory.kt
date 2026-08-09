@@ -36,8 +36,10 @@ class DiscordPayloadFactory {
         buildMap {
             put("jobId", snapshot.jobId.toString())
             put("title", truncate(snapshot.title, TITLE_MAX_LENGTH))
-            // JOB_DELETED Schema에는 companyName/deadline이 없다(.strict() 위반이 된다).
-            if (template != DiscordMessageTemplate.JOB_DELETED) {
+            // companyName/deadline은 jobPublishedDataSchema에만 선언되어 있다. JOB_UPDATED와
+            // JOB_CLOSED Schema는 jobId/title/changes|reason/url만 받고 .strict()라, 이 두 필드를
+            // 넣으면 400 INVALID_REQUEST(재시도 불가)로 즉시 FAILED가 된다.
+            if (template == DiscordMessageTemplate.JOB_PUBLISHED) {
                 putIfPresent("companyName", snapshot.companyName, LABEL_MAX_LENGTH)
                 putIfPresent("deadline", formatDateTime(snapshot.recruitmentEndedAt), SHORT_MAX_LENGTH)
             }
