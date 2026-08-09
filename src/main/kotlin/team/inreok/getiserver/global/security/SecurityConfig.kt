@@ -23,7 +23,14 @@ import tools.jackson.databind.ObjectMapper
  * 검색·프로필 조회, Issue #50 후속), `/api/v1/companies`(기업 조회, Issue #56), `/api/v1/jobs`
  * (공고 조회, Issue #60)는 인증을 요구하고, `/api/v1/admin/companies`(기업 등록·수정·삭제,
  * Issue #56)는 DEVELOPER 역할까지, `/api/v1/admin/jobs`(공고 관리, Issue #60)는 TEACHER 또는
- * DEVELOPER 역할까지 요구한다.
+ * DEVELOPER 역할까지, `/api/v1/me/forms`(개인 신청 양식 관리, Application Epic #75 Issue #76)도
+ * TEACHER 또는 DEVELOPER 역할까지 요구한다. `/api/v1/admin/programs`(프로그램 등록·수정·상태
+ * 관리, Program 도메인 전체 개발 요구사항 Phase 1~3)는 TEACHER 또는 DEVELOPER 역할까지,
+ * `POST /api/v1/programs/{id}/application-actions`(프로그램 신청·취소, 원본 요구사항 11절)는
+ * STUDENT 역할까지, 나머지 `/api/v1/programs`(프로그램 목록·상세 조회)는 인증만 요구한다.
+ * `/api/v1/notifications` 이하(인앱 알림 조회·읽음 처리, Notification Core)도 인증만 요구한다 —
+ * 항상 요청자 본인의 알림만 다루기 때문이다. `/api/v1/files` 이하(공통 파일 업로드·다운로드,
+ * File 도메인 Issue #85)도 인증만 요구하고, 파일별 소유권·접근 권한은 File 도메인이 판정한다.
  * 전공/기술스택 메타데이터 조회 등 다른
  * Domain은 아직 Spring Security와 연동되지 않아
  * ([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport] 참고)
@@ -71,6 +78,12 @@ class SecurityConfig(
                 authorize("/actuator/info", permitAll)
                 authorize("/api/v1/auth/session", authenticated)
                 authorize("/api/v1/auth/logout", authenticated)
+                // 개인 신청 양식(Form) 관리는 교사·개발자만 접근한다(Application Epic #75, Issue #76).
+                // 소유자 본인 검증(다른 교사의 양식 차단)은 Role만으로 알 수 없어 FormService가
+                // 별도로 수행한다. 더 구체적인 경로를 먼저 선언해야 아래 /api/v1/me/** 규칙에
+                // 가려지지 않는다.
+                authorize("/api/v1/me/forms", hasAnyRole("TEACHER", "DEVELOPER"))
+                authorize("/api/v1/me/forms/**", hasAnyRole("TEACHER", "DEVELOPER"))
                 authorize("/api/v1/me/**", authenticated)
                 authorize("/api/v1/members", authenticated)
                 authorize("/api/v1/members/**", authenticated)
@@ -99,6 +112,36 @@ class SecurityConfig(
                 authorize("/api/v1/jobs/**", authenticated)
                 // 공개 공고 출처 목록(JobSourceController)도 인증된 사용자 모두 접근할 수 있다(Issue #62).
                 authorize("/api/v1/job-sources", authenticated)
+                // 지원서 초안 조회·임시저장은 인증만 요구한다(소유자 본인 검증은 Role로 알 수
+                // 없어 JobApplicationService가 별도로 수행한다, Application Epic #75 Issue #78).
+                authorize("/api/v1/job-applications", authenticated)
+                authorize("/api/v1/job-applications/**", authenticated)
+                // 프로그램 관리(등록·수정·상태 변경)는 교사와 개발자가 사용한다(Program 도메인
+                // 전체 개발 요구사항 3절). 등록자·담당 교사 본인만 수정할 수 있는지는 Role만으로
+                // 알 수 없어 ProgramService가 별도로 수행한다. 더 구체적인 admin 경로를 먼저
+                // 선언해야 아래 조회 규칙에 가려지지 않는다.
+                authorize("/api/v1/admin/programs", hasAnyRole("TEACHER", "DEVELOPER"))
+                authorize("/api/v1/admin/programs/**", hasAnyRole("TEACHER", "DEVELOPER"))
+                // 프로그램 신청·취소(원본 요구사항 문서 11절 권한: STUDENT)는 Role 자체가
+                // 학생으로 고정되므로 여기서 STUDENT Role을 요구한다. 재학 여부(NOT_ENROLLED)는
+                // Role이 아닌 학적 상태라 이것과 별개로 ProgramService가 추가로 판단한다. 더
+                // 구체적인 경로를 먼저 선언해야 아래 조회 규칙에 가려지지 않는다.
+                authorize(HttpMethod.POST, "/api/v1/programs/*/application-actions", hasRole("STUDENT"))
+                // 프로그램 목록·상세 조회는 학생·교사·개발자 모두 접근할 수 있으므로 인증만
+                // 요구한다.
+                authorize("/api/v1/programs", authenticated)
+                authorize("/api/v1/programs/**", authenticated)
+                // 인앱 알림은 항상 요청자 본인의 알림만 다루므로 Role 구분 없이 인증만 요구한다
+                // (Notification Core, docs/Notification/notification-core-plan.md). 본인 소유
+                // 검증은 Role로 알 수 없어 NotificationService가 별도로 수행한다.
+                authorize("/api/v1/notifications", authenticated)
+                authorize("/api/v1/notifications/**", authenticated)
+                // 파일 업로드·다운로드는 학생·교사·개발자가 모두 사용하므로 Role을 구분하지 않고
+                // 인증만 요구한다(File 도메인 요구사항 §5/§15). 로그인만으로 모든 파일을 받을 수
+                // 있다는 뜻은 아니다 -- 파일별 소유권과 대상 리소스 접근 권한은 Role로 알 수 없어
+                // File 도메인의 Service 계층이 별도로 판정한다(§16).
+                authorize("/api/v1/files", authenticated)
+                authorize("/api/v1/files/**", authenticated)
                 authorize(anyRequest, permitAll)
             }
             exceptionHandling {

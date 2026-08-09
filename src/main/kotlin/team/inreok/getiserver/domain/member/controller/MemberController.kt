@@ -57,7 +57,7 @@ class MemberController(
         @Parameter(description = "조회할 학생의 회원 ID", example = "1") @PathVariable memberId: Long,
     ): ApiResponse<MemberProfileResponse> {
         requireStudentRequester(authentication)
-        return ApiResponse.of(memberService.getProfile(memberId))
+        return ApiResponse.of(memberService.getProfile(memberId, authentication.principal as Long))
     }
 
     @Operation(
@@ -76,6 +76,7 @@ class MemberController(
     )
     @GetMapping
     fun searchMembers(
+        authentication: Authentication,
         @Parameter(description = "검색할 학생 이름(부분 일치, 필수)", example = "홍길동")
         @RequestParam(required = false)
         name: String?,
@@ -98,7 +99,16 @@ class MemberController(
         pageable: Pageable,
     ): ApiResponse<MemberSearchResponse> =
         ApiResponse.of(
-            memberSearchService.search(name, academicStatus, cohort, department, majorId, techStackId, pageable),
+            memberSearchService.search(
+                authentication.principal as Long,
+                name,
+                academicStatus,
+                cohort,
+                department,
+                majorId,
+                techStackId,
+                pageable,
+            ),
         )
 
     // Access Token의 roles Claim(JwtAuthenticationFilter가 ROLE_ 접두어를 붙여 채운 authorities)에

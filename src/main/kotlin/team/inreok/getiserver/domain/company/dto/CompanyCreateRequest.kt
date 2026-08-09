@@ -52,4 +52,12 @@ data class CompanyCreateRequest(
     val mouStartDate: LocalDate? = null,
     @param:Schema(description = "MOU 협약 종료일", example = "2027-02-28", nullable = true)
     val mouEndDate: LocalDate? = null,
+    @param:Schema(
+        description =
+            "로고 파일 ID. `POST /api/v1/files`에 purpose=COMPANY_LOGO로 업로드해 받은 값이다. " +
+                "본인이 업로드한 파일만 연결할 수 있다.",
+        example = "43",
+        nullable = true,
+    )
+    val logoFileId: Long? = null,
 )

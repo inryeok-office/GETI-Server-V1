@@ -18,6 +18,7 @@ import org.testcontainers.utility.DockerImageName
 import team.inreok.getiserver.domain.ai.entity.JobAiAnalysis
 import team.inreok.getiserver.domain.ai.repository.JobAiAnalysisRepository
 import team.inreok.getiserver.domain.application.entity.JobApplication
+import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.audit.entity.AuditLog
 import team.inreok.getiserver.domain.audit.repository.AuditLogRepository
@@ -30,6 +31,8 @@ import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.company.entity.type.MouStatus
 import team.inreok.getiserver.domain.company.repository.CompanyRepository
 import team.inreok.getiserver.domain.file.entity.StoredFile
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.entity.type.FilePurpose
 import team.inreok.getiserver.domain.file.repository.StoredFileRepository
 import team.inreok.getiserver.domain.inquiry.entity.Inquiry
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryType
@@ -48,6 +51,7 @@ import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.member.repository.MemberRoleRepository
 import team.inreok.getiserver.domain.notification.entity.Notification
+import team.inreok.getiserver.domain.notification.entity.type.NotificationType
 import team.inreok.getiserver.domain.notification.repository.NotificationRepository
 import team.inreok.getiserver.domain.operation.entity.AsyncOperation
 import team.inreok.getiserver.domain.operation.entity.type.OperationType
@@ -106,7 +110,7 @@ class CoreDomainSchemaIntegrationTest
         private val auditLogRepository: AuditLogRepository,
     ) {
         @Test
-        fun `Flyway로 생성한 Schema에는 정확히 29개의 비즈니스 Table이 있다`() {
+        fun `Flyway로 생성한 Schema에는 정확히 33개의 비즈니스 Table이 있다`() {
             // persistence_probe는 integrationTest 전용 기술 검증 Table(V1__create_persistence_probe.sql)이며
             // GETI 비즈니스 Domain을 나타내지 않으므로 집계에서 제외한다. 최소 19개 Table ERD 기준
             // (docs/architecture/erd.md) 이후 Member 도메인 전공/기술 스택 정규화를 위해
@@ -115,7 +119,11 @@ class CoreDomainSchemaIntegrationTest
             // collection_run_errors 3개 Table을 추가해 26개가 되었으며, Issue #62 확장 범위(Discord
             // 신규 공고 알림)를 위해 job_notification_deliveries 1개 Table을 추가해 27개가 되었다.
             // Search 도메인(Issue #69)의 색인 실패 재처리·재색인 실행 이력을 위해 search_index_failures,
-            // search_reindex_runs 2개 Table을 추가해 29개가 되었다.
+            // search_reindex_runs 2개 Table을 추가해 29개가 되었고, Application 도메인 개인 신청
+            // 양식(Epic #75, Issue #76)을 위해 forms, form_versions 2개 Table을 추가해 31개가 되었으며,
+            // Application Phase 2(Issue #78) 공고-양식 연결을 위해 job_application_forms 1개
+            // Table을 추가해 32개가 되었다. Program 도메인 Phase 1(등록·수정·상태 관리)을 위해
+            // program_target_grades 1개 Table을 추가해 33개가 되었다(V14 Migration).
             @Suppress("UNCHECKED_CAST")
             val tableCount =
                 entityManager
@@ -128,7 +136,7 @@ class CoreDomainSchemaIntegrationTest
                         """.trimIndent(),
                     ).singleResult as Number
 
-            assertThat(tableCount.toInt()).isEqualTo(29)
+            assertThat(tableCount.toInt()).isEqualTo(33)
         }
 
         @Test
@@ -244,13 +252,18 @@ class CoreDomainSchemaIntegrationTest
             val file =
                 fileRepository.saveAndFlush(
                     StoredFile(
-                        ownerType = "PORTFOLIO_SUBMISSION",
-                        ownerId = 1L,
-                        objectKey = "portfolio/1/file.pdf",
+                        purpose = FilePurpose.PORTFOLIO,
+                        objectKey = "PORTFOLIO/2026/08/portfolio-file",
                         originalName = "file.pdf",
                         contentType = "application/pdf",
                         sizeBytes = 1024L,
-                    ).apply { uploaderMemberId = member.id },
+                        uploaderMemberId = member.id,
+                    ).apply {
+                        // V17의 ck_files_link_state가 "연결된 파일만 owner_*를 가진다"를 강제하므로
+                        // 업로드 완료 -> 연결 순서를 그대로 거친다.
+                        markUploaded()
+                        linkTo(FileOwnerType.PORTFOLIO_SUBMISSION, 1L, LocalDateTime.now())
+                    },
                 )
 
             memberRepository.delete(member)
@@ -261,7 +274,7 @@ class CoreDomainSchemaIntegrationTest
 
             val found = fileRepository.findById(file.id!!).orElseThrow()
             assertThat(found.uploaderMemberId).isNull()
-            assertThat(found.ownerType).isEqualTo("PORTFOLIO_SUBMISSION")
+            assertThat(found.ownerType).isEqualTo(FileOwnerType.PORTFOLIO_SUBMISSION)
         }
 
         @Test
@@ -269,9 +282,8 @@ class CoreDomainSchemaIntegrationTest
             assertThatThrownBy {
                 fileRepository.saveAndFlush(
                     StoredFile(
-                        ownerType = "JOB",
-                        ownerId = 1L,
-                        objectKey = "invalid.pdf",
+                        purpose = FilePurpose.JOB_ATTACHMENT,
+                        objectKey = "JOB_ATTACHMENT/2026/08/invalid",
                         originalName = "invalid.pdf",
                         contentType = "application/pdf",
                         sizeBytes = -1L,
@@ -389,7 +401,12 @@ class CoreDomainSchemaIntegrationTest
             val company = persistCompany()
             val job = jobRepository.saveAndFlush(newJob(company.id!!))
 
-            jobApplicationRepository.saveAndFlush(newJobApplication(job.id!!, member.id!!, 1))
+            // uk_job_applications_active_singleton(V13 Migration, PR #79 Review 반영)이 같은
+            // (job_id, applicant_member_id) 조합에 활성 Row를 최대 1건으로 강제하므로, 재지원
+            // 시나리오와 동일하게 이전 attempt를 WITHDRAWN으로 만든 뒤 다음 attempt를 저장한다.
+            jobApplicationRepository.saveAndFlush(
+                newJobApplication(job.id!!, member.id!!, 1).apply { status = JobApplicationStatus.WITHDRAWN },
+            )
             jobApplicationRepository.saveAndFlush(newJobApplication(job.id!!, member.id!!, 2))
             val found =
                 jobApplicationRepository.findByJobIdAndApplicantMemberIdAndAttemptNumber(
@@ -456,10 +473,12 @@ class CoreDomainSchemaIntegrationTest
             val member = persistMember("misc-subject")
             val file =
                 fileRepository.saveAndFlush(
+                    // 서버가 생성하는 Export 결과물에는 아직 전용 FilePurpose가 없다(일괄 다운로드,
+                    // Phase 6 범위). 이 Test는 async_operations.result_file_id FK 경로만 확인하므로
+                    // 유효한 Purpose 하나를 골라 쓰고 연결은 하지 않는다.
                     StoredFile(
-                        ownerType = "ASYNC_OPERATION_RESULT",
-                        ownerId = 1L,
-                        objectKey = "export/1/result.csv",
+                        purpose = FilePurpose.JOB_APPLICATION,
+                        objectKey = "JOB_APPLICATION/2026/08/export-result",
                         originalName = "result.csv",
                         contentType = "text/csv",
                         sizeBytes = 2048L,
@@ -470,7 +489,7 @@ class CoreDomainSchemaIntegrationTest
                 notificationRepository.saveAndFlush(
                     Notification(
                         recipientMemberId = member.id!!,
-                        type = "JOB_APPLICATION_APPROVED",
+                        type = NotificationType.JOB_APPLICATION_STATUS_CHANGED,
                         title = "지원이 승인되었습니다",
                         content = "지원하신 공고가 승인되었습니다.",
                     ),
@@ -536,9 +555,10 @@ class CoreDomainSchemaIntegrationTest
 
         @Test
         fun `다형적 참조 Column(files, notifications, async_operations, audit_logs)에는 물리 FK가 없다`() {
-            // files.owner_id, notifications.resource_id, async_operations.target_id, audit_logs.target_id는
-            // owner_type/resource_type/target_type과 함께 쓰이는 논리적 참조이며, 특정 Table을 가리키는
+            // files.owner_id, notifications.target_id, async_operations.target_id, audit_logs.target_id는
+            // owner_type/target_type과 함께 쓰이는 논리적 참조이며, 특정 Table을 가리키는
             // 물리 FK 제약을 만들지 않는다(docs/architecture/erd.md의 "다형적 참조" 참고).
+            // notifications는 V16에서 resource_type/resource_id -> target_type/target_id로 바뀌었다.
             @Suppress("UNCHECKED_CAST")
             val polymorphicForeignKeyCount =
                 entityManager
@@ -552,7 +572,7 @@ class CoreDomainSchemaIntegrationTest
                         WHERE tc.constraint_type = 'FOREIGN KEY'
                           AND (
                             (kcu.table_name = 'files' AND kcu.column_name = 'owner_id')
-                            OR (kcu.table_name = 'notifications' AND kcu.column_name = 'resource_id')
+                            OR (kcu.table_name = 'notifications' AND kcu.column_name = 'target_id')
                             OR (kcu.table_name = 'async_operations' AND kcu.column_name = 'target_id')
                             OR (kcu.table_name = 'audit_logs' AND kcu.column_name = 'target_id')
                           )

@@ -13,6 +13,7 @@ import team.inreok.getiserver.domain.member.exception.MemberProfileNotFoundExcep
 import team.inreok.getiserver.domain.member.exception.MemberProfileValidationException
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.member.repository.MemberRoleRepository
+import team.inreok.getiserver.domain.member.service.MemberProfileImageService
 import team.inreok.getiserver.domain.member.service.MemberSelectionQueryService
 import team.inreok.getiserver.domain.member.service.MemberService
 import tools.jackson.databind.JsonNode
@@ -23,16 +24,20 @@ class MemberServiceImpl(
     private val memberRepository: MemberRepository,
     private val memberRoleRepository: MemberRoleRepository,
     private val memberSelectionQueryService: MemberSelectionQueryService,
+    private val memberProfileImageService: MemberProfileImageService,
     private val objectMapper: ObjectMapper,
 ) : MemberService {
     @Transactional(readOnly = true)
-    override fun getProfile(memberId: Long): MemberProfileResponse {
+    override fun getProfile(
+        memberId: Long,
+        requesterId: Long,
+    ): MemberProfileResponse {
         val member = memberRepository.findById(memberId).orElseThrow { MemberNotFoundException(memberId) }
         // 이 API는 학생 프로필 조회 용도이므로, 조회 대상이 STUDENT Role이 아니면(교사/개발자 등)
         // 해당 프로필이 존재하지 않는 것과 동일하게 처리한다(코드 리뷰 Major 반영).
         val roles = memberRoleRepository.findAllByIdMemberId(memberId).map { it.id.role }
         if (RoleType.STUDENT !in roles) throw MemberNotFoundException(memberId)
-        return toProfileResponse(member)
+        return toProfileResponse(member, requesterId)
     }
 
     @Transactional(readOnly = true)
@@ -49,7 +54,7 @@ class MemberServiceImpl(
             cohort = member.cohort,
             department = member.department,
             phone = member.phoneNumber,
-            profileImageUrl = null,
+            profileImageUrl = memberProfileImageService.urlOf(member.profileImageFileId, requesterId = memberId),
             desiredJob = readStringList(member.desiredPositions).firstOrNull(),
             bio = member.introduction,
             githubUrl = member.githubUrl,
@@ -74,6 +79,7 @@ class MemberServiceImpl(
         if (body.has("githubUrl")) member.githubUrl = readNullableText(body, "githubUrl", maxLength = 500)
         applyDesiredJob(member, body)
         applyIsPublic(member, body)
+        memberProfileImageService.applyChange(member, body)
         // @UpdateTimestamp는 Flush 시점에 Entity의 updatedAt 값을 갱신한다. 명시적으로 Flush하지
         // 않으면 응답의 updatedAt이 이번 수정 이전 값일 수 있어(코드 리뷰 Major 반영), 응답을
         // 만들기 전에 강제로 Flush해 실제 갱신된 값을 반환한다.
@@ -86,12 +92,13 @@ class MemberServiceImpl(
         if (unknown.isNotEmpty()) {
             throw MemberProfileValidationException("알 수 없는 요청 Field입니다: ${unknown.joinToString()}")
         }
-        // profileImageUrl은 요청/응답 모두 명세에 있지만, 현재 Schema는 File 업로드 결과인
-        // profile_image_file_id(Long)만 가지고 있어 문자열 URL을 저장할 Column이 없다. File
-        // Domain 연동 전까지는 조용히 무시하지 않고 명확히 거부한다(코드 리뷰 Major 반영).
+        // profileImageUrl은 Notion API 명세에 요청 Field로 남아 있지만 서버가 받는 것은 문자열
+        // URL이 아니라 File 업로드 결과인 profileImageFileId다(Issue #86 CONTRACT_MISMATCH,
+        // Notion 갱신 필요). 조용히 무시하면 이미지가 저장된 줄 알게 되므로 명확히 거부하고
+        // 대체 Field를 알려준다.
         if (body.has("profileImageUrl")) {
             throw MemberProfileValidationException(
-                "profileImageUrl은 아직 지원하지 않습니다. File 업로드 API 연동 이후 다시 시도해주세요.",
+                "profileImageUrl은 지원하지 않습니다. 파일 업로드 API로 받은 profileImageFileId를 보내주세요.",
             )
         }
     }
@@ -147,7 +154,10 @@ class MemberServiceImpl(
         }
     }
 
-    private fun toProfileResponse(member: Member): MemberProfileResponse {
+    private fun toProfileResponse(
+        member: Member,
+        requesterId: Long,
+    ): MemberProfileResponse {
         val memberId = requireNotNull(member.id) { "저장된 Member는 id를 가져야 합니다." }
         val isPublic = member.profilePublic
         // isPublic=false인 비공개 프로필은 profileRestricted=true만 표시하고, 전공/기술 스택/희망
@@ -155,7 +165,7 @@ class MemberServiceImpl(
         return MemberProfileResponse(
             memberId = memberId,
             name = member.name.orEmpty(),
-            profileImageUrl = null,
+            profileImageUrl = memberProfileImageService.urlOf(member.profileImageFileId, requesterId),
             cohort = member.cohort,
             department = member.department,
             majors = if (isPublic) memberSelectionQueryService.getMajorNames(memberId) else emptyList(),
@@ -177,7 +187,12 @@ class MemberServiceImpl(
             bio = member.introduction,
             githubUrl = member.githubUrl,
             isPublic = member.profilePublic,
-            profileImageUrl = null,
+            // 수정 응답은 항상 본인 요청이므로 비공개 여부와 무관하게 URL이 나간다.
+            profileImageUrl =
+                memberProfileImageService.urlOf(
+                    member.profileImageFileId,
+                    requireNotNull(member.id) { "저장된 Member는 id를 가져야 합니다." },
+                ),
             updatedAt = requireNotNull(member.updatedAt) { "저장된 Member는 updatedAt을 가져야 합니다." },
         )
 
@@ -188,7 +203,17 @@ class MemberServiceImpl(
 
     companion object {
         private val ALLOWED_PROFILE_UPDATE_FIELDS =
-            setOf("department", "phone", "desiredJob", "bio", "githubUrl", "isPublic", "profileImageUrl")
+            setOf(
+                "department",
+                "phone",
+                "desiredJob",
+                "bio",
+                "githubUrl",
+                "isPublic",
+                "profileImageFileId",
+                // 지원하지 않지만 "알 수 없는 Field"가 아니라 전용 안내로 거부하기 위해 남겨 둔다.
+                "profileImageUrl",
+            )
     }
 }
 

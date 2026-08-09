@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.data.domain.Pageable
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
@@ -47,6 +48,7 @@ class CompanyController(
     )
     @GetMapping
     fun searchCompanies(
+        authentication: Authentication,
         @Parameter(description = "기업명 검색어(부분 일치, 선택). 생략하면 전체 조회", example = "인력")
         @RequestParam(required = false)
         query: String?,
@@ -62,14 +64,24 @@ class CompanyController(
         @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20, 최대 100)")
         pageable: Pageable,
     ): ApiResponse<CompanySearchResponse> =
-        ApiResponse.of(companyService.search(query, companyType, mouStatus, sourceName, pageable))
+        ApiResponse.of(
+            companyService.search(
+                authentication.principal as Long,
+                query,
+                companyType,
+                mouStatus,
+                sourceName,
+                pageable,
+            ),
+        )
 
     @Operation(
         summary = "기업 상세 조회",
         description = """
             companyId로 지정한 기업의 상세 정보를 조회한다. 삭제된 기업은 404로 처리한다.
-            `logoUrl`은 File 도메인 연동 전이라 항상 null이다. 연결된 공개 공고 목록은 Job 도메인
-            구현 후 별도 작업에서 추가된다.
+            `logoUrl`은 로고가 등록되어 있으면 브라우저가 바로 표시할 수 있는 짧은 유효기간의
+            서명된 URL이고, 없으면 null이다. 연결된 공개 공고 목록은 Job 도메인 구현 후 별도
+            작업에서 추가된다.
         """,
     )
     @ApiResponses(
@@ -80,6 +92,7 @@ class CompanyController(
     )
     @GetMapping("/{companyId}")
     fun getCompany(
+        authentication: Authentication,
         @Parameter(description = "조회할 기업 ID", example = "1") @PathVariable companyId: Long,
-    ): ApiResponse<CompanyResponse> = ApiResponse.of(companyService.get(companyId))
+    ): ApiResponse<CompanyResponse> = ApiResponse.of(companyService.get(companyId, authentication.principal as Long))
 }
