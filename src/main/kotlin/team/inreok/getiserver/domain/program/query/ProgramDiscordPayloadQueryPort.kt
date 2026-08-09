@@ -37,4 +37,13 @@ data class ProgramDiscordPayloadSnapshot(
     val bodyMarkdown: String?,
     val eventStartedAt: LocalDateTime?,
     val eventEndedAt: LocalDateTime?,
+    /** `Program.discordChannelId`(원시 Snowflake, 클라이언트가 등록 시 지정한 값). */
+    val discordChannelId: String?,
+    /** Mention Role 계산에 쓰는 대상 학년 목록. `program_target_grades` Table을 조회한 값이다. */
+    val targetGrades: List<Int>,
+    /**
+     * `discord-delivery-plan.md` §6.3의 UPDATE Idempotency Key를 만드는 데 쓴다. 저장된 Program은
+     * `@UpdateTimestamp`가 항상 채우므로 non-null이다.
+     */
+    val updatedAt: LocalDateTime,
 )

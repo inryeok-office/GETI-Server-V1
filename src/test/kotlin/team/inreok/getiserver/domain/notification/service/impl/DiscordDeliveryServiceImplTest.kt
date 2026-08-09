@@ -491,6 +491,9 @@ class DiscordDeliveryServiceImplTest {
                         bodyMarkdown = null,
                         eventStartedAt = LocalDateTime.of(2026, 8, 20, 9, 0),
                         eventEndedAt = null,
+                        discordChannelId = "channel-1",
+                        targetGrades = emptyList(),
+                        updatedAt = LocalDateTime.of(2026, 8, 20, 9, 0),
                     )
                 } else {
                     null

@@ -53,6 +53,7 @@ import team.inreok.getiserver.domain.program.repository.ProgramApplicationReposi
 import team.inreok.getiserver.domain.program.repository.ProgramRepository
 import team.inreok.getiserver.domain.program.repository.ProgramTargetGradeRepository
 import team.inreok.getiserver.domain.program.service.ProgramService
+import team.inreok.getiserver.global.discord.DiscordChannelResolver
 import tools.jackson.databind.json.JsonMapper
 import java.time.LocalDateTime
 import java.util.Optional
@@ -75,7 +76,15 @@ class ProgramServiceImplTest {
     @Mock
     private lateinit var memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort
 
+    @Mock
+    private lateinit var eventPublisher: org.springframework.context.ApplicationEventPublisher
+
+    @Mock
+    private lateinit var discordChannelResolver: DiscordChannelResolver
+
     private val service: ProgramService by lazy {
+        // create() Test 대부분이 publishableRequest()의 기본 채널("channel-1")을 그대로 쓴다.
+        given(discordChannelResolver.isAllowedProgramChannelId("channel-1")).willReturn(true)
         ProgramServiceImpl(
             programRepository,
             programTargetGradeRepository,
@@ -83,6 +92,8 @@ class ProgramServiceImplTest {
             programFormLinkQueryPort,
             memberApplicantSnapshotQueryPort,
             JsonMapper(),
+            eventPublisher,
+            discordChannelResolver,
         )
     }
 
