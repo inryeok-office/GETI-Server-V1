@@ -10,10 +10,14 @@ import org.springframework.modulith.NamedInterface
  * [ownerType]과의 관계: `purpose`는 업로드 시점에 정해지는 불변 정책 키이고 `ownerType`은 연결
  * 이후에 채워지는 가변 상태다. 값이 1:1로 대응하지만 역할이 다르므로 Column을 함께 둔다.
  *
- * 지시서 §4의 후보 6개에 `PROFILE_IMAGE`/`COMPANY_LOGO`를 더한 8개다. 뒤 둘은
+ * 지시서 §4의 후보 6개에 `PROFILE_IMAGE`/`COMPANY_LOGO`를 더한 8개로 시작했다. 뒤 둘은
  * `members.profile_image_file_id`/`companies.logo_file_id` FK가 V2부터 이미 존재해 추측이
  * 아니다. `async_operations.result_file_id`에 대응하는 목적(서버가 생성하는 ZIP 결과물)은 이
  * 업로드 API를 경유하지 않으므로 여기에 넣지 않는다 -- 일괄 다운로드(Phase 6)에서 추가한다.
+ *
+ * [INQUIRY_ANSWER_ATTACHMENT]는 Inquiry 도메인 개발 시점에 추가했다(GETI Inquiry 도메인 개발
+ * 요구사항 45절, 사용자 확인 완료) -- 문의 답변에 달리는 첨부파일은 문의 본문 첨부([INQUIRY_ATTACHMENT])와
+ * 같은 `owner_id`(문의 ID)를 공유할 수 없어(여러 답변의 첨부가 서로 섞인다) 별도 목적으로 분리했다.
  *
  * 다른 Domain이 [team.inreok.getiserver.domain.file.link.FileLinkPort]를 호출할 때 넘기므로
  * Named Interface로 공개한다.
@@ -29,5 +33,6 @@ enum class FilePurpose(
     JOB_APPLICATION(FileOwnerType.JOB_APPLICATION),
     PROGRAM_APPLICATION(FileOwnerType.PROGRAM_APPLICATION),
     INQUIRY_ATTACHMENT(FileOwnerType.INQUIRY),
+    INQUIRY_ANSWER_ATTACHMENT(FileOwnerType.INQUIRY_ANSWER),
     PORTFOLIO(FileOwnerType.PORTFOLIO_SUBMISSION),
 }

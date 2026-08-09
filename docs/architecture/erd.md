@@ -30,7 +30,7 @@ MinIO 업로드, Discord 전송, Elasticsearch 색인, 비동기 Worker
 | `program` | `programs`, `program_applications` | 취업 프로그램과 신청 |
 | `portfolio` | `portfolio_requests`, `portfolio_submissions` | 포트폴리오 제출 요청과 제출 |
 | `notification` | `notifications` | 인앱 알림 |
-| `inquiry` | `inquiries` | 문의와 Discord 전달 결과 |
+| `inquiry` | `inquiries`, `inquiry_answers` | 문의와 답변(1:N, V18) |
 | `collector` | `job_collection_runs` | 공고 수집 실행 이력(아래 "collector가 operation의 Enum을 재사용하는 이유" 참고) |
 | `operation` | `async_operations` | 비동기 작업 |
 | `audit` | `audit_logs` | 감사 로그 |
@@ -96,7 +96,7 @@ OR
 Migration 파일 상단 주석과 `V2__create_core_domain_schema.sql`의 각 `ON DELETE` 절이 최종 근거다. 원칙은 다음과 같다.
 
 - 같은 Aggregate에 강하게 종속된 자식/연결 Row(`member_roles`, `refresh_tokens`, `member_job_preferences`, `job_ai_analyses`, `recommendations`, `notifications`)는 부모가 사라지면 의미를 잃으므로 `ON DELETE CASCADE`.
-- 작성자/업로더/승인자처럼 이력의 주체가 아닌 Nullable 참조는 `ON DELETE SET NULL`로 레코드 자체를 보존한다(`files.uploader_member_id`, `members.profile_image_file_id`, `companies.logo_file_id`, `jobs.created_by_member_id`/`manager_member_id`, `inquiries.answered_by_member_id`, `async_operations.*`, `audit_logs.actor_member_id`).
+- 작성자/업로더/승인자처럼 이력의 주체가 아닌 Nullable 참조는 `ON DELETE SET NULL`로 레코드 자체를 보존한다(`files.uploader_member_id`, `members.profile_image_file_id`, `companies.logo_file_id`, `jobs.created_by_member_id`/`manager_member_id`, `inquiries.assignee_member_id`, `async_operations.*`, `audit_logs.actor_member_id`).
 - 지원/신청/제출/문의처럼 보존해야 하는 이력이면서 NOT NULL FK인 관계는 명시적 `ON DELETE`를 선언하지 않는다(PostgreSQL 기본값 `NO ACTION`). 참조가 남아있는 상위 Row(공고, 회원, 프로그램, 포트폴리오 요청)를 실수로 삭제해 이력이 함께 사라지는 것을 막는다.
 
 ## 확정하지 않고 남겨둔 정책 (DECISION_REQUIRED)

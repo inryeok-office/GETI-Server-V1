@@ -23,7 +23,7 @@ app:
       path-style-access: true
       access-key: test-only-access-key
       secret-key: test-only-secret-key
-    # FilePolicyProperties가 FilePurpose 8개 전부에 정책이 있어야 기동하므로 모두 선언한다.
+    # FilePolicyProperties가 FilePurpose 9개 전부에 정책이 있어야 기동하므로 모두 선언한다.
     # 여기 값은 운영 기본값(src/main/resources/application.yaml)을 그대로 옮긴 것이 아니라
     # Binding만 통과시키는 최소값이다 — Context를 띄우는 Test(OpenApi, Health, Smoke)의 관심사가
     # 파일 정책이 아니기 때문이다. 정책 로직 자체는 FileUploadPolicy를 직접 만들어 검증한다.
@@ -39,4 +39,5 @@ app:
       JOB_APPLICATION: *test-file-policy
       PROGRAM_APPLICATION: *test-file-policy
       INQUIRY_ATTACHMENT: *test-file-policy
+      INQUIRY_ANSWER_ATTACHMENT: *test-file-policy
       PORTFOLIO: *test-file-policy

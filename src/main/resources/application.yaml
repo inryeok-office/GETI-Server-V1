@@ -78,6 +78,14 @@ app:
         mime-types: [image/png, image/jpeg, application/pdf]
         max-size-bytes: 5242880       # 5MB
         max-count: 3
+      # 문의 답변 첨부파일. 정확한 개수/용량이 명세에 확정되지 않아(GETI Inquiry 도메인 개발
+      # 요구사항 83절 4번, DECISION_REQUIRED) 문의 본문 첨부(INQUIRY_ATTACHMENT)와 같은 값을
+      # 임시로 적용했다.
+      INQUIRY_ANSWER_ATTACHMENT:
+        extensions: [png, jpg, jpeg, pdf]
+        mime-types: [image/png, image/jpeg, application/pdf]
+        max-size-bytes: 5242880       # 5MB
+        max-count: 3
       PORTFOLIO:
         extensions: [pdf, png, jpg, jpeg]
         mime-types: [application/pdf, image/png, image/jpeg]

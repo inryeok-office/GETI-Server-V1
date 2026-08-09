@@ -56,4 +56,17 @@ interface MemberRepository : JpaRepository<Member, Long> {
         @Param("techStackId") techStackId: Long?,
         pageable: Pageable,
     ): Page<Member>
+
+    // Role/상태를 가리지 않고 이름만으로 찾는다 -- 문의 작성자는 학생/교사/개발자 모두일 수
+    // 있다(InquiryAuthorSearchQueryPort 참고). :name은 호출 측이 LIKE Wildcard(%, _)를 이미
+    // 이스케이프해 전달한다.
+    @Query(
+        """
+        SELECT m.id FROM Member m
+        WHERE LOWER(m.name) LIKE LOWER(CONCAT('%', :name, '%')) ESCAPE '\'
+        """,
+    )
+    fun findIdsByNameContaining(
+        @Param("name") name: String,
+    ): List<Long>
 }
