@@ -48,9 +48,10 @@ class ProgramAdminController(
             검증한다. PUBLISHED로 등록하면 등록자가 단일 담당 교사로 지정된다.
 
             `formId`를 지정하면 본인 소유의 FormType=PROGRAM, FormStatus=ACTIVE 양식만 연결할 수
-            있다. 본문 첨부파일(fileIds)과 Discord 실제 게시는 이번 범위에 포함되지 않는다(File
-            도메인에 공개 Use Case가 아직 없고, Discord 연동은 별도 Phase). 응답의 `discordDelivery`는
-            항상 SKIPPED다.
+            있다. 본문 첨부파일(fileIds)은 이번 범위에 포함되지 않는다(File 도메인에 공개 Use
+            Case가 아직 없음). `discordChannelId`는 학교 Discord 서버의 허용 채널 중 하나여야
+            하며, 허용 목록에 없으면 즉시 거부된다. Discord 전달 상태는 이 응답에 포함되지 않고
+            `GET /api/v1/admin/programs/{programId}/discord`로 별도 조회한다.
         """,
     )
     @ApiResponses(
@@ -61,6 +62,7 @@ class ProgramAdminController(
                 "일정 역전(INVALID_PROGRAM_PERIOD), 잘못된 정원(INVALID_CAPACITY), " +
                     "대상 학년 값 오류(INVALID_TARGET_GRADE), 게시 시 대상 학년 누락(TARGET_GRADE_REQUIRED), " +
                     "게시 시 Discord 채널 누락(DISCORD_CHANNEL_REQUIRED), " +
+                    "허용되지 않은 Discord 채널(DISCORD_CHANNEL_NOT_ALLOWED), " +
                     "연결할 수 없는 양식(PROGRAM_FORM_NOT_LINKABLE), " +
                     "그 외 게시 필수값 누락(PROGRAM_VALIDATION_FAILED), 요청 값 형식 오류(VALIDATION_FAILED)",
         ),

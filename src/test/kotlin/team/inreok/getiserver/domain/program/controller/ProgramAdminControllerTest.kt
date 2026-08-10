@@ -21,7 +21,6 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import team.inreok.getiserver.domain.program.dto.DiscordDeliveryResult
 import team.inreok.getiserver.domain.program.dto.ProgramCreateRequest
 import team.inreok.getiserver.domain.program.dto.ProgramCreateResponse
 import team.inreok.getiserver.domain.program.dto.ProgramStatusUpdateRequest
@@ -89,7 +88,6 @@ class ProgramAdminControllerTest
                 firstComeServed = true,
                 manager = null,
                 status = ProgramStatus.DRAFT,
-                discordDelivery = DiscordDeliveryResult.SKIPPED_NOT_IMPLEMENTED,
                 createdAt = LocalDateTime.now(),
             )
 
@@ -101,7 +99,6 @@ class ProgramAdminControllerTest
                 remainingCapacity = 5,
                 vacancyNotificationCount = 0,
                 notificationCreated = false,
-                discordDelivery = DiscordDeliveryResult.SKIPPED_NOT_IMPLEMENTED,
                 updatedAt = LocalDateTime.now(),
             )
 
@@ -112,7 +109,6 @@ class ProgramAdminControllerTest
                 manager = null,
                 notificationCount = 0,
                 expiredVacancySubscriptionCount = 0,
-                discordDelivery = DiscordDeliveryResult.SKIPPED_NOT_IMPLEMENTED,
                 updatedAt = LocalDateTime.now(),
             )
 

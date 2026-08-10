@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.application.query.ProgramFormLinkQueryPort
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
-import team.inreok.getiserver.domain.program.dto.DiscordDeliveryResult
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionRequest
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionResponse
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationAnswer
@@ -133,7 +132,6 @@ class ProgramServiceImpl(
             firstComeServed = saved.firstComeServed,
             manager = saved.managerMemberId?.let { ProgramManagerSummary(it, memberName(it)) },
             status = saved.status,
-            discordDelivery = DiscordDeliveryResult.SKIPPED_NOT_IMPLEMENTED,
             createdAt = saved.createdAt,
         )
     }
@@ -242,7 +240,6 @@ class ProgramServiceImpl(
             // (허위 true 반환 금지, 원본 요구사항 문서 17절).
             vacancyNotificationCount = 0,
             notificationCreated = false,
-            discordDelivery = DiscordDeliveryResult.SKIPPED_NOT_IMPLEMENTED,
             updatedAt = program.updatedAt,
         )
     }
@@ -313,7 +310,6 @@ class ProgramServiceImpl(
             // Notification/빈자리 구독 기능(Phase 6)이 아직 없어 항상 0이다.
             notificationCount = 0,
             expiredVacancySubscriptionCount = 0,
-            discordDelivery = DiscordDeliveryResult.SKIPPED_NOT_IMPLEMENTED,
             updatedAt = program.updatedAt,
         )
     }
