@@ -10,6 +10,7 @@ import team.inreok.getiserver.domain.inquiry.query.InquiryDiscordPayloadQueryPor
 import team.inreok.getiserver.domain.job.query.JobDiscordPayloadQueryPort
 import team.inreok.getiserver.domain.notification.config.DiscordBotProperties
 import team.inreok.getiserver.domain.notification.dto.DiscordDeliveryEnqueueCommand
+import team.inreok.getiserver.domain.notification.dto.DiscordDeliveryStatusResponse
 import team.inreok.getiserver.domain.notification.entity.DiscordDelivery
 import team.inreok.getiserver.domain.notification.entity.DiscordDeliveryAttempt
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryAction
@@ -18,6 +19,7 @@ import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryAtt
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryStatus
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryTargetType
 import team.inreok.getiserver.domain.notification.exception.DiscordDeliveryNotFoundException
+import team.inreok.getiserver.domain.notification.exception.DiscordDeliveryNotFoundForTargetException
 import team.inreok.getiserver.domain.notification.exception.DiscordDeliveryNotRetryableException
 import team.inreok.getiserver.domain.notification.exception.DiscordDeliveryRetryLimitExceededException
 import team.inreok.getiserver.domain.notification.repository.DiscordDeliveryAttemptRepository
@@ -49,7 +51,14 @@ import java.util.UUID
  * 여러 인스턴스나 수동 재시도가 같은 Row를 동시에 집어도
  * [DiscordDeliveryRepository.claim]의 조건부 UPDATE가 하나만 통과시킨다. 분산 Lock Library를
  * 새로 도입하지 않는다(후속 요구사항 문서 §30).
+ *
+ * ## Suppress("TooManyFunctions")
+ *
+ * 생성·처리·조회·재시도를 한 Service가 담당해(Admin API 추가, Issue #97) Public Method 6개 +
+ * Private Helper가 detekt 기본 TooManyFunctions 임계값(11)을 넘는다. `ProgramServiceImpl`·
+ * `InquiryServiceImpl`이 같은 이유로 이미 Suppress한 전례를 따른다.
  */
+@Suppress("TooManyFunctions")
 @Service
 class DiscordDeliveryServiceImpl(
     private val deliveryRepository: DiscordDeliveryRepository,
@@ -154,6 +163,47 @@ class DiscordDeliveryServiceImpl(
             delivery.manualRetryCount,
         )
     }
+
+    @Transactional(readOnly = true)
+    override fun findStatus(
+        targetType: DiscordDeliveryTargetType,
+        targetId: Long,
+    ): DiscordDeliveryStatusResponse {
+        val delivery =
+            deliveryRepository.findFirstByTargetTypeAndTargetIdOrderByIdDesc(targetType, targetId)
+                ?: throw DiscordDeliveryNotFoundForTargetException(targetType, targetId)
+        return delivery.toStatusResponse()
+    }
+
+    @Transactional
+    override fun retryManuallyForTarget(
+        targetType: DiscordDeliveryTargetType,
+        targetId: Long,
+    ): DiscordDeliveryStatusResponse {
+        val delivery =
+            deliveryRepository.findFirstByTargetTypeAndTargetIdOrderByIdDesc(targetType, targetId)
+                ?: throw DiscordDeliveryNotFoundForTargetException(targetType, targetId)
+        retryManually(requireNotNull(delivery.id))
+        return findStatus(targetType, targetId)
+    }
+
+    private fun DiscordDelivery.toStatusResponse() =
+        DiscordDeliveryStatusResponse(
+            targetType = targetType,
+            targetId = targetId,
+            channelId = channelId,
+            messageId = discordMessageId,
+            status = status,
+            automaticRetryCount = automaticRetryCount,
+            manualRetryCount = manualRetryCount,
+            maxAutomaticRetryCount = properties.maxAutomaticRetryCount,
+            maxManualRetryCount = properties.maxManualRetryCount,
+            canRetry = status == DiscordDeliveryStatus.FAILED && retryPolicy.canRetryManually(manualRetryCount),
+            failureCode = lastErrorCode,
+            failureReason = lastErrorMessage,
+            requestedAt = requireNotNull(createdAt) { "저장된 DiscordDelivery는 createdAt을 가져야 합니다." },
+            lastSyncedAt = lastAttemptAt,
+        )
 
     private fun recoverStaleProcessing(now: LocalDateTime) {
         val recovered =
