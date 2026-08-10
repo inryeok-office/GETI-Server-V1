@@ -56,9 +56,9 @@ class InquiryAdminController(
             (서로 다른 개발자를 가리키면 결과가 항상 빈 목록이 된다). 기본 page=0, size=20이며
             최대 size=100이다. 정렬은 최신 등록순으로 고정된다.
 
-            Discord 접수 알림 상태(`discordStatus`)로 필터링하는 기능은 Notification 실연동
-            (Phase 5) 이후에 추가한다 -- 지금은 모든 문의의 상태가 PENDING 고정값이라 필터링이
-            의미가 없다.
+            Discord 접수 알림 상태(`discordStatus`)로 필터링하는 기능은 이번 범위에 포함되지
+            않는다. Discord 전달 상태는 이 목록에 포함되지 않고
+            `GET /api/v1/admin/inquiries/{inquiryId}/discord`로 개별 조회한다.
         """,
     )
     @ApiResponses(

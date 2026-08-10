@@ -46,19 +46,6 @@ class Inquiry(
     @Column(name = "assignee_member_id")
     var assigneeMemberId: Long? = null
 
-    // Discord 접수 알림 관련 필드다. 공통 Discord Delivery 계약(discord_deliveries 테이블,
-    // PENDING/PROCESSING/DELIVERED/FAILED)이 아직 저장소에 없어(V18 시점 실측, Phase 5 재확인) 당장
-    // 대체할 곳이 없다. Program 도메인이 Phase 7 교체 예정으로 남긴 경고와 동일한 방식으로 유지만
-    // 하고, 신규 Inquiry 로직(Discord 상태 조회는 InquiryDiscordDeliveryQueryPort 사용, Phase 5)에서는
-    // 읽거나 쓰지 않는다.
-    @Deprecated("공통 Discord Delivery 계약으로 교체 예정. 신규 로직에서 사용하지 않는다.")
-    @Column(name = "discord_message_id", length = 255)
-    var discordMessageId: String? = null
-
-    @Deprecated("공통 Discord Delivery 계약으로 교체 예정. 신규 로직에서 사용하지 않는다.")
-    @Column(name = "discord_error_message", columnDefinition = "text")
-    var discordErrorMessage: String? = null
-
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     var createdAt: LocalDateTime? = null
