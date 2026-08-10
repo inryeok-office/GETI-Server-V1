@@ -44,15 +44,31 @@ data class JobSummaryResponse(
         /**
          * 검색 결과(Elasticsearch Document)를 그대로 응답으로 옮긴다. PostgreSQL을 다시 조회하지
          * 않는다(Issue #69 — Elasticsearch가 검색 전용 Read Model이라는 원칙, 완료 보고 참고).
+         *
+         * [logoUrls]는 `companyLogoFileId -> Presigned URL` Map이다(Issue #92). 목록 항목마다
+         * 단건 발급하면 N+1이 되므로, 호출 측(`JobSearchServiceImpl`)이 검색 결과 전체의
+         * `companyLogoFileId`를 모아 한 번에 발급한 배치 결과를 그대로 전달한다. Elasticsearch에는
+         * 만료되는 URL을 저장하지 않으므로(`JobSearchDocument.companyLogoFileId` 참고) URL은 이
+         * 변환 시점에만 존재한다.
          */
-        fun from(document: JobSearchDocument): JobSummaryResponse =
+        fun from(
+            document: JobSearchDocument,
+            logoUrls: Map<Long, String> = emptyMap(),
+        ): JobSummaryResponse =
             JobSummaryResponse(
                 jobId = document.jobId,
                 title = document.title,
                 postingType = PostingType.valueOf(document.postingType),
                 applicationMethod = ApplicationMethod.valueOf(document.applicationMethod),
                 status = JobStatus.valueOf(document.status),
-                company = document.companyName?.let { CompanySummary(companyId = document.companyId, name = it) },
+                company =
+                    document.companyName?.let {
+                        CompanySummary(
+                            companyId = document.companyId,
+                            name = it,
+                            logoUrl = document.companyLogoFileId?.let { fileId -> logoUrls[fileId] },
+                        )
+                    },
                 startDate = document.startDate,
                 endDate = document.endDate,
                 targetGrade = document.targetGrade,
