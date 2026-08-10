@@ -1,0 +1,109 @@
+package team.inreok.getiserver.domain.inquiry
+
+import com.redis.testcontainers.RedisContainer
+import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers.any
+import org.mockito.BDDMockito.given
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection
+import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.testcontainers.junit.jupiter.Container
+import org.testcontainers.junit.jupiter.Testcontainers
+import org.testcontainers.postgresql.PostgreSQLContainer
+import org.testcontainers.utility.DockerImageName
+import team.inreok.getiserver.domain.inquiry.dto.InquiryCreateRequest
+import team.inreok.getiserver.domain.inquiry.entity.type.InquiryStatus
+import team.inreok.getiserver.domain.inquiry.entity.type.InquiryType
+import team.inreok.getiserver.domain.inquiry.service.InquiryService
+import team.inreok.getiserver.domain.member.entity.Member
+import team.inreok.getiserver.domain.member.entity.type.MemberStatus
+import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
+import team.inreok.getiserver.domain.member.repository.MemberRepository
+import team.inreok.getiserver.domain.notification.dto.DiscordDeliveryEnqueueCommand
+import team.inreok.getiserver.domain.notification.entity.type.DiscordMessageTemplate
+import team.inreok.getiserver.domain.notification.service.DiscordDeliveryService
+import java.util.UUID
+
+/**
+ * `InquiryDiscordEventListener`(`domain.notification`)가 실제 PostgreSQL Commit 경계를 사이에
+ * 두고 의도대로 동작하는지 검증한다(Issue #97). 기존 `InquiryCreationDiscordFailureIntegrationTest`
+ * (동기 조회 + `runCatching` 방어)를 대체한다 -- 그 Test가 검증하던 메커니즘 자체가 이번 PR에서
+ * AFTER_COMMIT Event 구독 방식으로 바뀌었다.
+ */
+@Testcontainers
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+    properties = [
+        "app.jwt.secret=inquiry-discord-event-integration-test-only-jwt-secret-value",
+        "app.jwt.access-token-expiration-seconds=1800",
+        "app.jwt.refresh-token-expiration-seconds=1209600",
+        "app.file.storage.bucket=geti-integration-test",
+        "app.file.storage.region=us-east-1",
+        "app.file.storage.access-key=integration-test-only-access-key",
+        "app.file.storage.secret-key=integration-test-only-secret-key",
+        "app.discord.channel-policy.channels.inquiry-alert.channel-id=inquiry-discord-event-test-channel",
+        "app.discord.channel-policy.inquiry-channel-key=inquiry-alert",
+    ],
+)
+class InquiryDiscordEventIntegrationTest {
+    @Autowired
+    private lateinit var inquiryService: InquiryService
+
+    @Autowired
+    private lateinit var memberRepository: MemberRepository
+
+    @MockitoBean
+    private lateinit var discordDeliveryService: DiscordDeliveryService
+
+    // Kotlin non-null 파라미터에 bare any()를 쓰면 null 반환으로 NPE가 나므로 Elvis로 기본값을
+    // 채운다.
+    private fun anyCommand(): DiscordDeliveryEnqueueCommand =
+        any(DiscordDeliveryEnqueueCommand::class.java)
+            ?: DiscordDeliveryEnqueueCommand(DiscordMessageTemplate.INQUIRY_CREATED, 0L, "")
+
+    @Test
+    fun `Discord 예약이 실패해도 문의 등록 Transaction은 이미 Commit되어 영향을 받지 않는다`() {
+        given(discordDeliveryService.enqueue(anyCommand())).willThrow(RuntimeException("Discord 예약 강제 실패(Test 전용)"))
+
+        val author = createMember("inquiry-discord-event-author")
+
+        // create는 @Transactional Method라 반환 시점에는 이미 Commit이 끝나 있고, AFTER_COMMIT
+        // Listener(InquiryDiscordEventListener)도 같은 호출 Thread 안에서 동기 실행을 마친 뒤다.
+        val response =
+            inquiryService.create(
+                InquiryCreateRequest(
+                    inquiryType = InquiryType.ETC,
+                    title = "Discord Event 연동 Test용 문의",
+                    content = "Discord 예약 실패가 문의 등록을 막지 않는지 확인합니다.",
+                ),
+                requireNotNull(author.id),
+            )
+
+        assertThat(response.status).isEqualTo(InquiryStatus.RECEIVED)
+        assertThat(response.inquiryId).isNotNull()
+    }
+
+    private fun createMember(subject: String): Member =
+        memberRepository.saveAndFlush(
+            Member(
+                oauthProvider = OAuthProvider.DG,
+                oauthSubject = "$subject-${UUID.randomUUID()}",
+                email = "$subject-${UUID.randomUUID()}@example.com",
+                status = MemberStatus.ACTIVE,
+            ).apply { name = subject },
+        )
+
+    companion object {
+        @Container
+        @ServiceConnection
+        @JvmStatic
+        val postgres = PostgreSQLContainer(DockerImageName.parse("postgres:18.4-alpine"))
+
+        @Container
+        @ServiceConnection
+        @JvmStatic
+        val redis = RedisContainer(DockerImageName.parse("redis:8.8.1-alpine"))
+    }
+}
