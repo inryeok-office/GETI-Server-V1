@@ -15,6 +15,7 @@ enum class MemberErrorCode(
     TECH_STACK_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 기술 스택을 찾을 수 없습니다."),
     NAME_REQUIRED(HttpStatus.BAD_REQUEST, "검색할 이름을 입력해야 합니다."),
     NOT_A_STUDENT(HttpStatus.FORBIDDEN, "학생만 접근할 수 있습니다."),
+    OAUTH_EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 다른 방식으로 가입된 이메일입니다."),
     ;
 
     override val code: String get() = name
