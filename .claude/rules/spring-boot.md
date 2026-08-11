@@ -40,7 +40,7 @@ GETI-Server의 실제 환경(Spring Boot 4.1.0, Kotlin 2.3.21, Gradle 9.5.1 Kotl
 
 ## 모듈 경계 (Spring Modulith)
 
-Spring Modulith 기반이 구성되어 있다(`spring-modulith-starter-test`, `ModularityTest`, `PackageArchitectureTest`). 최상위 Production Package는 `domain`과 `global` 두 종류만 사용하고, 새 도메인 Package는 `domain` 바로 아래 독립된 Module(`domain.{domain-name}`)로 만든다. Domain 내부는 `entity`(+`entity/type`), `repository`, `service`, `controller`, `dto`, `exception` 중 실제로 필요한 Package만 만든다. 다른 Domain의 내부 구현을 직접 참조하지 않는다(Named Interface로 명시적으로 공개한 Package는 예외, 현재 `domain.operation.entity.type`만 해당). Package 구조를 바꾸면 `./gradlew test --tests "*ModularityTest"`와 `./gradlew test --tests "*PackageArchitectureTest"`로 구조 검증을 실행한다. 세부 원칙은 [`docs/architecture/modularity.md`](../../docs/architecture/modularity.md)를 따른다.
+Spring Modulith 기반이 구성되어 있다(`spring-modulith-starter-test`, `ModularityTest`, `PackageArchitectureTest`). 최상위 Production Package는 `domain`과 `global` 두 종류만 사용하고, 새 도메인 Package는 `domain` 바로 아래 독립된 Module(`domain.{domain-name}`)로 만든다. Domain 내부는 `entity`(+`entity/type`), `repository`, `service`, `controller`, `dto`, `exception` 중 실제로 필요한 Package만 만든다. 다른 Domain의 내부 구현을 직접 참조하지 않는다(Named Interface로 명시적으로 공개한 Package/타입은 예외, 예: `domain.operation.entity.type`, `domain.company.query`, `domain.job.query`). Package 구조를 바꾸면 `./gradlew test --tests "*ModularityTest"`와 `./gradlew test --tests "*PackageArchitectureTest"`로 구조 검증을 실행한다. 세부 원칙은 [`docs/architecture/modularity.md`](../../docs/architecture/modularity.md)를 따른다.
 
 ## Architecture 제한
 

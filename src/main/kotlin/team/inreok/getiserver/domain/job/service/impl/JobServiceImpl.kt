@@ -45,7 +45,7 @@ class JobServiceImpl(
         }
 
         val title = request.title.trim()
-        val company = requireActiveCompany(request.companyId)
+        val company = requireActiveCompany(request.companyId, createdByMemberId)
         val discordChannelKey = requireAllowedDiscordChannelKey(request.discordChannelKey)
 
         val job =
@@ -89,6 +89,7 @@ class JobServiceImpl(
     override fun update(
         jobId: Long,
         request: JobUpdateRequest,
+        requesterId: Long,
     ): JobDetailResponse {
         val job = findNotDeleted(jobId)
 
@@ -121,13 +122,14 @@ class JobServiceImpl(
         if (job.status in PUBLIC_VISIBLE_STATUSES) {
             eventPublisher.publishEvent(JobDiscordEvent(jobId, JobDiscordAction.UPDATED))
         }
-        return JobDetailResponse.from(job, findCompanySummary(job.companyId))
+        return JobDetailResponse.from(job, findCompanySummary(job.companyId, requesterId))
     }
 
     @Transactional
     override fun changeStatus(
         jobId: Long,
         request: JobStatusUpdateRequest,
+        requesterId: Long,
     ): JobDetailResponse {
         val job = findNotDeleted(jobId)
         val target = request.status
@@ -162,7 +164,7 @@ class JobServiceImpl(
         jobRepository.flush()
         eventPublisher.publishEvent(JobChangedEvent(jobId))
         publishJobDiscordEventFor(jobId, target, previousStatus)
-        return JobDetailResponse.from(job, findCompanySummary(job.companyId))
+        return JobDetailResponse.from(job, findCompanySummary(job.companyId, requesterId))
     }
 
     /**
@@ -186,15 +188,21 @@ class JobServiceImpl(
     }
 
     @Transactional(readOnly = true)
-    override fun getForAdmin(jobId: Long): JobDetailResponse {
+    override fun getForAdmin(
+        jobId: Long,
+        requesterId: Long,
+    ): JobDetailResponse {
         // 관리자는 삭제 이력까지 확인해야 하므로 deletedAt 조건 없이 조회한다.
         val job = jobRepository.findById(jobId).orElseThrow { JobNotFoundException(jobId) }
-        return JobDetailResponse.from(job, findCompanySummary(job.companyId))
+        return JobDetailResponse.from(job, findCompanySummary(job.companyId, requesterId))
     }
 
     // 조회수를 증가시키므로 readOnly Transaction을 쓸 수 없다.
     @Transactional
-    override fun getPublicDetail(jobId: Long): JobDetailResponse {
+    override fun getPublicDetail(
+        jobId: Long,
+        requesterId: Long,
+    ): JobDetailResponse {
         val job = findNotDeleted(jobId)
         if (job.status !in PUBLIC_VISIBLE_STATUSES) throw JobNotVisibleException(jobId)
 
@@ -203,7 +211,7 @@ class JobServiceImpl(
         val response =
             JobDetailResponse.from(
                 job = job,
-                company = findCompanySummary(job.companyId),
+                company = findCompanySummary(job.companyId, requesterId),
                 viewCount = job.viewCount + 1,
             )
         jobRepository.incrementViewCount(jobId)
@@ -224,11 +232,17 @@ class JobServiceImpl(
         return key
     }
 
-    private fun requireActiveCompany(companyId: Long): CompanySummary =
-        companyQuery.findActiveSummary(companyId) ?: throw JobCompanyNotFoundException(companyId)
+    private fun requireActiveCompany(
+        companyId: Long,
+        requesterId: Long,
+    ): CompanySummary =
+        companyQuery.findActiveSummary(companyId, requesterId) ?: throw JobCompanyNotFoundException(companyId)
 
     // 공고 등록 후 기업이 삭제될 수 있으므로 응답에서는 없어도 오류로 다루지 않고 null로 둔다.
-    private fun findCompanySummary(companyId: Long): CompanySummary? = companyQuery.findActiveSummary(companyId)
+    private fun findCompanySummary(
+        companyId: Long,
+        requesterId: Long,
+    ): CompanySummary? = companyQuery.findActiveSummary(companyId, requesterId)
 
     private fun allowedTransitions(current: JobStatus): Set<JobStatus> =
         when (current) {

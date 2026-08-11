@@ -69,6 +69,7 @@ class JobServiceTest {
     }
 
     private val companySummary = CompanySummary(companyId = 1L, name = "인력개발원")
+    private val companySummaryWithLogo = CompanySummary(companyId = 1L, name = "인력개발원", logoUrl = LOGO_URL)
 
     // --- 등록 ---
 
@@ -77,7 +78,7 @@ class JobServiceTest {
         givenActiveCompany()
         givenSaveAssignsId()
 
-        val response = service.create(draftRequest(), createdByMemberId = 7L)
+        val response = service.create(draftRequest(), createdByMemberId = REQUESTER_ID)
 
         assertThat(response.status).isEqualTo(JobStatus.DRAFT)
         assertThat(response.content).isNull()
@@ -86,23 +87,33 @@ class JobServiceTest {
     }
 
     @Test
+    fun `등록 응답의 company에 로고 URL이 담긴다`() {
+        given(companyQuery.findActiveSummary(1L, REQUESTER_ID)).willReturn(companySummaryWithLogo)
+        givenSaveAssignsId()
+
+        val response = service.create(draftRequest(), createdByMemberId = REQUESTER_ID)
+
+        assertThat(response.company?.logoUrl).isEqualTo(LOGO_URL)
+    }
+
+    @Test
     fun `등록 시 작성자를 Access Token에서 받은 회원 ID로 기록한다`() {
         givenActiveCompany()
         givenSaveAssignsId()
 
-        service.create(draftRequest(), createdByMemberId = 7L)
+        service.create(draftRequest(), createdByMemberId = REQUESTER_ID)
 
         verify(jobRepository).saveAndFlush(jobCaptor.capture() ?: newJob())
-        assertThat(jobCaptor.value.createdByMemberId).isEqualTo(7L)
+        assertThat(jobCaptor.value.createdByMemberId).isEqualTo(REQUESTER_ID)
         // 담당자는 요청으로 받지 않으므로 항상 비어 있어야 한다(Issue #60 제외 범위).
         assertThat(jobCaptor.value.managerMemberId).isNull()
     }
 
     @Test
     fun `삭제되었거나 없는 기업으로 등록하면 COMPANY_NOT_FOUND로 거부한다`() {
-        given(companyQuery.findActiveSummary(anyLong())).willReturn(null)
+        given(companyQuery.findActiveSummary(anyLong(), any())).willReturn(null)
 
-        assertThatThrownBy { service.create(draftRequest(), 7L) }
+        assertThatThrownBy { service.create(draftRequest(), REQUESTER_ID) }
             .isInstanceOf(JobCompanyNotFoundException::class.java)
 
         verify(jobRepository, never()).saveAndFlush(anyJob())
@@ -113,7 +124,7 @@ class JobServiceTest {
         givenActiveCompany()
         givenSaveAssignsId()
 
-        val response = service.create(publishableRequest(), 7L)
+        val response = service.create(publishableRequest(), REQUESTER_ID)
 
         assertThat(response.status).isEqualTo(JobStatus.PUBLISHED)
         assertThat(response.publishedAt).isNotNull()
@@ -123,7 +134,7 @@ class JobServiceTest {
     fun `PUBLISHED로 등록할 때 본문이 없으면 거부한다`() {
         givenActiveCompany()
 
-        assertThatThrownBy { service.create(publishableRequest(content = null), 7L) }
+        assertThatThrownBy { service.create(publishableRequest(content = null), REQUESTER_ID) }
             .isInstanceOf(JobValidationFailedException::class.java)
     }
 
@@ -131,7 +142,7 @@ class JobServiceTest {
     fun `PUBLISHED로 등록할 때 외부 지원 URL이 없으면 거부한다`() {
         givenActiveCompany()
 
-        assertThatThrownBy { service.create(publishableRequest(externalUrl = null), 7L) }
+        assertThatThrownBy { service.create(publishableRequest(externalUrl = null), REQUESTER_ID) }
             .isInstanceOf(JobValidationFailedException::class.java)
     }
 
@@ -140,7 +151,7 @@ class JobServiceTest {
         givenActiveCompany()
 
         assertThatThrownBy {
-            service.create(publishableRequest(applicationMethod = ApplicationMethod.INTERNAL), 7L)
+            service.create(publishableRequest(applicationMethod = ApplicationMethod.INTERNAL), REQUESTER_ID)
         }.isInstanceOf(JobFormRequiredException::class.java)
     }
 
@@ -149,7 +160,7 @@ class JobServiceTest {
         givenActiveCompany()
         givenSaveAssignsId()
 
-        val response = service.create(draftRequest(applicationMethod = ApplicationMethod.INTERNAL), 7L)
+        val response = service.create(draftRequest(applicationMethod = ApplicationMethod.INTERNAL), REQUESTER_ID)
 
         assertThat(response.applicationMethod).isEqualTo(ApplicationMethod.INTERNAL)
     }
@@ -158,7 +169,7 @@ class JobServiceTest {
     fun `CLOSED나 DELETED 상태로는 등록할 수 없다`() {
         givenActiveCompany()
 
-        assertThatThrownBy { service.create(draftRequest(status = JobStatus.CLOSED), 7L) }
+        assertThatThrownBy { service.create(draftRequest(status = JobStatus.CLOSED), REQUESTER_ID) }
             .isInstanceOf(JobValidationFailedException::class.java)
         verify(jobRepository, never()).saveAndFlush(anyJob())
     }
@@ -167,7 +178,7 @@ class JobServiceTest {
     fun `제목이 공백만 있으면 거부한다`() {
         givenActiveCompany()
 
-        assertThatThrownBy { service.create(draftRequest(title = "   "), 7L) }
+        assertThatThrownBy { service.create(draftRequest(title = "   "), REQUESTER_ID) }
             .isInstanceOf(JobValidationFailedException::class.java)
     }
 
@@ -181,7 +192,7 @@ class JobServiceTest {
                     startDate = LocalDateTime.of(2026, 9, 1, 0, 0),
                     endDate = LocalDateTime.of(2026, 8, 1, 0, 0),
                 ),
-                7L,
+                REQUESTER_ID,
             )
         }.isInstanceOf(JobValidationFailedException::class.java)
     }
@@ -190,7 +201,7 @@ class JobServiceTest {
     fun `대상 학년이 1에서 3 밖이면 거부한다`() {
         givenActiveCompany()
 
-        assertThatThrownBy { service.create(draftRequest(targetGrade = 4), 7L) }
+        assertThatThrownBy { service.create(draftRequest(targetGrade = 4), REQUESTER_ID) }
             .isInstanceOf(JobValidationFailedException::class.java)
     }
 
@@ -198,7 +209,7 @@ class JobServiceTest {
     fun `모집 인원이 0 이하면 거부한다`() {
         givenActiveCompany()
 
-        assertThatThrownBy { service.create(draftRequest(capacity = 0), 7L) }
+        assertThatThrownBy { service.create(draftRequest(capacity = 0), REQUESTER_ID) }
             .isInstanceOf(JobValidationFailedException::class.java)
     }
 
@@ -206,7 +217,7 @@ class JobServiceTest {
     fun `외부 지원 URL이 http나 https가 아니면 거부한다`() {
         givenActiveCompany()
 
-        assertThatThrownBy { service.create(draftRequest(externalUrl = "ftp://example.com/apply"), 7L) }
+        assertThatThrownBy { service.create(draftRequest(externalUrl = "ftp://example.com/apply"), REQUESTER_ID) }
             .isInstanceOf(JobValidationFailedException::class.java)
     }
 
@@ -218,10 +229,21 @@ class JobServiceTest {
         givenFoundNotDeleted(job)
         givenActiveCompany()
 
-        service.update(1L, JobUpdateRequest(title = "새 제목"))
+        service.update(1L, JobUpdateRequest(title = "새 제목"), REQUESTER_ID)
 
         assertThat(job.title).isEqualTo("새 제목")
         assertThat(job.capacity).isEqualTo(5)
+    }
+
+    @Test
+    fun `수정 응답의 company에 로고 URL이 담긴다`() {
+        val job = jobOf(status = JobStatus.DRAFT)
+        givenFoundNotDeleted(job)
+        given(companyQuery.findActiveSummary(1L, REQUESTER_ID)).willReturn(companySummaryWithLogo)
+
+        val response = service.update(1L, JobUpdateRequest(title = "새 제목"), REQUESTER_ID)
+
+        assertThat(response.company?.logoUrl).isEqualTo(LOGO_URL)
     }
 
     @Test
@@ -229,7 +251,7 @@ class JobServiceTest {
         val job = jobOf(status = JobStatus.PUBLISHED)
         givenFoundNotDeleted(job)
 
-        assertThatThrownBy { service.update(1L, JobUpdateRequest(title = "   ")) }
+        assertThatThrownBy { service.update(1L, JobUpdateRequest(title = "   "), REQUESTER_ID) }
             .isInstanceOf(JobValidationFailedException::class.java)
     }
 
@@ -237,7 +259,7 @@ class JobServiceTest {
     fun `없거나 삭제된 공고를 수정하면 JOB_NOT_FOUND로 거부한다`() {
         given(jobRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(null)
 
-        assertThatThrownBy { service.update(1L, JobUpdateRequest(title = "새 제목")) }
+        assertThatThrownBy { service.update(1L, JobUpdateRequest(title = "새 제목"), REQUESTER_ID) }
             .isInstanceOf(JobNotFoundException::class.java)
     }
 
@@ -249,7 +271,7 @@ class JobServiceTest {
         givenFoundNotDeleted(job)
         givenActiveCompany()
 
-        val response = service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED))
+        val response = service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED), REQUESTER_ID)
 
         assertThat(response.status).isEqualTo(JobStatus.PUBLISHED)
         assertThat(job.publishedAt).isNotNull()
@@ -260,7 +282,7 @@ class JobServiceTest {
         val job = jobOf(status = JobStatus.DRAFT, content = null)
         givenFoundNotDeleted(job)
 
-        assertThatThrownBy { service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED)) }
+        assertThatThrownBy { service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED), REQUESTER_ID) }
             .isInstanceOf(JobValidationFailedException::class.java)
         assertThat(job.status).isEqualTo(JobStatus.DRAFT)
     }
@@ -270,7 +292,7 @@ class JobServiceTest {
         val job = jobOf(status = JobStatus.DRAFT, applicationMethod = ApplicationMethod.INTERNAL)
         givenFoundNotDeleted(job)
 
-        assertThatThrownBy { service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED)) }
+        assertThatThrownBy { service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED), REQUESTER_ID) }
             .isInstanceOf(JobFormRequiredException::class.java)
     }
 
@@ -280,7 +302,7 @@ class JobServiceTest {
         givenFoundNotDeleted(job)
         givenActiveCompany()
 
-        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.CLOSED))
+        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.CLOSED), REQUESTER_ID)
 
         assertThat(job.status).isEqualTo(JobStatus.CLOSED)
         assertThat(job.closedAt).isNotNull()
@@ -292,7 +314,7 @@ class JobServiceTest {
         givenFoundNotDeleted(job)
         givenActiveCompany()
 
-        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.DELETED))
+        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.DELETED), REQUESTER_ID)
 
         assertThat(job.status).isEqualTo(JobStatus.DELETED)
         assertThat(job.deletedAt).isNotNull()
@@ -304,7 +326,7 @@ class JobServiceTest {
     fun `마감된 공고를 다시 게시할 수 없다`() {
         givenFoundNotDeleted(jobOf(status = JobStatus.CLOSED))
 
-        assertThatThrownBy { service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED)) }
+        assertThatThrownBy { service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED), REQUESTER_ID) }
             .isInstanceOf(JobStatusTransitionInvalidException::class.java)
     }
 
@@ -312,7 +334,7 @@ class JobServiceTest {
     fun `같은 상태로의 변경도 거부한다`() {
         givenFoundNotDeleted(jobOf(status = JobStatus.PUBLISHED))
 
-        assertThatThrownBy { service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED)) }
+        assertThatThrownBy { service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED), REQUESTER_ID) }
             .isInstanceOf(JobStatusTransitionInvalidException::class.java)
     }
 
@@ -320,7 +342,7 @@ class JobServiceTest {
     fun `이미 삭제된 공고는 상태를 바꿀 수 없다`() {
         given(jobRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(null)
 
-        assertThatThrownBy { service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED)) }
+        assertThatThrownBy { service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED), REQUESTER_ID) }
             .isInstanceOf(JobNotFoundException::class.java)
     }
 
@@ -332,17 +354,39 @@ class JobServiceTest {
         givenFoundNotDeleted(job)
         givenActiveCompany()
 
-        val response = service.getPublicDetail(1L)
+        val response = service.getPublicDetail(1L, REQUESTER_ID)
 
         assertThat(response.viewCount).isEqualTo(11)
         verify(jobRepository).incrementViewCount(1L)
     }
 
     @Test
+    fun `공개 상세 응답의 company에 로고 URL이 담긴다`() {
+        val job = jobOf(status = JobStatus.PUBLISHED)
+        givenFoundNotDeleted(job)
+        given(companyQuery.findActiveSummary(1L, REQUESTER_ID)).willReturn(companySummaryWithLogo)
+
+        val response = service.getPublicDetail(1L, REQUESTER_ID)
+
+        assertThat(response.company?.logoUrl).isEqualTo(LOGO_URL)
+    }
+
+    @Test
+    fun `기업에 로고가 없으면 응답의 logoUrl은 null이다`() {
+        val job = jobOf(status = JobStatus.PUBLISHED)
+        givenFoundNotDeleted(job)
+        givenActiveCompany()
+
+        val response = service.getPublicDetail(1L, REQUESTER_ID)
+
+        assertThat(response.company?.logoUrl).isNull()
+    }
+
+    @Test
     fun `임시저장 공고를 공개 상세로 조회하면 JOB_NOT_VISIBLE로 거부한다`() {
         givenFoundNotDeleted(jobOf(status = JobStatus.DRAFT))
 
-        assertThatThrownBy { service.getPublicDetail(1L) }
+        assertThatThrownBy { service.getPublicDetail(1L, REQUESTER_ID) }
             .isInstanceOf(JobNotVisibleException::class.java)
         verify(jobRepository, never()).incrementViewCount(anyLong())
     }
@@ -352,7 +396,7 @@ class JobServiceTest {
         givenFoundNotDeleted(jobOf(status = JobStatus.CLOSED))
         givenActiveCompany()
 
-        val response = service.getPublicDetail(1L)
+        val response = service.getPublicDetail(1L, REQUESTER_ID)
 
         assertThat(response.status).isEqualTo(JobStatus.CLOSED)
     }
@@ -361,7 +405,7 @@ class JobServiceTest {
     fun `삭제된 공고는 공개 상세에서 JOB_NOT_FOUND로 처리한다`() {
         given(jobRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(null)
 
-        assertThatThrownBy { service.getPublicDetail(1L) }
+        assertThatThrownBy { service.getPublicDetail(1L, REQUESTER_ID) }
             .isInstanceOf(JobNotFoundException::class.java)
     }
 
@@ -371,11 +415,22 @@ class JobServiceTest {
         given(jobRepository.findById(1L)).willReturn(Optional.of(job))
         givenActiveCompany()
 
-        val response = service.getForAdmin(1L)
+        val response = service.getForAdmin(1L, REQUESTER_ID)
 
         assertThat(response.status).isEqualTo(JobStatus.DRAFT)
         assertThat(response.viewCount).isEqualTo(10)
         verify(jobRepository, never()).incrementViewCount(anyLong())
+    }
+
+    @Test
+    fun `관리자 상세 응답의 company에 로고 URL이 담긴다`() {
+        val job = jobOf(status = JobStatus.DRAFT)
+        given(jobRepository.findById(1L)).willReturn(Optional.of(job))
+        given(companyQuery.findActiveSummary(1L, REQUESTER_ID)).willReturn(companySummaryWithLogo)
+
+        val response = service.getForAdmin(1L, REQUESTER_ID)
+
+        assertThat(response.company?.logoUrl).isEqualTo(LOGO_URL)
     }
 
     // --- Discord Event 발행 (docs/notification/discord-event-wiring-plan.md §4.2) ---
@@ -388,7 +443,7 @@ class JobServiceTest {
         givenActiveCompany()
         givenSaveAssignsId()
 
-        service.create(publishableRequest(), createdByMemberId = 7L)
+        service.create(publishableRequest(), REQUESTER_ID)
 
         assertThat(publishedDiscordEvents()).containsExactly(JobDiscordEvent(1L, JobDiscordAction.PUBLISHED))
     }
@@ -398,7 +453,7 @@ class JobServiceTest {
         givenActiveCompany()
         givenSaveAssignsId()
 
-        service.create(draftRequest(), createdByMemberId = 7L)
+        service.create(draftRequest(), REQUESTER_ID)
 
         assertThat(publishedDiscordEvents()).isEmpty()
     }
@@ -408,7 +463,7 @@ class JobServiceTest {
         givenFoundNotDeleted(jobOf(status = JobStatus.PUBLISHED))
         givenActiveCompany()
 
-        service.update(1L, JobUpdateRequest(title = "수정된 제목"))
+        service.update(1L, JobUpdateRequest(title = "수정된 제목"), REQUESTER_ID)
 
         assertThat(publishedDiscordEvents()).containsExactly(JobDiscordEvent(1L, JobDiscordAction.UPDATED))
     }
@@ -418,7 +473,7 @@ class JobServiceTest {
         givenFoundNotDeleted(jobOf(status = JobStatus.DRAFT))
         givenActiveCompany()
 
-        service.update(1L, JobUpdateRequest(title = "수정된 제목"))
+        service.update(1L, JobUpdateRequest(title = "수정된 제목"), REQUESTER_ID)
 
         assertThat(publishedDiscordEvents()).isEmpty()
     }
@@ -428,7 +483,7 @@ class JobServiceTest {
         givenFoundNotDeleted(jobOf(status = JobStatus.PUBLISHED))
         givenActiveCompany()
 
-        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.CLOSED))
+        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.CLOSED), REQUESTER_ID)
 
         assertThat(publishedDiscordEvents()).containsExactly(JobDiscordEvent(1L, JobDiscordAction.CLOSED))
     }
@@ -438,7 +493,7 @@ class JobServiceTest {
         givenFoundNotDeleted(jobOf(status = JobStatus.PUBLISHED))
         givenActiveCompany()
 
-        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.DELETED))
+        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.DELETED), REQUESTER_ID)
 
         assertThat(publishedDiscordEvents()).containsExactly(JobDiscordEvent(1L, JobDiscordAction.DELETED))
     }
@@ -448,7 +503,7 @@ class JobServiceTest {
         givenFoundNotDeleted(jobOf(status = JobStatus.DRAFT))
         givenActiveCompany()
 
-        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.DELETED))
+        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.DELETED), REQUESTER_ID)
 
         assertThat(publishedDiscordEvents()).isEmpty()
     }
@@ -458,7 +513,7 @@ class JobServiceTest {
         givenFoundNotDeleted(jobOf(status = JobStatus.DRAFT))
         givenActiveCompany()
 
-        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED))
+        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED), REQUESTER_ID)
 
         assertThat(publishedDiscordEvents()).containsExactly(JobDiscordEvent(1L, JobDiscordAction.PUBLISHED))
     }
@@ -469,7 +524,7 @@ class JobServiceTest {
         given(discordChannelResolver.isAllowedJobChannelKey("random-channel")).willReturn(false)
 
         assertThatThrownBy {
-            service.create(publishableRequest().copy(discordChannelKey = "random-channel"), createdByMemberId = 7L)
+            service.create(publishableRequest().copy(discordChannelKey = "random-channel"), REQUESTER_ID)
         }.isInstanceOf(JobDiscordChannelNotAllowedException::class.java)
 
         verify(jobRepository, never()).saveAndFlush(anyJob())
@@ -493,7 +548,7 @@ class JobServiceTest {
     private fun anyJob(): Job = any(Job::class.java) ?: newJob()
 
     private fun givenActiveCompany() {
-        given(companyQuery.findActiveSummary(1L)).willReturn(companySummary)
+        given(companyQuery.findActiveSummary(1L, REQUESTER_ID)).willReturn(companySummary)
     }
 
     /** 실제 저장처럼 id를 채워 준다. id가 없으면 응답 DTO가 만들어지지 않는다. */
@@ -565,5 +620,10 @@ class JobServiceTest {
         bodyMarkdown = content
         this.externalUrl = externalUrl
         this.capacity = capacity
+    }
+
+    private companion object {
+        private const val REQUESTER_ID = 7L
+        private const val LOGO_URL = "https://storage.example/company-logo?signature=test"
     }
 }

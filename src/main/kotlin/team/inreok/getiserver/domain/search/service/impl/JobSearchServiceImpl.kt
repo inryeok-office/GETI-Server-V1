@@ -7,7 +7,9 @@ import org.springframework.data.domain.Pageable
 import org.springframework.data.elasticsearch.client.elc.NativeQuery
 import org.springframework.stereotype.Service
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
+import team.inreok.getiserver.domain.file.link.FileUrlPort
 import team.inreok.getiserver.domain.job.entity.type.PostingType
+import team.inreok.getiserver.domain.search.document.JobSearchDocument
 import team.inreok.getiserver.domain.search.dto.JobSearchResponse
 import team.inreok.getiserver.domain.search.dto.JobSort
 import team.inreok.getiserver.domain.search.dto.JobSummaryResponse
@@ -22,7 +24,9 @@ import java.time.format.DateTimeFormatter
 @Service
 class JobSearchServiceImpl(
     private val indexManager: JobSearchIndexManager,
+    private val fileUrlPort: FileUrlPort,
 ) : JobSearchService {
+    @Suppress("LongParameterList")
     override fun search(
         query: String?,
         postingType: PostingType?,
@@ -34,6 +38,7 @@ class JobSearchServiceImpl(
         sort: JobSort,
         direction: SortDirection?,
         pageable: Pageable,
+        requesterId: Long,
     ): JobSearchResponse {
         // 검색어를 보내지 않은 경우와 공백만 보낸 경우를 모두 "검색어 없음"으로 취급한다.
         val keyword = query?.trim()?.takeIf { it.isNotEmpty() }
@@ -70,8 +75,11 @@ class JobSearchServiceImpl(
         val totalElements = hits.totalHits
         val totalPages = if (size == 0) 0 else ((totalElements + size - 1) / size).toInt()
 
+        val documents = hits.searchHits.map { it.content }
+        val logoUrls = resolveLogoUrls(documents, requesterId)
+
         return JobSearchResponse(
-            content = hits.searchHits.map { JobSummaryResponse.from(it.content) },
+            content = documents.map { JobSummaryResponse.from(it, logoUrls) },
             page = page,
             size = size,
             totalElements = totalElements,
@@ -79,6 +87,21 @@ class JobSearchServiceImpl(
             first = page == 0,
             last = page >= totalPages - 1,
         )
+    }
+
+    /**
+     * 이번 Page에 담긴 `companyLogoFileId`를 모아 한 번에 URL로 바꾼다. 항목마다 단건 발급하면
+     * Page 크기만큼 반복된다(N+1, Issue #92 — `CompanyServiceImpl.search`와 같은 이유).
+     * Elasticsearch에는 URL 자체를 저장하지 않으므로(`JobSearchDocument.companyLogoFileId`
+     * 참고) 이 변환은 매 요청마다 새로 일어난다.
+     */
+    private fun resolveLogoUrls(
+        documents: List<JobSearchDocument>,
+        requesterId: Long,
+    ): Map<Long, String> {
+        val logoFileIds = documents.mapNotNull { it.companyLogoFileId }.distinct()
+        if (logoFileIds.isEmpty()) return emptyMap()
+        return fileUrlPort.presignedImageUrls(requesterId, logoFileIds)
     }
 
     @Suppress("LongParameterList")

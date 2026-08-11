@@ -35,6 +35,7 @@ class JobIndexDocumentBuilderTest {
         given(jobIndexQueryPort.findById(1L)).willReturn(snapshotOf())
         given(companyQuery.findActiveSummary(1L)).willReturn(CompanySummary(1L, "인력개발원"))
         given(companyQuery.findActiveType(1L)).willReturn(CompanyType.GENERAL)
+        given(companyQuery.findActiveLogoFileId(1L)).willReturn(43L)
 
         val document = builder.buildFor(1L)
 
@@ -44,6 +45,8 @@ class JobIndexDocumentBuilderTest {
         assertThat(document.title).isEqualTo("2026 상반기 백엔드 채용")
         assertThat(document.companyName).isEqualTo("인력개발원")
         assertThat(document.companyType).isEqualTo("GENERAL")
+        // Presigned URL이 아니라 안정적인 File ID를 저장한다(Issue #92, 색인은 URL을 만들지 않는다).
+        assertThat(document.companyLogoFileId).isEqualTo(43L)
         assertThat(document.postingType).isEqualTo("MOU")
         assertThat(document.status).isEqualTo("PUBLISHED")
     }
@@ -53,11 +56,25 @@ class JobIndexDocumentBuilderTest {
         given(jobIndexQueryPort.findById(1L)).willReturn(snapshotOf())
         given(companyQuery.findActiveSummary(1L)).willReturn(null)
         given(companyQuery.findActiveType(1L)).willReturn(null)
+        given(companyQuery.findActiveLogoFileId(1L)).willReturn(null)
 
         val document = builder.buildFor(1L)
 
         assertThat(document!!.companyName).isNull()
         assertThat(document.companyType).isNull()
+        assertThat(document.companyLogoFileId).isNull()
+    }
+
+    @Test
+    fun `기업에 로고가 없으면 companyLogoFileId를 null로 둔다`() {
+        given(jobIndexQueryPort.findById(1L)).willReturn(snapshotOf())
+        given(companyQuery.findActiveSummary(1L)).willReturn(CompanySummary(1L, "인력개발원"))
+        given(companyQuery.findActiveType(1L)).willReturn(CompanyType.GENERAL)
+        given(companyQuery.findActiveLogoFileId(1L)).willReturn(null)
+
+        val document = builder.buildFor(1L)
+
+        assertThat(document!!.companyLogoFileId).isNull()
     }
 
     private fun snapshotOf() =

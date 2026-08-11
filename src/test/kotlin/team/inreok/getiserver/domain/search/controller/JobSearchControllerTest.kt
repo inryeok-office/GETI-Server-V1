@@ -3,6 +3,7 @@ package team.inreok.getiserver.domain.search.controller
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyBoolean
+import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.BDDMockito.given
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
@@ -71,6 +72,7 @@ class JobSearchControllerTest
                     anySort(),
                     any(),
                     anyPageable(),
+                    anyLong(),
                 ),
             ).willReturn(searchResponse())
 
@@ -80,7 +82,10 @@ class JobSearchControllerTest
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.content[0].jobId").value(1))
                 .andExpect(jsonPath("$.data.content[0].company.name").value("인력개발원"))
-                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(
+                    jsonPath("$.data.content[0].company.logoUrl")
+                        .value("https://storage.example/company-logo?signature=test"),
+                ).andExpect(jsonPath("$.data.page").value(0))
                 .andExpect(jsonPath("$.data.size").value(20))
                 .andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.totalPages").value(1))
@@ -102,6 +107,7 @@ class JobSearchControllerTest
                     anySort(),
                     any(),
                     anyPageable(),
+                    anyLong(),
                 ),
             ).willReturn(searchResponse())
 
@@ -123,6 +129,7 @@ class JobSearchControllerTest
                     anySort(),
                     any(),
                     anyPageable(),
+                    anyLong(),
                 ),
             ).willReturn(searchResponse())
 
@@ -202,7 +209,7 @@ class JobSearchControllerTest
                 postingType = PostingType.MOU,
                 applicationMethod = ApplicationMethod.EXTERNAL,
                 status = JobStatus.PUBLISHED,
-                company = CompanySummary(1L, "인력개발원"),
+                company = CompanySummary(1L, "인력개발원", logoUrl = "https://storage.example/company-logo?signature=test"),
                 startDate = null,
                 endDate = null,
                 targetGrade = 3,

@@ -22,6 +22,7 @@ class JobIndexDocumentBuilder(
     fun build(snapshot: JobIndexSnapshot): JobSearchDocument {
         val company = companyQuery.findActiveSummary(snapshot.companyId)
         val companyType = companyQuery.findActiveType(snapshot.companyId)
+        val companyLogoFileId = companyQuery.findActiveLogoFileId(snapshot.companyId)
         return JobSearchDocument(
             id = snapshot.jobId.toString(),
             jobId = snapshot.jobId,
@@ -36,6 +37,7 @@ class JobIndexDocumentBuilder(
             // (기업이 삭제되면 응답의 company 자체가 null이라는 기존 계약을 유지, PR #70 Review 반영).
             companyName = company?.name,
             companyType = companyType?.name,
+            companyLogoFileId = companyLogoFileId,
             sourceName = snapshot.sourceName,
             targetGrade = snapshot.targetGrade,
             capacity = snapshot.capacity,

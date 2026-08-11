@@ -60,7 +60,7 @@ class JobControllerTest
 
         @Test
         fun `공개 상세를 조회하면 200과 증가된 조회수를 반환한다`() {
-            given(jobService.getPublicDetail(1L)).willReturn(detailResponse(viewCount = 11))
+            given(jobService.getPublicDetail(1L, 1L)).willReturn(detailResponse(viewCount = 11))
 
             mockMvc
                 .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
@@ -69,11 +69,25 @@ class JobControllerTest
                 .andExpect(jsonPath("$.data.jobId").value(1))
                 .andExpect(jsonPath("$.data.viewCount").value(11))
                 .andExpect(jsonPath("$.data.company.companyId").value(1))
+                .andExpect(
+                    jsonPath("$.data.company.logoUrl").value("https://storage.example/company-logo?signature=test"),
+                )
+        }
+
+        @Test
+        fun `기업에 로고가 없으면 응답의 company logoUrl은 null이다`() {
+            given(jobService.getPublicDetail(1L, 1L))
+                .willReturn(detailResponse(viewCount = 11, company = CompanySummary(1L, "인력개발원")))
+
+            mockMvc
+                .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.company.logoUrl").doesNotExist())
         }
 
         @Test
         fun `없거나 삭제된 공고를 조회하면 404를 반환한다`() {
-            willThrow(JobNotFoundException(1L)).given(jobService).getPublicDetail(anyLong())
+            willThrow(JobNotFoundException(1L)).given(jobService).getPublicDetail(anyLong(), anyLong())
 
             mockMvc
                 .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
@@ -83,7 +97,7 @@ class JobControllerTest
 
         @Test
         fun `공개되지 않은 공고를 조회하면 403을 반환한다`() {
-            willThrow(JobNotVisibleException(1L)).given(jobService).getPublicDetail(anyLong())
+            willThrow(JobNotVisibleException(1L)).given(jobService).getPublicDetail(anyLong(), anyLong())
 
             mockMvc
                 .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
@@ -100,25 +114,31 @@ class JobControllerTest
 
         // --- Fixture ---
 
-        private fun detailResponse(viewCount: Long) =
-            JobDetailResponse(
-                jobId = 1L,
-                title = "2026 상반기 백엔드 채용",
-                postingType = PostingType.MOU,
-                applicationMethod = ApplicationMethod.EXTERNAL,
-                status = JobStatus.PUBLISHED,
-                company = CompanySummary(1L, "인력개발원"),
-                content = "## 모집 부문",
-                externalUrl = "https://example.com/apply",
-                startDate = null,
-                endDate = null,
-                targetGrade = 3,
-                capacity = 2,
-                firstComeServed = false,
-                viewCount = viewCount,
-                publishedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
-                closedAt = null,
-                createdAt = LocalDateTime.of(2026, 7, 20, 10, 0),
-                updatedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
-            )
+        private fun detailResponse(
+            viewCount: Long,
+            company: CompanySummary? = CompanySummary(1L, "인력개발원", logoUrl = LOGO_URL),
+        ) = JobDetailResponse(
+            jobId = 1L,
+            title = "2026 상반기 백엔드 채용",
+            postingType = PostingType.MOU,
+            applicationMethod = ApplicationMethod.EXTERNAL,
+            status = JobStatus.PUBLISHED,
+            company = company,
+            content = "## 모집 부문",
+            externalUrl = "https://example.com/apply",
+            startDate = null,
+            endDate = null,
+            targetGrade = 3,
+            capacity = 2,
+            firstComeServed = false,
+            viewCount = viewCount,
+            publishedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
+            closedAt = null,
+            createdAt = LocalDateTime.of(2026, 7, 20, 10, 0),
+            updatedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
+        )
+
+        private companion object {
+            private const val LOGO_URL = "https://storage.example/company-logo?signature=test"
+        }
     }
