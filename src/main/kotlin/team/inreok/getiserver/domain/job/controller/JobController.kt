@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
@@ -55,5 +56,7 @@ class JobController(
     @GetMapping("/{jobId}")
     fun getJob(
         @Parameter(description = "조회할 공고 ID", example = "1") @PathVariable jobId: Long,
-    ): ApiResponse<JobDetailResponse> = ApiResponse.of(jobService.getPublicDetail(jobId))
+        authentication: Authentication,
+    ): ApiResponse<JobDetailResponse> =
+        ApiResponse.of(jobService.getPublicDetail(jobId, authentication.principal as Long))
 }

@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.data.domain.Pageable
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -107,6 +108,7 @@ class JobSearchController(
         direction: SortDirection?,
         @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20, 최대 100). sort Parameter는 무시된다")
         pageable: Pageable,
+        authentication: Authentication,
     ): ApiResponse<JobSearchResponse> =
         ApiResponse.of(
             jobSearchService.search(
@@ -120,6 +122,7 @@ class JobSearchController(
                 sort,
                 direction,
                 pageable,
+                authentication.principal as Long,
             ),
         )
 }
