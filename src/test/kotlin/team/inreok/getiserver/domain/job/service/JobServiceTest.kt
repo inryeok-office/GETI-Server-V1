@@ -10,6 +10,7 @@ import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.BDDMockito.given
 import org.mockito.Captor
 import org.mockito.Mock
+import org.mockito.Mockito.atLeastOnce
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
@@ -25,7 +26,10 @@ import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
+import team.inreok.getiserver.domain.job.event.JobDiscordAction
+import team.inreok.getiserver.domain.job.event.JobDiscordEvent
 import team.inreok.getiserver.domain.job.exception.JobCompanyNotFoundException
+import team.inreok.getiserver.domain.job.exception.JobDiscordChannelNotAllowedException
 import team.inreok.getiserver.domain.job.exception.JobFormRequiredException
 import team.inreok.getiserver.domain.job.exception.JobNotFoundException
 import team.inreok.getiserver.domain.job.exception.JobNotVisibleException
@@ -374,10 +378,117 @@ class JobServiceTest {
         verify(jobRepository, never()).incrementViewCount(anyLong())
     }
 
+    // --- Discord Event 발행 (docs/notification/discord-event-wiring-plan.md §4.2) ---
+    //
+    // 한 번도 게시되지 않은 DRAFT는 Discord에 메시지가 없어, UPDATED/DELETED를 발행하면 Worker가
+    // MISSING_DISCORD_MESSAGE_ID로 실패 처리할 Row만 쌓인다. 그래서 발행 단계에서 거른다.
+
+    @Test
+    fun `PUBLISHED로 등록하면 Discord PUBLISHED Event를 발행한다`() {
+        givenActiveCompany()
+        givenSaveAssignsId()
+
+        service.create(publishableRequest(), createdByMemberId = 7L)
+
+        assertThat(publishedDiscordEvents()).containsExactly(JobDiscordEvent(1L, JobDiscordAction.PUBLISHED))
+    }
+
+    @Test
+    fun `DRAFT로 등록하면 Discord Event를 발행하지 않는다`() {
+        givenActiveCompany()
+        givenSaveAssignsId()
+
+        service.create(draftRequest(), createdByMemberId = 7L)
+
+        assertThat(publishedDiscordEvents()).isEmpty()
+    }
+
+    @Test
+    fun `게시된 공고를 수정하면 Discord UPDATED Event를 발행한다`() {
+        givenFoundNotDeleted(jobOf(status = JobStatus.PUBLISHED))
+        givenActiveCompany()
+
+        service.update(1L, JobUpdateRequest(title = "수정된 제목"))
+
+        assertThat(publishedDiscordEvents()).containsExactly(JobDiscordEvent(1L, JobDiscordAction.UPDATED))
+    }
+
+    @Test
+    fun `DRAFT를 수정하면 Discord Event를 발행하지 않는다`() {
+        givenFoundNotDeleted(jobOf(status = JobStatus.DRAFT))
+        givenActiveCompany()
+
+        service.update(1L, JobUpdateRequest(title = "수정된 제목"))
+
+        assertThat(publishedDiscordEvents()).isEmpty()
+    }
+
+    @Test
+    fun `게시된 공고를 마감하면 Discord CLOSED Event를 발행한다`() {
+        givenFoundNotDeleted(jobOf(status = JobStatus.PUBLISHED))
+        givenActiveCompany()
+
+        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.CLOSED))
+
+        assertThat(publishedDiscordEvents()).containsExactly(JobDiscordEvent(1L, JobDiscordAction.CLOSED))
+    }
+
+    @Test
+    fun `게시된 공고를 삭제하면 Discord DELETED Event를 발행한다`() {
+        givenFoundNotDeleted(jobOf(status = JobStatus.PUBLISHED))
+        givenActiveCompany()
+
+        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.DELETED))
+
+        assertThat(publishedDiscordEvents()).containsExactly(JobDiscordEvent(1L, JobDiscordAction.DELETED))
+    }
+
+    @Test
+    fun `DRAFT를 삭제하면 Discord Event를 발행하지 않는다`() {
+        givenFoundNotDeleted(jobOf(status = JobStatus.DRAFT))
+        givenActiveCompany()
+
+        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.DELETED))
+
+        assertThat(publishedDiscordEvents()).isEmpty()
+    }
+
+    @Test
+    fun `DRAFT를 게시하면 Discord PUBLISHED Event를 발행한다`() {
+        givenFoundNotDeleted(jobOf(status = JobStatus.DRAFT))
+        givenActiveCompany()
+
+        service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED))
+
+        assertThat(publishedDiscordEvents()).containsExactly(JobDiscordEvent(1L, JobDiscordAction.PUBLISHED))
+    }
+
+    @Test
+    fun `허용 목록에 없는 Discord 채널 Key로 등록하면 거부한다`() {
+        givenActiveCompany()
+        given(discordChannelResolver.isAllowedJobChannelKey("random-channel")).willReturn(false)
+
+        assertThatThrownBy {
+            service.create(publishableRequest().copy(discordChannelKey = "random-channel"), createdByMemberId = 7L)
+        }.isInstanceOf(JobDiscordChannelNotAllowedException::class.java)
+
+        verify(jobRepository, never()).saveAndFlush(anyJob())
+    }
+
     // --- Fixture ---
     //
     // Kotlin non-null 파라미터에 bare any()를 쓰면 null이 반환되어 NPE가 나므로 Elvis로 기본값을
     // 준다(CompanyServiceTest.anyCompany와 같은 이유).
+
+    /**
+     * 발행된 Event 중 [JobDiscordEvent]만 골라낸다. 같은 지점에서 `JobChangedEvent`(search 색인
+     * 동기화)도 함께 발행되므로 Event 종류를 구분하지 않으면 검증이 흐려진다.
+     */
+    private fun publishedDiscordEvents(): List<JobDiscordEvent> {
+        val captor = ArgumentCaptor.forClass(Any::class.java)
+        verify(eventPublisher, atLeastOnce()).publishEvent(captor.capture() ?: Any())
+        return captor.allValues.filterIsInstance<JobDiscordEvent>()
+    }
 
     private fun anyJob(): Job = any(Job::class.java) ?: newJob()
 
