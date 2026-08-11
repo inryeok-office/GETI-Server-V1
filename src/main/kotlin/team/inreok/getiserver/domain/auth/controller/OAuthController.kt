@@ -12,7 +12,8 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import team.inreok.getiserver.domain.auth.dto.AuthorizeResponse
-import team.inreok.getiserver.domain.auth.dto.OAuthCallbackResponse
+import team.inreok.getiserver.domain.auth.dto.OAuthLoginResponse
+import team.inreok.getiserver.domain.auth.service.AuthLoginService
 import team.inreok.getiserver.domain.auth.service.OAuthLoginService
 import team.inreok.getiserver.global.web.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
@@ -22,6 +23,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 @RequestMapping("/api/v1/auth/{provider}")
 class OAuthController(
     private val oAuthLoginService: OAuthLoginService,
+    private val authLoginService: AuthLoginService,
 ) {
     // Frontend(Web/App)가 이 URL로 직접 이동(Redirect)해 Google 로그인 화면을 띄운다. Web/App이
     // 동일한 방식으로 소비할 수 있도록 302 Redirect 대신 JSON으로 URL을 반환한다.
@@ -52,26 +54,29 @@ class OAuthController(
         return ApiResponse.of(AuthorizeResponse(authorization.authorizationUrl, authorization.state))
     }
 
-    // Google이 사용자 동의 후 이 URL로 code/state를 붙여 Redirect한다. code/state 교환까지만
-    // 수행하고 Provider의 사용자 식별값(subject/email)을 그대로 반환한다 — 이 식별값으로 회원을
-    // 조회/생성하고 GETI 자체 Token을 발급하는 것은 Member 도메인 연동이 필요해 후속 PR에서
-    // 이어서 구현한다(OAuthLoginService.exchangeCode 참고).
+    // Provider가 사용자 동의 후 이 URL로 code/state를 붙여 Redirect한다. code/state를 교환해 회원을
+    // 조회/생성하고 GETI 자체 Access/Refresh Token을 발급한다. Frontend는 응답의 isNewMember/status로
+    // 진입 페이지(신규 → 프로필 등록, 승인 대기 → 안내)를 분기한다.
     @Operation(
-        summary = "OAuth 콜백 처리",
+        summary = "OAuth 콜백 처리 및 로그인 완료",
         description = """
-            OAuth Provider가 사용자 동의 후 이 Endpoint로 code/state를 Redirect한다. code/state 교환까지만
-            수행하고 Provider의 사용자 식별값(subject, email)을 그대로 반환한다. 이 식별값으로 GETI 회원을
-            조회·생성하고 자체 Access/Refresh Token을 발급하는 절차는 아직 연동되지 않았다(후속 작업).
-            인증 없이 접근 가능하다.
+            OAuth Provider가 사용자 동의 후 이 Endpoint로 code/state를 Redirect한다. 서버는 code/state를
+            교환해 사용자 식별값을 얻고, 그 값으로 GETI 회원을 조회하거나(없으면) status=PENDING으로 신규
+            생성한 뒤 GETI 자체 Access/Refresh Token을 발급한다. 응답의 isNewMember/status로 최초 로그인·
+            승인 대기 여부를 구분한다. 인증 없이 접근 가능하다.
         """,
     )
     @ApiResponses(
-        SwaggerApiResponse(responseCode = "200", description = "Provider 사용자 식별값 반환 성공"),
+        SwaggerApiResponse(responseCode = "200", description = "로그인 성공(Token 및 회원 정보 반환)"),
         SwaggerApiResponse(
             responseCode = "400",
             description =
                 "state가 만료되었거나 유효하지 않음(OAUTH_STATE_INVALID), " +
                     "Provider Token 교환·UserInfo 조회 실패(OAUTH_LOGIN_FAILED)",
+        ),
+        SwaggerApiResponse(
+            responseCode = "409",
+            description = "같은 이메일이 다른 방식으로 이미 가입됨(OAUTH_EMAIL_ALREADY_REGISTERED)",
         ),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
@@ -94,8 +99,5 @@ class OAuthController(
         )
         @RequestParam
         state: String,
-    ): ApiResponse<OAuthCallbackResponse> {
-        val userInfo = oAuthLoginService.exchangeCode(provider, code, state)
-        return ApiResponse.of(OAuthCallbackResponse(subject = userInfo.subject, email = userInfo.email))
-    }
+    ): ApiResponse<OAuthLoginResponse> = ApiResponse.of(authLoginService.loginWithOAuth(provider, code, state))
 }
