@@ -27,7 +27,7 @@ class TokenController(
         summary = "Access/Refresh Token 재발급",
         description = """
             유효한 Refresh Token을 즉시 폐기(1회용 Rotation)하고 새 Access/Refresh Token 쌍을 발급한다.
-            Access Token은 아직 Member 도메인과 연동되지 않아 역할(roles) Claim이 항상 빈 목록이다.
+            새 Access Token의 역할(roles) Claim은 해당 회원의 현재 Member Role을 다시 조회해 반영한다.
             Access Token(Authorization Header) 없이 Body의 refreshToken만으로 호출한다.
         """,
     )
