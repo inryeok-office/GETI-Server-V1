@@ -3,8 +3,10 @@ package team.inreok.getiserver.domain.job
 import com.redis.testcontainers.RedisContainer
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.BDDMockito.given
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
@@ -74,6 +76,9 @@ class JobDiscordEventIntegrationTest {
         any(DiscordDeliveryEnqueueCommand::class.java)
             ?: DiscordDeliveryEnqueueCommand(DiscordMessageTemplate.JOB_PUBLISHED, 0L, "")
 
+    private fun captureCommand(captor: ArgumentCaptor<DiscordDeliveryEnqueueCommand>): DiscordDeliveryEnqueueCommand =
+        captor.capture() ?: DiscordDeliveryEnqueueCommand(DiscordMessageTemplate.JOB_PUBLISHED, 0L, "")
+
     @Test
     fun `Discord 예약이 실패해도 공고 등록 Transaction은 이미 Commit되어 영향을 받지 않는다`() {
         given(discordDeliveryService.enqueue(anyCommand())).willThrow(RuntimeException("Discord 예약 강제 실패(Test 전용)"))
@@ -88,6 +93,16 @@ class JobDiscordEventIntegrationTest {
 
         assertThat(response.status).isEqualTo(JobStatus.PUBLISHED)
         assertThat(response.jobId).isNotNull()
+
+        // Listener가 실제로 실행됐는지 확인한다. 이 검증이 없으면 Listener가 아예 동작하지
+        // 않아도(Event 미발행, Bean 누락, 채널 해석 실패) 위 단언만으로는 똑같이 통과해
+        // 이 Test의 관심사인 "예외가 원본 Transaction으로 번지지 않는다"를 검증할 수 없다.
+        // 요청이 채널 Key를 지정하지 않았으므로 default-job-channel-key로 해석돼야 한다.
+        val captor = ArgumentCaptor.forClass(DiscordDeliveryEnqueueCommand::class.java)
+        verify(discordDeliveryService).enqueue(captureCommand(captor))
+        assertThat(captor.value.template).isEqualTo(DiscordMessageTemplate.JOB_PUBLISHED)
+        assertThat(captor.value.targetId).isEqualTo(response.jobId)
+        assertThat(captor.value.channelId).isEqualTo("job-discord-event-test-channel")
     }
 
     private fun createCompany() = companyRepository.saveAndFlush(Company(name = "인력개발원", type = CompanyType.GENERAL))
