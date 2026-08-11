@@ -189,10 +189,12 @@ class DiscordDeliveryAdminController(
         ApiResponse.of(discordDeliveryService.findStatus(DiscordDeliveryTargetType.INQUIRY, inquiryId))
 
     /**
-     * `ProgramServiceImpl.requireManager`와 같은 규칙이다 -- 두 곳이 각자 판정 규칙을 흉내 내면
-     * 어긋날 수 있어 이상적으로는 하나로 모아야 하지만, `program`의 그 규칙은 Module 내부
-     * 구현이라 `notification`이 직접 재사용할 수 없다(Module 경계). 규칙 자체가 단순(3항 비교)해
-     * 중복의 위험보다 새 Cross-Module 계약을 만드는 비용이 크다고 판단했다.
+     * `ProgramServiceImpl.requireManager`와 같은 규칙(등록자 또는 담당 교사, 개발자는 우회)이다.
+     * 그 Method 자체는 `program` Module 내부 구현이라 `notification`이 직접 호출할 수 없어
+     * (Module 경계), 판정에 필요한 최소 정보만 [ProgramManagerQueryPort]로 공개받아 여기서 같은
+     * 비교를 수행한다(`discord-event-wiring-plan.md` §7 결정 11). 판정 로직을 Port에 넣지 않은
+     * 것은 접근 제어 결정을 소비 측이 명시적으로 갖도록 하기 위해서다 -- 규칙이 바뀌면 두 곳을
+     * 함께 고쳐야 하므로, 규칙 변경 시 이 주석과 `requireManager`를 같이 확인한다.
      */
     private fun requireProgramManager(
         authentication: Authentication,
