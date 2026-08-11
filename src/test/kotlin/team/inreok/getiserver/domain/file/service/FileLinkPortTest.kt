@@ -203,6 +203,34 @@ class FileLinkPortTest {
     }
 
     @Test
+    fun `linkedFilesOf 배치 조회는 ownerId별로 파일을 묶어 돌려준다`() {
+        val fileForFirst =
+            uploadedFile(id = 1L, uploaderMemberId = OWNER, purpose = FilePurpose.INQUIRY_ANSWER_ATTACHMENT)
+        fileForFirst.linkTo(FileOwnerType.INQUIRY_ANSWER, 10L, LocalDateTime.now())
+        val fileForSecond =
+            uploadedFile(id = 2L, uploaderMemberId = OWNER, purpose = FilePurpose.INQUIRY_ANSWER_ATTACHMENT)
+        fileForSecond.linkTo(FileOwnerType.INQUIRY_ANSWER, 20L, LocalDateTime.now())
+        given(
+            storedFileRepository.findAllByOwnerTypeAndOwnerIdInAndStatus(
+                FileOwnerType.INQUIRY_ANSWER,
+                setOf(10L, 20L),
+                FileStatus.LINKED,
+            ),
+        ).willReturn(listOf(fileForFirst, fileForSecond))
+
+        val filesByOwnerId = port.linkedFilesOf(FileOwnerType.INQUIRY_ANSWER, listOf(10L, 20L))
+
+        assertThat(filesByOwnerId).hasSize(2)
+        assertThat(filesByOwnerId.getValue(10L).single().fileId).isEqualTo(1L)
+        assertThat(filesByOwnerId.getValue(20L).single().fileId).isEqualTo(2L)
+    }
+
+    @Test
+    fun `linkedFilesOf 배치 조회는 ownerId가 비어있으면 조회 없이 빈 Map을 돌려준다`() {
+        assertThat(port.linkedFilesOf(FileOwnerType.INQUIRY_ANSWER, emptyList())).isEmpty()
+    }
+
+    @Test
     fun `snapshotsOf는 보이지 않는 상태의 파일을 제외한다`() {
         val visible = uploadedFile(id = 1L, uploaderMemberId = OWNER)
         val pending = pendingFile(id = 2L, uploaderMemberId = OWNER)

@@ -46,6 +46,16 @@ interface StoredFileRepository : JpaRepository<StoredFile, Long> {
         status: FileStatus,
     ): List<StoredFile>
 
+    /**
+     * [findAllByOwnerTypeAndOwnerIdAndStatus]의 배치 버전이다. 여러 리소스에 연결된 파일을 한
+     * 번에 읽어 N+1을 막는다(`FileLinkPort.linkedFilesOf`의 배치 오버로드가 사용).
+     */
+    fun findAllByOwnerTypeAndOwnerIdInAndStatus(
+        ownerType: FileOwnerType,
+        ownerIds: Collection<Long>,
+        status: FileStatus,
+    ): List<StoredFile>
+
     /** 리소스에 이미 연결된 파일 수. 지시서 §24의 목적별 최대 첨부 개수 검증에 쓴다. */
     fun countByOwnerTypeAndOwnerIdAndPurposeAndStatus(
         ownerType: FileOwnerType,

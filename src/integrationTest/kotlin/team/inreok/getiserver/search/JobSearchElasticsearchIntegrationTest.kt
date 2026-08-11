@@ -18,6 +18,7 @@ import org.testcontainers.images.builder.ImageFromDockerfile
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
+import team.inreok.getiserver.domain.file.link.FileUrlPort
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
@@ -52,7 +53,10 @@ class JobSearchElasticsearchIntegrationTest {
     @BeforeEach
     fun setUp() {
         indexManager = JobSearchIndexManager(elasticsearchOperations, properties)
-        searchService = JobSearchServiceImpl(indexManager)
+        // 이 Test는 Elasticsearch Query 자체의 정확성만 다룬다 -- 로고 URL 발급(FileUrlPort)은
+        // JobSearchServiceImplTest(Unit Test)와 CompanyQueryImplTest가 이미 검증하므로 여기서는
+        // 항상 빈 Map을 돌려주는 최소 구현으로 대체한다.
+        searchService = JobSearchServiceImpl(indexManager, NoOpFileUrlPort)
 
         // 재색인(Alias 전환) 흐름은 SearchReindexServiceImplTest(Unit Test)가 이미 검증하므로,
         // 여기서는 검색 Query 자체의 정확성만 보기 위해 Alias 이름과 동일한 물리 Index를 직접
@@ -333,6 +337,7 @@ class JobSearchElasticsearchIntegrationTest {
         sort,
         direction,
         pageable,
+        REQUESTER_ID,
     )
 
     @Suppress("LongParameterList")
@@ -393,6 +398,7 @@ class JobSearchElasticsearchIntegrationTest {
         companyId = 1L,
         companyName = companyName,
         companyType = companyType.name,
+        companyLogoFileId = null,
         sourceName = sourceName,
         targetGrade = targetGrade,
         capacity = null,
@@ -403,8 +409,17 @@ class JobSearchElasticsearchIntegrationTest {
         endDate = endDate,
     )
 
+    /** 항상 빈 Map을 돌려주는 최소 구현이다. 이 Test는 Query 정확성만 다루고 File URL 발급은 다루지 않는다. */
+    private object NoOpFileUrlPort : FileUrlPort {
+        override fun presignedImageUrls(
+            requesterId: Long,
+            fileIds: Collection<Long>,
+        ): Map<Long, String> = emptyMap()
+    }
+
     companion object {
         private const val TEST_INDEX = "jobs-search-integration-test"
+        private const val REQUESTER_ID = 1L
 
         @Container
         @JvmStatic

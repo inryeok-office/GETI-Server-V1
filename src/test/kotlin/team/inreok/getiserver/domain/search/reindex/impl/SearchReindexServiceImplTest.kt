@@ -206,6 +206,7 @@ class SearchReindexServiceImplTest {
             companyId = 1L,
             companyName = "인력개발원",
             companyType = "GENERAL",
+            companyLogoFileId = null,
             sourceName = null,
             targetGrade = null,
             capacity = null,

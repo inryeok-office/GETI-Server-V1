@@ -31,6 +31,9 @@ import tools.jackson.databind.ObjectMapper
  * `/api/v1/notifications` 이하(인앱 알림 조회·읽음 처리, Notification Core)도 인증만 요구한다 —
  * 항상 요청자 본인의 알림만 다루기 때문이다. `/api/v1/files` 이하(공통 파일 업로드·다운로드,
  * File 도메인 Issue #85)도 인증만 요구하고, 파일별 소유권·접근 권한은 File 도메인이 판정한다.
+ * `/api/v1/inquiries`(문의 등록·상세 조회)와 `/api/v1/me/inquiries`(내 문의 목록, 기존
+ * `/api/v1/me/` 이하 규칙에 포함)도 인증만 요구한다 — 상세 조회의 본인 소유권 검증(개발자는 예외)은
+ * Role로 알 수 없어 InquiryService가 별도로 수행한다.
  * 전공/기술스택 메타데이터 조회 등 다른
  * Domain은 아직 Spring Security와 연동되지 않아
  * ([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport] 참고)
@@ -48,6 +51,12 @@ class SecurityConfig(
     fun jwtAuthenticationFilter(jwtTokenProvider: JwtTokenProvider): JwtAuthenticationFilter =
         JwtAuthenticationFilter(jwtTokenProvider)
 
+    // authorizeHttpRequests가 Domain이 늘어날 때마다 한 줄씩 길어지는 선언적 목록이라(Class
+    // KDoc 참고) detekt 기본 LongMethod 임계값(60)을 넘는다. Domain별 규칙을 별도 Method로
+    // 쪼개면 "구체적인 경로를 먼저 선언한다"는 순서 자체가 여러 Method에 흩어져 오히려 실수를
+    // 유발한다(Program 사고 사례, 이 파일 Inquiry 규칙 주석 참고) -- 한 곳에 순서대로 두는 것이
+    // 의도적인 설계다.
+    @Suppress("LongMethod")
     @Bean
     fun securityFilterChain(
         http: HttpSecurity,
@@ -84,6 +93,13 @@ class SecurityConfig(
                 // 가려지지 않는다.
                 authorize("/api/v1/me/forms", hasAnyRole("TEACHER", "DEVELOPER"))
                 authorize("/api/v1/me/forms/**", hasAnyRole("TEACHER", "DEVELOPER"))
+                // 내 문의 목록(요구사항 §13)도 학생·교사·개발자 모두 인증만 있으면 접근할 수
+                // 있어 값 자체는 아래 "/api/v1/me/**" 규칙과 같다. 그래도 명시적으로 선언한다 --
+                // 그 규칙에 암묵적으로 기대면 나중에 "/api/v1/me/**" 기본값이 바뀔 때(예: 다른
+                // 하위 경로에 Role 제한이 생기며 그 파급 범위를 좁히려 규칙이 세분화되는 경우)
+                // Inquiry가 조용히 영향받는다. 하위 경로가 없는 단일 Endpoint라 "/**" 형태는
+                // 추가하지 않는다.
+                authorize("/api/v1/me/inquiries", authenticated)
                 authorize("/api/v1/me/**", authenticated)
                 authorize("/api/v1/members", authenticated)
                 authorize("/api/v1/members/**", authenticated)
@@ -142,6 +158,26 @@ class SecurityConfig(
                 // File 도메인의 Service 계층이 별도로 판정한다(§16).
                 authorize("/api/v1/files", authenticated)
                 authorize("/api/v1/files/**", authenticated)
+                // 문의 관리(전체 목록·검색, 담당자 지정·해제, 상태 변경, 답변 등록)는 개발자만
+                // 접근한다(요구사항 §51 권한 Matrix). Program에서 넓은 패턴이 먼저 선언되어
+                // 학생 전용 API가 뚫렸던 사고(원본 실행 프롬프트 §3)를 반복하지 않도록, 구체적인
+                // 하위 경로(.../answers, .../status, .../assignee)를 목록 조회·admin catch-all
+                // 보다 먼저 선언한다. POST .../answers는 Phase 4에서 Controller를 추가하며, 그때
+                // 가서 이 순서를 다시 손대지 않도록 지금 함께 선언해 둔다(현재는 대응하는
+                // Controller가 없어 이 규칙에 실제로 도달하는 요청이 없다).
+                authorize(HttpMethod.POST, "/api/v1/admin/inquiries/*/answers", hasRole("DEVELOPER"))
+                authorize(HttpMethod.PATCH, "/api/v1/admin/inquiries/*/status", hasRole("DEVELOPER"))
+                authorize(HttpMethod.PATCH, "/api/v1/admin/inquiries/*/assignee", hasRole("DEVELOPER"))
+                authorize(HttpMethod.GET, "/api/v1/admin/inquiries", hasRole("DEVELOPER"))
+                authorize("/api/v1/admin/inquiries/**", hasRole("DEVELOPER"))
+                // 문의 등록·상세 조회는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
+                // 상세 조회의 본인 소유권 검증(다른 사용자 문의 차단, 개발자는 예외)은 Role로 알
+                // 수 없어 InquiryService가 별도로 수행한다. "/api/v1/admin/inquiries"는 이 Prefix와
+                // 겹치지 않지만, 위 admin 규칙을 이 규칙보다 먼저 선언하는 순서 관례를 유지한다.
+                // "/api/v1/me/inquiries"는 기존 "/api/v1/me/**" 규칙(위)이 이미 포함하므로 별도로
+                // 추가하지 않는다.
+                authorize("/api/v1/inquiries", authenticated)
+                authorize("/api/v1/inquiries/**", authenticated)
                 authorize(anyRequest, permitAll)
             }
             exceptionHandling {

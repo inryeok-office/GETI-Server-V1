@@ -33,6 +33,13 @@ enum class FileOwnerType {
     /** 문의 첨부파일. `owner_id`는 `inquiries.id`. */
     INQUIRY,
 
+    /**
+     * 문의 답변 첨부파일. `owner_id`는 `inquiry_answers.id`. [INQUIRY]와 분리한 이유는 문의 본문과
+     * 그에 달린 여러 답변이 같은 `owner_id`(문의 ID) 아래에서는 서로 구분되지 않기 때문이다
+     * (GETI Inquiry 도메인 개발 요구사항 45절, 사용자 확인 완료).
+     */
+    INQUIRY_ANSWER,
+
     /** 포트폴리오 제출물. `owner_id`는 `portfolio_submissions.id`(요청이 아니라 실제 제출물). */
     PORTFOLIO_SUBMISSION,
 }
