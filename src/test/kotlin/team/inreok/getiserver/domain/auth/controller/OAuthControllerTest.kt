@@ -42,8 +42,8 @@ class OAuthControllerTest
                         accessTokenExpiresInSeconds = 1800,
                         memberId = 1L,
                         roles = listOf("TEACHER"),
-                        status = "PENDING",
-                        isNewMember = true,
+                        status = "ACTIVE",
+                        isNewMember = false,
                     ),
                 )
 
@@ -55,8 +55,8 @@ class OAuthControllerTest
                 .andExpect(jsonPath("$.data.accessTokenExpiresInSeconds").value(1800))
                 .andExpect(jsonPath("$.data.memberId").value(1))
                 .andExpect(jsonPath("$.data.roles[0]").value("TEACHER"))
-                .andExpect(jsonPath("$.data.status").value("PENDING"))
-                .andExpect(jsonPath("$.data.isNewMember").value(true))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.isNewMember").value(false))
         }
 
         @Test

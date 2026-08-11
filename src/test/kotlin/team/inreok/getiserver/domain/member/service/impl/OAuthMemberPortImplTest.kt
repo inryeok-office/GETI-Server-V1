@@ -58,40 +58,45 @@ class OAuthMemberPortImplTest {
         verify(memberRepository, never()).saveAndFlush(anyMember())
     }
 
+    // 저장 시 전달된 Member에 id를 붙여 그대로 돌려준다(생성된 status를 결과가 그대로 반영하도록).
+    private fun savedWithId(id: Long) =
+        org.mockito.BDDMockito.willAnswer { inv -> (inv.arguments[0] as Member).also { it.id = id } }
+
     @Test
-    fun `Google 신규 회원은 PENDING으로 생성되고 TEACHER 역할이 부여된다`() {
+    fun `Google 신규 교직원은 PENDING으로 생성되고 승인 전이라 Role을 부여하지 않는다`() {
         given(memberRepository.findByOauthProviderAndOauthSubject(OAuthProvider.GOOGLE, "subject-1")).willReturn(null)
         given(memberRepository.findByEmail("user@example.com")).willReturn(null)
-        given(memberRepository.saveAndFlush(anyMember())).willReturn(member(id = 10L))
+        savedWithId(10L).given(memberRepository).saveAndFlush(anyMember())
 
         val result = port.findOrCreateByOAuth("google", "subject-1", "user@example.com")
 
         assertThat(result.memberId).isEqualTo(10L)
         assertThat(result.status).isEqualTo("PENDING")
-        assertThat(result.roles).containsExactly("TEACHER")
+        assertThat(result.roles).isEmpty()
         assertThat(result.isNewMember).isTrue()
-
-        val captor = ArgumentCaptor.forClass(MemberRole::class.java)
-        verify(memberRoleRepository).save(captor.capture())
-        assertThat(captor.value.id.role).isEqualTo(RoleType.TEACHER)
-        assertThat(captor.value.id.memberId).isEqualTo(10L)
+        // PENDING 회원에게 Role을 부여하면 status를 보지 않는 인가에서 승인을 우회하므로 부여하지 않는다.
+        verify(memberRoleRepository, never()).save(org.mockito.ArgumentMatchers.any(MemberRole::class.java))
     }
 
     @Test
-    fun `DG 신규 회원은 STUDENT 역할이 부여된다`() {
+    fun `DG 신규 학생은 ACTIVE로 자동 가입되고 STUDENT 역할이 부여된다`() {
         given(memberRepository.findByOauthProviderAndOauthSubject(OAuthProvider.DG, "dg-subject")).willReturn(null)
         given(memberRepository.findByEmail("student@dgsw.hs.kr")).willReturn(null)
-        given(memberRepository.saveAndFlush(anyMember()))
-            .willReturn(
-                member(id = 11L, provider = OAuthProvider.DG, subject = "dg-subject", email = "student@dgsw.hs.kr"),
-            )
+        savedWithId(11L).given(memberRepository).saveAndFlush(anyMember())
 
         val result = port.findOrCreateByOAuth("dg", "dg-subject", "student@dgsw.hs.kr")
 
+        assertThat(result.status).isEqualTo("ACTIVE")
         assertThat(result.roles).containsExactly("STUDENT")
-        val captor = ArgumentCaptor.forClass(MemberRole::class.java)
-        verify(memberRoleRepository).save(captor.capture())
-        assertThat(captor.value.id.role).isEqualTo(RoleType.STUDENT)
+
+        val savedMember = ArgumentCaptor.forClass(Member::class.java)
+        verify(memberRepository).saveAndFlush(savedMember.capture())
+        assertThat(savedMember.value.status).isEqualTo(MemberStatus.ACTIVE)
+
+        val savedRole = ArgumentCaptor.forClass(MemberRole::class.java)
+        verify(memberRoleRepository).save(savedRole.capture())
+        assertThat(savedRole.value.id.role).isEqualTo(RoleType.STUDENT)
+        assertThat(savedRole.value.id.memberId).isEqualTo(11L)
     }
 
     @Test

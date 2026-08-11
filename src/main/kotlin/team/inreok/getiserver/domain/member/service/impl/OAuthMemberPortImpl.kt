@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.member.entity.Member
 import team.inreok.getiserver.domain.member.entity.MemberRole
 import team.inreok.getiserver.domain.member.entity.MemberRoleId
+import team.inreok.getiserver.domain.member.entity.type.MemberStatus
 import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
 import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.exception.OAuthEmailAlreadyRegisteredException
@@ -20,8 +21,10 @@ import team.inreok.getiserver.domain.member.repository.MemberRoleRepository
  * 이미 크고 이 책임(OAuth 회원 조회/생성)은 그와 무관하므로, 다른 `*QueryPortImpl`과 같은 방식으로
  * 분리한다.
  *
- * 최초 로그인은 회원을 `status=PENDING`으로 만들고 Provider에 따른 기본 Role을 부여한다. 승인 전까지
- * PENDING이므로 이 Role은 잠정값이며, 관리자가 승인 단계에서 실제 Role로 조정한다(Issue #48).
+ * 최초 로그인 시 Provider별로 상태를 다르게 만든다(Issue #99): 학생(DG)은 즉시 활성화(ACTIVE)해
+ * STUDENT Role을 부여하고, 교직원(GOOGLE)은 승인 대기(PENDING)로 두며 Role을 **부여하지 않는다**.
+ * `SecurityConfig`가 status가 아니라 Role만으로 인가하므로, PENDING 회원에게 권한 Role을 미리 주면
+ * 승인 절차를 우회한다. 교직원 Role은 이후 승인 시점에 부여한다.
  */
 @Service
 class OAuthMemberPortImpl(
@@ -62,7 +65,12 @@ class OAuthMemberPortImpl(
         val saved =
             try {
                 memberRepository.saveAndFlush(
-                    Member(oauthProvider = oauthProvider, oauthSubject = subject, email = email),
+                    Member(
+                        oauthProvider = oauthProvider,
+                        oauthSubject = subject,
+                        email = email,
+                        status = initialStatusFor(oauthProvider),
+                    ),
                 )
             } catch (ex: DataIntegrityViolationException) {
                 // 같은 사용자가 동시에 최초 로그인하면 한쪽이 UNIQUE 제약에 걸린다. 이 경우 먼저
@@ -76,12 +84,17 @@ class OAuthMemberPortImpl(
             }
 
         val memberId = requireNotNull(saved.id) { "저장된 Member는 id를 가져야 합니다." }
-        val defaultRole = defaultRoleFor(oauthProvider)
-        memberRoleRepository.save(MemberRole(MemberRoleId(memberId = memberId, role = defaultRole)))
+        // 승인 대기(PENDING) 회원에게는 Role을 부여하지 않는다 -- 부여하면 status를 보지 않는
+        // 인가(SecurityConfig)에서 승인 없이 권한을 갖게 된다. 즉시 활성화되는 회원만 부여한다.
+        val grantedRoles =
+            autoGrantRoleFor(oauthProvider)?.let { role ->
+                memberRoleRepository.save(MemberRole(MemberRoleId(memberId = memberId, role = role)))
+                listOf(role.name)
+            } ?: emptyList()
         return OAuthMemberIdentity(
             memberId = memberId,
             status = saved.status.name,
-            roles = listOf(defaultRole.name),
+            roles = grantedRoles,
             isNewMember = true,
         )
     }
@@ -101,12 +114,22 @@ class OAuthMemberPortImpl(
 
     private companion object {
         /**
-         * Provider별 최초 로그인 기본 Role. GOOGLE(교직원)은 TEACHER로 시작해 승인 시 관리자가
-         * DEVELOPER 등으로 조정한다(Issue #48 확정). DG(학생 로그인)는 STUDENT다.
+         * Provider별 최초 로그인 상태. 학생(DG)은 즉시 활성화(ACTIVE)해 로그인 후 바로 서비스를
+         * 이용하고, 교직원(GOOGLE)은 승인 대기(PENDING)로 생성한다(Issue #99 완료 조건).
          */
-        fun defaultRoleFor(provider: OAuthProvider): RoleType =
+        fun initialStatusFor(provider: OAuthProvider): MemberStatus =
             when (provider) {
-                OAuthProvider.GOOGLE -> RoleType.TEACHER
+                OAuthProvider.GOOGLE -> MemberStatus.PENDING
+                OAuthProvider.DG -> MemberStatus.ACTIVE
+            }
+
+        /**
+         * 가입 즉시 활성화되는 회원에게 부여할 기본 Role. 학생(DG)은 STUDENT를 바로 부여한다.
+         * 교직원(GOOGLE)은 PENDING이라 여기서 Role을 주지 않고(승인 우회 방지), 승인 시점에 부여한다.
+         */
+        fun autoGrantRoleFor(provider: OAuthProvider): RoleType? =
+            when (provider) {
+                OAuthProvider.GOOGLE -> null
                 OAuthProvider.DG -> RoleType.STUDENT
             }
     }

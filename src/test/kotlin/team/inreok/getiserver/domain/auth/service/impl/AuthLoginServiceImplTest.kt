@@ -32,16 +32,17 @@ class AuthLoginServiceImplTest {
     fun `로그인은 code 교환-회원 조회_생성-Token 발급을 조합해 응답을 만든다`() {
         given(oAuthLoginService.exchangeCode("google", "auth-code", "state-value"))
             .willReturn(OAuthUserInfo(subject = "google-subject-1", email = "teacher@example.com"))
+        // 신규 교직원(PENDING)은 승인 전이라 Role이 비어 있고, 그 값이 그대로 Token 발급에 전달된다.
         given(oAuthMemberPort.findOrCreateByOAuth("google", "google-subject-1", "teacher@example.com"))
             .willReturn(
                 OAuthMemberIdentity(
                     memberId = 7L,
                     status = "PENDING",
-                    roles = listOf("TEACHER"),
+                    roles = emptyList(),
                     isNewMember = true,
                 ),
             )
-        given(tokenService.issueFor(7L, listOf("TEACHER"), null))
+        given(tokenService.issueFor(7L, emptyList(), null))
             .willReturn(
                 IssuedTokens(
                     accessToken = "access-token",
@@ -56,7 +57,7 @@ class AuthLoginServiceImplTest {
         assertThat(response.refreshToken).isEqualTo("refresh-token")
         assertThat(response.accessTokenExpiresInSeconds).isEqualTo(1800)
         assertThat(response.memberId).isEqualTo(7L)
-        assertThat(response.roles).containsExactly("TEACHER")
+        assertThat(response.roles).isEmpty()
         assertThat(response.status).isEqualTo("PENDING")
         assertThat(response.isNewMember).isTrue()
     }
