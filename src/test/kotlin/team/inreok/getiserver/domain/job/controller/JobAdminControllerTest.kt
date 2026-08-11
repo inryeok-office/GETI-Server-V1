@@ -196,7 +196,9 @@ class JobAdminControllerTest
 
         @Test
         fun `공고를 부분 수정하면 200을 반환한다`() {
-            given(jobService.update(anyLong(), anyUpdateRequest())).willReturn(detailResponse(title = "새 제목"))
+            given(
+                jobService.update(anyLong(), anyUpdateRequest(), anyLong()),
+            ).willReturn(detailResponse(title = "새 제목"))
 
             mockMvc
                 .perform(
@@ -206,11 +208,14 @@ class JobAdminControllerTest
                         .content("""{"title":"새 제목"}"""),
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.data.title").value("새 제목"))
+                .andExpect(
+                    jsonPath("$.data.company.logoUrl").value("https://storage.example/company-logo?signature=test"),
+                )
         }
 
         @Test
         fun `없는 공고를 수정하면 404를 반환한다`() {
-            willThrow(JobNotFoundException(1L)).given(jobService).update(anyLong(), anyUpdateRequest())
+            willThrow(JobNotFoundException(1L)).given(jobService).update(anyLong(), anyUpdateRequest(), anyLong())
 
             mockMvc
                 .perform(
@@ -226,7 +231,7 @@ class JobAdminControllerTest
 
         @Test
         fun `상태를 변경하면 200을 반환한다`() {
-            given(jobService.changeStatus(anyLong(), anyStatusRequest()))
+            given(jobService.changeStatus(anyLong(), anyStatusRequest(), anyLong()))
                 .willReturn(detailResponse(status = JobStatus.PUBLISHED))
 
             mockMvc
@@ -243,7 +248,7 @@ class JobAdminControllerTest
         fun `허용되지 않은 상태 전이는 409를 반환한다`() {
             willThrow(JobStatusTransitionInvalidException(JobStatus.CLOSED, JobStatus.PUBLISHED))
                 .given(jobService)
-                .changeStatus(anyLong(), anyStatusRequest())
+                .changeStatus(anyLong(), anyStatusRequest(), anyLong())
 
             mockMvc
                 .perform(
@@ -259,7 +264,7 @@ class JobAdminControllerTest
 
         @Test
         fun `관리자는 임시저장 공고의 상세를 조회할 수 있다`() {
-            given(jobService.getForAdmin(1L)).willReturn(detailResponse(status = JobStatus.DRAFT))
+            given(jobService.getForAdmin(1L, 7L)).willReturn(detailResponse(status = JobStatus.DRAFT))
 
             mockMvc
                 .perform(get("/api/v1/admin/jobs/1").with(authOf(7L, "TEACHER")))
@@ -269,7 +274,7 @@ class JobAdminControllerTest
 
         @Test
         fun `관리자 상세에서 없는 공고는 404를 반환한다`() {
-            willThrow(JobNotFoundException(1L)).given(jobService).getForAdmin(anyLong())
+            willThrow(JobNotFoundException(1L)).given(jobService).getForAdmin(anyLong(), anyLong())
 
             mockMvc
                 .perform(get("/api/v1/admin/jobs/1").with(authOf(7L, "DEVELOPER")))
@@ -320,7 +325,7 @@ class JobAdminControllerTest
             postingType = PostingType.MOU,
             applicationMethod = ApplicationMethod.EXTERNAL,
             status = status,
-            company = CompanySummary(1L, "인력개발원"),
+            company = CompanySummary(1L, "인력개발원", logoUrl = "https://storage.example/company-logo?signature=test"),
             content = "## 모집 부문",
             externalUrl = "https://example.com/apply",
             startDate = null,

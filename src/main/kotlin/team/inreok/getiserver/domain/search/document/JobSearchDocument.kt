@@ -46,6 +46,12 @@ data class JobSearchDocument(
     val companyName: String?,
     @Field(type = FieldType.Keyword)
     val companyType: String?,
+    // Presigned URL은 저장하지 않는다 -- 만료되는 값이라 색인에 두면 검색 결과가 곧 깨진 링크를
+    // 반환하게 된다(Issue #92). 안정적인 File ID만 저장하고, 응답 조립 시점에 FileUrlPort로
+    // 매번 새로 URL을 발급한다(JobSummaryResponse.from, JobSearchServiceImpl 참고). 기업이
+    // 삭제되었거나 로고가 없으면 companyName과 같은 정책으로 null이다.
+    @Field(type = FieldType.Long)
+    val companyLogoFileId: Long?,
     @Field(type = FieldType.Keyword)
     val sourceName: String?,
     @Field(type = FieldType.Integer)
