@@ -18,15 +18,15 @@ Spring Modulith 도입은 즉시 MSA로 분리한다는 뜻이 아니다. 현재
 ## 현재 상태
 
 - Root Package: `team.inreok.getiserver`
-- 최신 19개 Table 최소 ERD([`erd.md`](./erd.md) 참고)를 구현한 15개 Domain Package가 `domain` 아래에 있다: `member`, `auth`, `file`, `company`, `job`, `ai`, `recommendation`, `application`, `program`, `portfolio`, `notification`, `inquiry`, `collector`, `operation`, `audit`.
-- `global`은 공통 기반 Package(`error`, `web`)를 담는다. `config`/`response`/`security`/`persistence`는 아직 실제 Class가 없어 만들지 않았다(아래 "global Package 책임" 참고).
-- 각 Domain Package는 현재 `entity`(+ 필요하면 `entity/type`)와 `repository`만 가진다. Service/Controller/DTO/Exception이 아직 없어 만들지 않았다(아래 "Domain Package 내부 구조" 참고).
-- Module 간 FK는 JPA 연관관계가 아니라 `Long`/`UUID` ID Column으로만 참조하므로(Entity 사이에 Java/Kotlin 타입 의존성이 없음), 대부분의 Domain은 서로 컴파일 시점 의존성이 전혀 없다. 유일한 예외는 `collector`(JobCollectionRun)가 `operation`의 공개 Type(`OperationStatus`)을 재사용하는 것이며, Spring Modulith Named Interface로 명시적으로 허용했다(아래 "Domain 간 허용 의존" 참고).
-- `./gradlew test --tests "*ModularityTest"`(`modules.verify()`)가 15개 Domain Module + `global` 구성에서 순환 의존성이나 비공개 접근 없이 통과한다.
+- `domain` 아래에 16개 Domain Package가 있다. 최신 19개 Table 최소 ERD([`erd.md`](./erd.md) 참고)를 구현한 15개 Domain(`member`, `auth`, `file`, `company`, `job`, `ai`, `recommendation`, `application`, `program`, `portfolio`, `notification`, `inquiry`, `collector`, `operation`, `audit`)에, 이후 Elasticsearch 기반 채용 공고 검색을 담당하는 `search`(Issue #69)가 추가됐다. `search`는 색인 상태 관리를 위한 자체 Table(`SearchIndexFailure`/`SearchReindexRun`)도 갖지만, `erd.md` 갱신은 이 문서의 범위가 아니다.
+- `global`은 공통 기반 Package로 `error`, `web`, `openapi`, `health`, `security`를 담는다. `config`/`response`/`persistence`는 아직 실제 Class가 없어 만들지 않았다(아래 "global Package 책임" 참고).
+- 각 Domain Package는 담당 책임만큼만 Sub-package를 갖는다. `ai`/`recommendation`/`portfolio`/`operation`/`audit`는 아직 `entity`(+ 필요하면 `entity/type`)와 `repository`만 갖고, 나머지 11개 Domain은 실제 기능이 구현되어 `service`/`controller`/`dto`/`exception` 등을 추가로 갖는다(아래 "Domain Package 내부 구조" 참고).
+- Module 간 FK는 JPA 연관관계가 아니라 `Long`/`UUID` ID Column으로만 참조한다(Entity 사이에 직접적인 Java/Kotlin 타입 의존성은 없음). 다만 여러 Domain이 실제 기능(다른 Domain 정보 조회, Event 구독, 파일 접근 권한 판단 등)을 구현하면서 서로가 공개한 `query`/`event`/`upsert`/`external`/`link`/`access`/`entity.type` 같은 Named Interface Package를 통해 컴파일 시점 의존성을 갖는다(아래 "Domain 간 허용 의존" 참고). 다른 Domain의 비공개 구현(`entity`/`repository`/`service`/`controller` 등 Named Interface로 공개되지 않은 Package)을 직접 참조하는 경우는 없다.
+- `./gradlew test --tests "*ModularityTest"`(`modules.verify()`)가 16개 Domain Module + `global`(총 17개 Application Module) 구성에서 순환 의존성이나 비공개 접근 없이 통과한다.
 
 ## Package Tree
 
-`global`(공통 기반) Package 구조는 다음과 같다(PR 12 Global 전역 예외 처리 및 에러 응답 계약 정비 시점 그대로 유지).
+`global`(공통 기반) Package 구조는 다음과 같다. PR 12 시점에는 `error`/`web`만 있었지만, 이후 OpenAPI 문서화(`openapi`), 배포 정보 Health Endpoint(`health`), JWT 기반 인증(`security`)이 추가됐다.
 
 ```text
 team.inreok.getiserver                            (Root Package)
@@ -39,64 +39,84 @@ team.inreok.getiserver                            (Root Package)
 ├── ApplicationProfileConfigurationTest.kt         (Test, Profile Config Data Binding 검증)
 └── global                                         (Production + Test, Application Module — 공통 기반)
     ├── error
-    │   ├── ErrorCode.kt                          (Production, Framework Error Code)
+    │   ├── ErrorCode.kt                          (Production, Framework/공통 Error Code, CommonErrorCode 포함)
     │   ├── ErrorResponse.kt                       (Production, 공통 오류 응답)
     │   ├── BusinessException.kt                   (Production, Domain 예외 공통 기반)
     │   ├── GlobalExceptionHandler.kt               (Production, 전역 예외 처리)
     │   └── GlobalExceptionHandlerTest.kt           (Test, 오류 응답 Contract 검증)
-    └── web
-        ├── ApiResponse.kt                         (Production, 공통 성공 응답)
-        ├── PageResponse.kt                        (Production, Pagination 응답)
-        ├── CorsProperties.kt                       (Production, CORS ConfigurationProperties)
-        ├── WebCorsConfig.kt                        (Production, CORS 등록)
-        ├── WebPageableConfig.kt                    (Production, Pagination 최대 Size 강제)
-        ├── RequestIdFilter.kt                      (Production, requestId 생성/MDC 등록)
-        ├── WebTestSupportController.kt             (Test 전용 Controller)
-        ├── WebCorsConfigTest.kt                    (Test, CORS 허용/거부 검증)
-        └── RequestIdFilterTest.kt                  (Test, requestId 생성/재사용 검증)
+    ├── web
+    │   ├── ApiResponse.kt                         (Production, 공통 성공 응답)
+    │   ├── PageResponse.kt                        (Production, Pagination 응답)
+    │   ├── CorsProperties.kt                       (Production, CORS ConfigurationProperties)
+    │   ├── WebCorsConfig.kt                        (Production, CORS 등록)
+    │   ├── WebPageableConfig.kt                    (Production, Pagination 최대 Size 강제)
+    │   ├── RequestIdFilter.kt                      (Production, requestId 생성/MDC 등록)
+    │   ├── AuthorizationHeaderSupport.kt            (Production, Authorization Header 공통 파싱)
+    │   ├── WebTestSupportController.kt             (Test 전용 Controller)
+    │   ├── WebCorsConfigTest.kt                    (Test, CORS 허용/거부 검증)
+    │   └── RequestIdFilterTest.kt                  (Test, requestId 생성/재사용 검증)
+    ├── openapi
+    │   └── OpenApiConfig.kt                        (Production, Springdoc 공통 설정 — Info, JWT Bearer Security Scheme)
+    ├── health
+    │   ├── DeploymentInfoContributor.kt             (Production, `/actuator/info`에 배포 정보 추가)
+    │   ├── DeploymentInfoProperties.kt              (Production, 배포 정보 ConfigurationProperties)
+    │   ├── DeploymentInfoContributorTest.kt         (Test)
+    │   ├── DeploymentInfoPropertiesTest.kt          (Test)
+    │   ├── HealthEndpointTest.kt                    (Test)
+    │   └── HealthGroupMembershipTest.kt             (Test)
+    └── security
+        ├── SecurityConfig.kt                        (Production, Stateless JWT 인증 Filter Chain)
+        ├── JwtAuthenticationFilter.kt                (Production, JWT 검증 Filter)
+        ├── JwtTokenProvider.kt                       (Production, JWT 발급/검증)
+        ├── JwtProperties.kt                          (Production, JWT ConfigurationProperties)
+        └── JwtTokenProviderTest.kt                   (Test)
 ```
 
-`domain` 아래에는 15개 Domain Package가 있다. 각 Package는 동일한 형태를 반복한다(예시로 `member`만 전개, Enum이 없는 Domain은 `entity/type`도 없다).
+`domain` 아래에는 16개 Domain Package가 있다. 모든 Domain이 같은 Sub-package 구성을 갖는 것은 아니다 — Persistence만 있는 Domain은 `entity`/`repository`만, 실제 기능이 구현된 Domain은 필요한 만큼 `service`/`controller`/`dto`/`exception`/`query`/`event` 등을 추가로 갖는다(예시로 실제 기능이 구현된 `job`을 전개, 나머지는 실제 존재하는 주요 Sub-package만 나열).
 
 ```text
 team.inreok.getiserver.domain
-├── member
+├── job          채용 공고. Service/Controller까지 구현된 Domain의 대표 예시로 전개
 │   ├── entity
-│   │   ├── Member.kt
-│   │   ├── MemberRole.kt
-│   │   ├── MemberRoleId.kt
-│   │   └── type
-│   │       ├── OAuthProvider.kt
-│   │       ├── RoleType.kt
-│   │       ├── MemberStatus.kt
-│   │       ├── AcademicStatus.kt
-│   │       └── DepartmentType.kt
-│   └── repository
-│       ├── MemberRepository.kt
-│       └── MemberRoleRepository.kt
-├── auth        (RefreshToken + RefreshTokenRepository)
-├── file        (StoredFile + StoredFileRepository — java.io.File와 이름 충돌을 피해 StoredFile 사용)
-├── company     (Company + CompanyType/MouStatus + CompanyRepository)
-├── job         (Job + PostingType/ApplicationMethod/JobStatus + JobRepository)
-├── ai          (JobAiAnalysis + AiStatus + JobAiAnalysisRepository)
-├── recommendation (MemberJobPreference(+Id), Recommendation + SuitabilityLevel/ExclusionType + Repository 2종)
-├── application (JobApplication + JobApplicationStatus + JobApplicationRepository)
-├── program     (Program, ProgramApplication + Enum 3종 + Repository 2종)
-├── portfolio   (PortfolioRequest, PortfolioSubmission + Enum 2종 + Repository 2종)
-├── notification (Notification + NotificationRepository)
-├── inquiry     (Inquiry + InquiryType/InquiryStatus + InquiryRepository)
-├── collector   (JobCollectionRun + JobCollectionRunRepository — operation의 OperationStatus를 재사용)
-├── operation   (AsyncOperation + OperationStatus/OperationType + AsyncOperationRepository)
-└── audit       (AuditLog + AuditLogRepository)
+│   │   ├── Job.kt
+│   │   └── type/                                  (PostingType, ApplicationMethod, JobStatus)
+│   ├── repository
+│   │   └── JobRepository.kt
+│   ├── service
+│   │   ├── JobService.kt                          (Interface)
+│   │   └── impl/JobServiceImpl.kt
+│   ├── controller                                  (공고 조회/등록/수정/마감 API)
+│   ├── dto
+│   ├── exception
+│   ├── query                                       (다른 Domain에 공개하는 Named Interface — JobIndexQueryPort, JobDiscordPayloadQueryPort 등)
+│   ├── event                                       (JobChangedEvent — Named Interface)
+│   └── upsert                                      (collector가 사용하는 CollectedJobUpsertUseCase, + impl)
+├── member       entity(+type), repository, service(+impl), controller, dto, exception, query, access
+├── auth         entity, repository, service(+impl), controller, dto, exception (Refresh Token 발급/재발급)
+├── file         entity(+type), repository, service(+impl), controller, dto, exception, link, access, policy, storage
+├── company      entity(+type), repository, service(+impl), controller, dto, exception, query, external(+impl), access
+├── ai           entity(+type), repository (JobAiAnalysis — 아직 Service/Controller 없음)
+├── recommendation entity(+type), repository (MemberJobPreference, Recommendation — 아직 Service/Controller 없음)
+├── application  entity(+type), repository, service(+impl), controller, dto, exception, query
+├── program      entity(+type), repository, service(+impl), controller, dto, exception, query
+├── portfolio    entity(+type), repository (PortfolioRequest, PortfolioSubmission — 아직 Service/Controller 없음)
+├── notification entity(+type), repository, service(+impl), controller, dto, exception, event, scheduler, config (인앱 알림 + Discord Delivery)
+├── inquiry      entity(+type), repository, service(+impl), controller, dto, exception, query, event, access
+├── collector    entity(+type), repository, service(+impl), controller, dto, exception, scheduler, provider(외부 채용 사이트별 수집기), eligibility, notification(자체 Discord Webhook 연동)
+├── operation    entity(+type), repository (AsyncOperation — 아직 Service/Controller 없음)
+├── audit        entity, repository (AuditLog — 아직 Service/Controller 없음)
+└── search       entity(+type), repository, service(+impl), controller, dto, exception, event, scheduler, config, document, index, reindex(+impl) (Elasticsearch 색인/재색인)
 ```
 
-각 Domain의 19개 Table 전체 목록, Enum, FK/삭제 정책은 [`erd.md`](./erd.md)를 따른다. `common`/`util`/`controller`/`service`/`repository` 같은 Root 수준의 무제한·포괄 Package는 없다.
+각 Domain의 19개 Table 전체 목록, Enum, FK/삭제 정책은 [`erd.md`](./erd.md)를 따른다(`search`가 추가한 색인 관리 Table은 아직 이 문서에 반영되지 않았다). `common`/`util`/`controller`/`service`/`repository` 같은 Root 수준의 무제한·포괄 Package는 없다.
 
 모든 Spring Bean은 Main Application Class(`GetiServerApplication`)가 있는 Root Package 아래에 위치해야 한다. `@SpringBootApplication`은 별도 `scanBasePackages` 없이 Application Class가 속한 Package를 기준으로 Component Scan을 수행하므로, Root Package 밖에 Bean을 두면 자동으로 탐지되지 않는다.
 
 ## Domain Package 내부 구조
 
-Entity/Repository 기반 PR이므로 현재 각 Domain은 다음 Sub-package만 가진다.
+Domain Package는 정해진 Layer 세트를 전부 갖는 것이 아니라, 그 Domain이 실제로 담당하는 책임만큼만 Sub-package를 가진다.
+
+`ai`/`recommendation`/`portfolio`/`operation`/`audit`처럼 아직 Use Case(Service/Controller)가 구현되지 않은 Domain은 다음처럼 Persistence Package만 가진다.
 
 ```text
 domain/{domain-name}/
@@ -105,7 +125,7 @@ domain/{domain-name}/
 └── repository/
 ```
 
-향후 실제 기능이 생기면 같은 Domain 아래에 필요한 만큼만 추가한다.
+`member`/`auth`/`file`/`company`/`job`/`application`/`program`/`notification`/`inquiry`/`collector`/`search`처럼 실제 기능이 구현된 Domain은 필요한 만큼 아래 Sub-package를 추가로 가진다.
 
 ```text
 domain/{domain-name}/
@@ -115,10 +135,13 @@ domain/{domain-name}/
 │   └── impl/
 ├── controller/
 ├── dto/
-└── exception/
+├── exception/
+├── query/          다른 Domain에 공개하는 읽기 전용 계약(Named Interface, 아래 "Domain 간 허용 의존" 참고)
+├── event/          다른 Domain Listener가 구독하는 Domain Event(Named Interface)
+└── (Domain 책임에 따른 추가 Package 예: upsert/external/link/access/scheduler/provider/config/document/index)
 ```
 
-아직 실제 구현이 없는 `service`/`controller`/`dto`/`exception`은 미리 빈 Package로 만들지 않는다. `presentation`/`application`/`infrastructure` 같은 확정되지 않은 추가 Layer로도 전환하지 않는다.
+모든 Domain이 이 Package를 전부 가져야 하는 것은 아니다. 예를 들어 `collector`는 외부 채용 사이트별 수집기를 위한 `provider`(`cleaneye`/`jobalio`/`mma`/`naraeilteo`)와 `eligibility`, 자체 Discord Webhook 연동을 위한 `notification` Sub-package를 갖고, `search`는 Elasticsearch 연동을 위한 `document`/`index`/`reindex`를 갖는다. 아직 실제 구현이 없는 Package를 빈 채로 미리 만들지 않는다. `presentation`/`application`/`infrastructure` 같은 확정되지 않은 추가 Layer로도 전환하지 않는다.
 
 ### Service Interface/Impl 분리
 
@@ -144,11 +167,12 @@ Repository Interface는 `org.springframework.data.jpa.repository.JpaRepository`�
 | Package 후보 | 용도 | 현재 상태 |
 | --- | --- | --- |
 | `global.error` | 모든 Domain이 공유하는 오류 계약(Error Code, 오류 응답, 전역 예외 처리, 공통 예외 기반) | 있음([`web-api.md`](../development/web-api.md) 참고) |
-| `global.web` | 모든 Domain Controller가 공유하는 HTTP Web 기술 기반(공통 응답, Pagination, CORS, requestId 등) | 있음([`web-api.md`](../development/web-api.md) 참고) |
+| `global.web` | 모든 Domain Controller가 공유하는 HTTP Web 기술 기반(공통 응답, Pagination, CORS, requestId, Authorization Header 파싱 등) | 있음([`web-api.md`](../development/web-api.md) 참고) |
 | `global.openapi` | 모든 Domain Controller가 공유하는 Springdoc OpenAPI 공통 설정(Info, JWT Bearer Security Scheme) | 있음([`docs/ai/openapi-documentation.md`](../ai/openapi-documentation.md) 참고) |
+| `global.health` | 모든 Domain과 무관한 배포/운영 정보를 `/actuator/info`에 노출(Service/Version/GitSha/BuildTime/Environment) | 있음 |
+| `global.security` | Spring Security 설정(Stateless JWT 인증 Filter Chain, Token 발급/검증) | 있음(`SecurityConfig`/`JwtAuthenticationFilter`/`JwtTokenProvider`/`JwtProperties`) |
 | `global.config` | Spring Framework Configuration Class, `@ConfigurationProperties` | 없음. 실제 Class가 생기는 시점에 만든다 |
 | `global.response` | (검토 중) `global.web`과 책임이 겹친다 | 없음. `global.web`에 이미 `ApiResponse`/`PageResponse`가 있어 중복 Package를 만들지 않았다. 실제 필요가 명확해지면 `global.web`을 `global.response`로 재구성할지 별도로 판단한다 |
-| `global.security` | Spring Security 설정 | 없음. Spring Security 자체가 아직 도입되지 않았다 |
 | `global.persistence` | 여러 Domain이 공유하는 Persistence 기술 요소(예: 공통 Auditing 설정) | 없음. 19개 Table의 Timestamp Column 구성이 균일하지 않아(예: `files`는 `updated_at`이 없음) 공용 BaseEntity를 아직 도입하지 않았다([`erd.md`](./erd.md)의 "시간 타입과 Timestamp 자동화" 참고) |
 
 다음 규칙을 적용한다.
@@ -201,7 +225,7 @@ team.inreok.getiserver.DomainApplicationModuleDetectionStrategy   (src/test 전�
 
 `domain`의 Direct Subpackage(예: `domain.member`)는 개별 Module로, 그 외 Root Direct Subpackage(`global`)는 그대로 하나의 Module로 인식한다. `spring.modulith.detection-strategy`(`src/test/resources/application.yaml`)에 이 Class의 Fully Qualified Name을 지정했다. 이 Property는 `BeanUtils.instantiateClass`가 Public 기본 생성자로 직접 생성하는 방식이라 Spring Bean이 아니며, Spring Modulith가 실제로 사용되는 곳(현재는 `ModularityTest`/`ModuleDocumentationTest`뿐)에만 영향을 준다. `src/main`에는 이 설정이 없어 Production Runtime 동작에는 영향이 없다(Spring Modulith Production Dependency 자체가 없다).
 
-`ApplicationModules.of(GetiServerApplication::class.java)`로 실측한 결과 Module은 총 16개(`global` + 15개 `domain.{domain-name}`)다.
+`ApplicationModules.of(GetiServerApplication::class.java)`로 실측한 결과 Module은 총 17개(`global` + 16개 `domain.{domain-name}`)다.
 
 ## Domain 간 허용 의존
 
@@ -213,7 +237,11 @@ Module 간 순환 의존성을 만들지 않고, 다른 Module의 내부 구현(
 
 세 번째 사례는 같은 `CollectorExecutionServiceImpl`이 `company`가 공개한 `domain.company.external` Package(`CompanyExternalImportUseCase`/`CompanyExternalImportCommand`/`CompanyExternalImportResult`)를 통해 외부에서 수집한 기업명으로 기존 기업을 찾거나 최소 정보로 새로 만드는 것이다(Issue #62). 정규화된 공고는 기업명(String)만 제공하는데 `jobs.company_id`가 `NOT NULL`이라 Collector가 companyId를 직접 해석해야 했고, `CompanyQuery`는 ID 기준 조회만 공개해(Issue #56) 이 용도에 맞지 않았다. `company` 도메인이 소유한 (name, type) 미삭제 Unique 판정(`uk_companies_name_type_active`)을 그대로 재사용해 별도 중복 정책을 만들지 않았다. `CompanyRepository`/`Company` Entity는 여전히 비공개다.
 
-새로운 Domain 간 의존이 필요해지면 이 방식(Named Interface로 필요한 Package만 명시적으로 공개)을 그대로 따르고, 이 문서에 근거를 추가한다.
+위 세 사례 이후로는 같은 방식이 여러 Domain에 반복해서 쓰이고 있어 사례마다 개별 서술하지 않는다. 대표적으로 `query`(다른 Domain에 공개하는 읽기 전용 조회 Port + Snapshot/DTO — 예: `CompanyQuery`, `JobIndexQueryPort`, `JobDiscordPayloadQueryPort`, `JobNotificationTargetQueryPort`, `JobApplicationSnapshotQueryPort`, `InquiryDiscordPayloadQueryPort`, `ProgramNotificationTargetQueryPort`, `ProgramDiscordPayloadQueryPort`, `MemberApplicantSnapshotQueryPort`, `InquiryMemberSnapshotQueryPort`, `ProgramFormLinkQueryPort`), `event`(다른 Domain의 Listener가 구독하는 Domain Event — 예: `JobChangedEvent`, `InquiryCreatedEvent`, `InquiryAnsweredEvent`), `link`/`access`(File 업로드·접근권한 계약 — 예: `FileLinkPort`, `FileUrlPort`, `FileAccessChecker`) Package 이름으로 Company/Job/Member/Program/Inquiry/File/Application Domain이 각자 필요한 계약을 공개한다. `search`가 `job.query`/`company.query`를, `notification`이 `job.query`/`program.query`/`inquiry.query`를 참조하는 것이 그 예다. 이 저장소의 실제 Domain 간 소비 관계 전체는 코드 자체가 최종 근거이며, 이 문서에 모든 조합을 나열하지 않는다.
+
+`operation.entity.type`처럼 Enum만 공개할 때는 Kotlin이 Package-level Annotation을 지원하지 않아 `package-info.java`(`src/main/java`)로 선언하고, 위 사례들처럼 특정 Interface/데이터 Class/Enum만 선택적으로 공개할 때는 그 Kotlin 파일에서 `org.springframework.modulith.NamedInterface`를 타입에 직접 붙인다. 두 방식 모두 이 Package(또는 그 안에서 Annotation이 붙은 타입)만 다른 Module에 공개하고, 같은 Domain의 나머지 비공개 구현(`entity`, `repository`, `service`, `controller` 등)은 여전히 접근할 수 없다. `FileAccessChecker`처럼 소유 Domain이 공개한 SPI Interface를 소비 Domain이 구현해 Bean으로 등록하는 경우(`company`/`member`/`inquiry`의 `access` Package)도 있는데, 이때 구현체 자체는 다시 공개할 필요가 없다.
+
+새로운 Domain 간 의존이 필요해지면 이 방식(Named Interface로 필요한 Package/타입만 명시적으로 공개)을 그대로 따른다.
 
 ## 만들지 않는 Package
 
@@ -247,7 +275,7 @@ presentation/application/infrastructure 같은 확정되지 않은 4-Layer 구�
 `ModularityTest`(`src/test/kotlin/team/inreok/getiserver/ModularityTest.kt`)는 `ApplicationModules.of(GetiServerApplication::class.java)`를 생성하고 다음을 검증한다.
 
 - `modules.verify()`: Module 간 순환 의존성, 다른 Module의 내부 구현(Non-public) 접근, 명시적으로 선언한 허용 Dependency 위반이 없는지.
-- 실제 탐지된 Module 16개(`global` + 15개 `domain.{domain-name}`)의 이름이 기대한 값과 정확히 일치하는지.
+- 실제 탐지된 Module 17개(`global` + 16개 `domain.{domain-name}`)의 이름이 기대한 값과 정확히 일치하는지.
 
 `PackageArchitectureTest`(`src/test/kotlin/team/inreok/getiserver/PackageArchitectureTest.kt`)는 ArchUnit(`spring-modulith-starter-test`가 Test Classpath에 이미 Transitive로 포함)으로 `ModularityTest`가 다루지 않는 "어느 Package에 있어야 하는가"라는 배치 규칙을 검증한다.
 
@@ -271,7 +299,7 @@ presentation/application/infrastructure 같은 확정되지 않은 4-Layer 구�
 build/spring-modulith-docs/components.puml            전체 Module 관계 PlantUML
 build/spring-modulith-docs/module-global.adoc          global Module Canvas
 build/spring-modulith-docs/module-domain.member.adoc   domain.member Module Canvas
-...                                                    (domain.{domain-name}마다 1개, 총 15개)
+...                                                    (domain.{domain-name}마다 1개, 총 16개)
 ```
 
 이 Test는 일반 `test` 실행에 포함되며, 결과물은 `build/` 아래에만 생성되고 Git에 Commit하지 않는다(`.gitignore`의 기존 `build/` 규칙으로 충분하다).
@@ -284,7 +312,7 @@ build/spring-modulith-docs/module-domain.member.adoc   domain.member Module Canv
 
 `@ApplicationModuleTest`는 특정 Module과 그 Module이 선언한 협력 Module만 골라 Spring Context를 구성하는 Slice Test다. 일반 `@SpringBootTest`가 전체 Context를 올리는 것과 달리, 검증 대상 Module의 경계 안에서만 통합 동작을 확인할 때 사용한다.
 
-15개 Domain Module이 있지만 아직 각 Module 내부에 Spring Bean 협력(Service 등)이 없고, Persistence 검증은 여러 Module의 Table을 함께 다루는 `CoreDomainSchemaIntegrationTest`(`src/integrationTest`)가 담당하고 있어 `@ApplicationModuleTest`를 사용하는 빈 Test를 만들지 않았다. 실제 Module 내부에 Spring Bean 협력이 생기는 시점에 해당 Module Package 안에 Integration Test를 추가한다.
+16개 Domain Module 중 다수가 이미 Service/Controller 등 Spring Bean 협력을 갖지만, 아직 `@ApplicationModuleTest`를 사용하는 Test는 없다. Persistence 검증은 여러 Module의 Table을 함께 다루는 `CoreDomainSchemaIntegrationTest`(`src/integrationTest`)가, Module 경계 자체의 정확성은 `ModularityTest`/`PackageArchitectureTest`가 담당하고 있어 지금까지는 `@ApplicationModuleTest`를 사용하는 빈 Test를 만들지 않았다. 특정 Module 경계 안에서의 통합 동작만 따로 검증해야 하는 상황이 생기면 그 시점에 해당 Module Package 안에 Integration Test를 추가한다.
 
 ## 아직 도입하지 않은 것
 
