@@ -1,13 +1,17 @@
 package team.inreok.getiserver.domain.auth.controller
 
+import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.willThrow
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
+import org.springframework.http.HttpHeaders
+import org.springframework.http.ResponseCookie
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.inreok.getiserver.domain.auth.dto.OAuthLoginResponse
@@ -17,6 +21,7 @@ import team.inreok.getiserver.domain.auth.exception.UnsupportedOAuthProviderExce
 import team.inreok.getiserver.domain.auth.service.AuthLoginService
 import team.inreok.getiserver.domain.auth.service.OAuthAuthorization
 import team.inreok.getiserver.domain.auth.service.OAuthLoginService
+import team.inreok.getiserver.domain.auth.service.RefreshTokenCookieFactory
 import team.inreok.getiserver.domain.member.entity.type.MemberStatus
 import team.inreok.getiserver.domain.member.exception.MemberLoginNotAllowedException
 import team.inreok.getiserver.domain.member.exception.OAuthEmailAlreadyRegisteredException
@@ -34,6 +39,9 @@ class OAuthControllerTest
 
         @MockitoBean
         private lateinit var authLoginService: AuthLoginService
+
+        @MockitoBean
+        private lateinit var refreshTokenCookieFactory: RefreshTokenCookieFactory
 
         @Test
         fun `authorize는 200과 함께 인가 URL과 state를 반환한다`() {
@@ -68,7 +76,7 @@ class OAuthControllerTest
         }
 
         @Test
-        fun `콜백이 성공하면 200과 함께 Token 및 회원 정보를 반환한다`() {
+        fun `콜백이 성공하면 200과 함께 Token, 회원 정보, Refresh Token Cookie를 반환한다`() {
             given(authLoginService.loginWithOAuth("google", "auth-code", "state-value"))
                 .willReturn(
                     OAuthLoginResponse(
@@ -81,6 +89,14 @@ class OAuthControllerTest
                         isNewMember = false,
                     ),
                 )
+            given(refreshTokenCookieFactory.create("refresh-token"))
+                .willReturn(
+                    ResponseCookie
+                        .from("refreshToken", "refresh-token")
+                        .httpOnly(true)
+                        .path("/api/v1/auth")
+                        .build(),
+                )
 
             mockMvc
                 .perform(get("/api/v1/auth/google/callback").param("code", "auth-code").param("state", "state-value"))
@@ -92,6 +108,7 @@ class OAuthControllerTest
                 .andExpect(jsonPath("$.data.roles[0]").value("TEACHER"))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.data.isNewMember").value(false))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("refreshToken=refresh-token")))
         }
 
         @Test

@@ -1,19 +1,25 @@
 package team.inreok.getiserver.domain.auth.controller
 
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import jakarta.validation.Valid
+import jakarta.servlet.http.HttpServletResponse
+import org.springframework.http.HttpHeaders
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
+import org.springframework.web.bind.annotation.CookieValue
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import team.inreok.getiserver.domain.auth.dto.LogoutRequest
 import team.inreok.getiserver.domain.auth.dto.SessionResponse
+import team.inreok.getiserver.domain.auth.exception.RefreshTokenRequiredException
+import team.inreok.getiserver.domain.auth.service.RefreshTokenCookieFactory
 import team.inreok.getiserver.domain.auth.service.TokenService
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
 import team.inreok.getiserver.global.web.ApiResponse
@@ -24,6 +30,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 @RequestMapping("/api/v1/auth")
 class SessionController(
     private val tokenService: TokenService,
+    private val refreshTokenCookieFactory: RefreshTokenCookieFactory,
 ) {
     // SecurityConfig가 이 경로를 인증 필수로 지정하므로, 여기 도달했다는 것은 이미 유효한
     // Access Token(JwtAuthenticationFilter)이 SecurityContext에 인증 정보를 채웠다는 뜻이다.
@@ -45,21 +52,23 @@ class SessionController(
     }
 
     // 인증된 호출자(memberId)를 함께 넘겨, 다른 사용자의 Refresh Token을 강제 폐기하지 못하도록
-    // Service 계층에서 소유권을 검증한다(코드 리뷰 Blocker 반영).
+    // Service 계층에서 소유권을 검증한다(코드 리뷰 Blocker 반영). Refresh Token은 Cookie >
+    // X-Refresh-Token Header > Body 순으로 읽고, 성공 시 Cookie를 즉시 만료시킨다(Issue #105).
     @Operation(
         summary = "현재 기기 로그아웃",
         description = """
-            요청 Body의 Refresh Token을 폐기해 재발급을 막는다. Access Token의 소유자와 Refresh Token의
-            소유자가 다르면 거부한다(다른 사용자의 세션을 강제 로그아웃시키는 것을 방지). 성공 시 Body 없이
-            204를 반환한다.
+            Refresh Token을 폐기해 재발급을 막는다. Refresh Token은 Cookie(refreshToken) > X-Refresh-Token
+            Header > Body(refreshToken) 순으로 읽는다. Access Token의 소유자와 Refresh Token의 소유자가
+            다르면 거부한다(다른 사용자의 세션을 강제 로그아웃시키는 것을 방지). 성공 시 Body 없이 204를
+            반환하고 Refresh Token Cookie를 만료시킨다.
         """,
     )
     @SecurityRequirement(name = BEARER_AUTH_SCHEME)
     @ApiResponses(
-        SwaggerApiResponse(responseCode = "204", description = "로그아웃 성공(Body 없음)"),
+        SwaggerApiResponse(responseCode = "204", description = "로그아웃 성공(Body 없음, Set-Cookie로 refreshToken 만료)"),
         SwaggerApiResponse(
             responseCode = "400",
-            description = "요청 값 검증 실패, refreshToken 누락 (VALIDATION_FAILED)",
+            description = "Refresh Token이 Cookie/Header/Body 어디에도 없음 (REFRESH_TOKEN_REQUIRED)",
         ),
         SwaggerApiResponse(
             responseCode = "401",
@@ -72,10 +81,21 @@ class SessionController(
     @DeleteMapping("/logout")
     fun logout(
         authentication: Authentication,
-        @Valid @RequestBody request: LogoutRequest,
+        @RequestBody(required = false) request: LogoutRequest?,
+        @Parameter(description = "Refresh Token(Web용 HttpOnly Cookie). Cookie > X-Refresh-Token Header > Body 순으로 읽는다.")
+        @CookieValue(name = RefreshTokenCookieFactory.COOKIE_NAME, required = false)
+        cookieToken: String?,
+        @Parameter(description = "Refresh Token(App용 Header). Cookie가 없을 때 사용한다.")
+        @RequestHeader(name = RefreshTokenCookieFactory.HEADER_NAME, required = false)
+        headerToken: String?,
+        response: HttpServletResponse,
     ): ResponseEntity<Void> {
         val memberId = authentication.principal as Long
-        tokenService.logout(request.refreshToken, memberId)
+        val refreshToken =
+            refreshTokenCookieFactory.resolve(cookieToken, headerToken, request?.refreshToken)
+                ?: throw RefreshTokenRequiredException()
+        tokenService.logout(refreshToken, memberId)
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.expired().toString())
         return ResponseEntity.noContent().build()
     }
 }
