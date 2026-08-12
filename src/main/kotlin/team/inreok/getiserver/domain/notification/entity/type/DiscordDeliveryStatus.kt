@@ -2,9 +2,9 @@ package team.inreok.getiserver.domain.notification.entity.type
 
 /**
  * Discord 전달의 공통 상태다(후속 요구사항 문서 §7). `domain.notification`이 이 계약의
- * Source of Truth이며, 다른 도메인이 각자 정의한 Discord 상태(`domain.program`의
- * `DiscordDeliveryStatus(SUCCESS/FAILED/SKIPPED)`, `domain.inquiry`의
- * `InquiryDiscordDeliveryStatus(PENDING)`)는 후속 PR에서 이 값 집합으로 교체한다.
+ * Source of Truth다. `domain.program`이 따로 정의했던 `DiscordDeliveryStatus(SUCCESS/FAILED/
+ * SKIPPED)`와 `domain.inquiry`의 `InquiryDiscordDeliveryStatus(PENDING)`는 이 값 집합으로
+ * 교체되며 제거됐다(`discord-event-wiring-plan.md` §6).
  *
  * `domain.collector`의 `JobNotificationDeliveryStatus(PENDING/SENDING/SENT/FAILED)`는 이름이
  * 비슷하지만 **완전히 별개의 Subsystem**(수집 공고용 Discord Webhook)이다. 이 Package에서

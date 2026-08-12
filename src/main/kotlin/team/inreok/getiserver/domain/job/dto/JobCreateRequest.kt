@@ -15,6 +15,11 @@ import java.time.LocalDateTime
  *
  * `sourceId`, `formId`, `fileIds`, `targetGrades`(복수), `techStackIds`는 이번 범위에서
  * 제외했다(Issue #60). 해당 Column이나 연결 Table이 아직 없다.
+ *
+ * `discordChannelKey`는 원시 Discord Snowflake가 아니라 **논리 채널 Key**다(Notification 후속
+ * 요구사항 문서 §10, Issue #97). 운영 Channel Id를 API·DB에 노출하지 않기 위해 Program의
+ * `discordChannelId`(원시 Snowflake, 기존 계약)와 다른 방식을 택했다. 생략하면 게시 시
+ * 기본 채널을 쓴다.
  */
 @Schema(description = "공고 등록·임시저장 요청")
 data class JobCreateRequest(
@@ -68,4 +73,12 @@ data class JobCreateRequest(
     val capacity: Int? = null,
     @param:Schema(description = "선착순 모집 여부", example = "false", defaultValue = "false")
     val firstComeServed: Boolean = false,
+    @field:Size(max = 255, message = "Discord 채널 Key는 255자를 넘을 수 없습니다.")
+    @param:Schema(
+        description = "게시할 Discord 채널의 논리 Key. 허용 목록에 없으면 거부된다. 생략하면 기본 채널을 쓴다.",
+        example = "job-notice",
+        nullable = true,
+        maxLength = 255,
+    )
+    val discordChannelKey: String? = null,
 )

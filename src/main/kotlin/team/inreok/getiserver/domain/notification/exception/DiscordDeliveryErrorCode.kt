@@ -22,6 +22,13 @@ enum class DiscordDeliveryErrorCode(
 
     /** 수동 재시도 상한을 모두 소진한 경우다(§18). */
     DISCORD_DELIVERY_RETRY_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "수동 재시도 가능 횟수를 모두 사용했습니다."),
+
+    /**
+     * Program Discord 상태 조회·재시도를 등록자·담당 교사·개발자가 아닌 사용자가 요청한 경우다
+     * (요구사항 §37). `domain.program.exception.ProgramManageForbiddenException`은 Module
+     * 내부 계약이라 여기서 재사용할 수 없어 별도로 정의한다.
+     */
+    DISCORD_DELIVERY_MANAGE_FORBIDDEN(HttpStatus.FORBIDDEN, "프로그램 등록자·담당 교사·개발자만 조회할 수 있습니다."),
     ;
 
     override val code: String get() = name

@@ -1,13 +1,13 @@
 package team.inreok.getiserver.domain.program.service.impl
 
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.application.query.ProgramFormLinkQueryPort
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
-import team.inreok.getiserver.domain.program.dto.DiscordDeliveryResult
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionRequest
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionResponse
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationAnswer
@@ -30,9 +30,12 @@ import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationEligi
 import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationStatus
 import team.inreok.getiserver.domain.program.entity.type.ProgramStatus
 import team.inreok.getiserver.domain.program.entity.type.ProgramType
+import team.inreok.getiserver.domain.program.event.ProgramDiscordAction
+import team.inreok.getiserver.domain.program.event.ProgramDiscordEvent
 import team.inreok.getiserver.domain.program.exception.ActiveApplicationNotFoundException
 import team.inreok.getiserver.domain.program.exception.AlreadyAppliedException
 import team.inreok.getiserver.domain.program.exception.CapacityBelowCurrentApplicantsException
+import team.inreok.getiserver.domain.program.exception.DiscordChannelNotAllowedException
 import team.inreok.getiserver.domain.program.exception.NotEnrolledException
 import team.inreok.getiserver.domain.program.exception.NotTargetGradeException
 import team.inreok.getiserver.domain.program.exception.ProgramActionNotAvailableException
@@ -54,6 +57,7 @@ import team.inreok.getiserver.domain.program.service.computeProgramEligibilityRe
 import team.inreok.getiserver.domain.program.service.programEligibilityMessageOf
 import team.inreok.getiserver.domain.program.service.validateProgramCommon
 import team.inreok.getiserver.domain.program.service.validateProgramForPublish
+import team.inreok.getiserver.global.discord.DiscordChannelResolver
 import tools.jackson.databind.ObjectMapper
 import java.time.LocalDateTime
 
@@ -71,6 +75,8 @@ class ProgramServiceImpl(
     private val programFormLinkQueryPort: ProgramFormLinkQueryPort,
     private val memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort,
     private val objectMapper: ObjectMapper,
+    private val eventPublisher: ApplicationEventPublisher,
+    private val discordChannelResolver: DiscordChannelResolver,
 ) : ProgramService {
     private val log = LoggerFactory.getLogger(ProgramServiceImpl::class.java)
 
@@ -91,24 +97,9 @@ class ProgramServiceImpl(
             targetGrades = targetGrades,
             capacity = request.capacity,
         )
+        requireAllowedDiscordChannelId(request.discordChannelId)
 
-        val program =
-            Program(
-                createdByMemberId = createdByMemberId,
-                type = request.programType,
-                title = request.title.trim(),
-                status = request.status,
-            ).apply {
-                bodyMarkdown = request.content
-                location = request.location
-                eventStartedAt = request.startAt
-                eventEndedAt = request.endAt
-                applicationStartedAt = request.applicationStartAt
-                applicationEndedAt = request.applicationEndAt
-                capacity = request.capacity
-                discordChannelId = request.discordChannelId
-            }
-
+        val program = buildProgram(request, createdByMemberId)
         request.formId?.let { program.formId = linkForm(it, createdByMemberId) }
 
         if (request.status == ProgramStatus.PUBLISHED) {
@@ -127,6 +118,9 @@ class ProgramServiceImpl(
 
         val saved = programRepository.saveAndFlush(program)
         saveTargetGrades(requireNotNull(saved.id), targetGrades)
+        if (saved.status == ProgramStatus.PUBLISHED) {
+            eventPublisher.publishEvent(ProgramDiscordEvent(requireNotNull(saved.id), ProgramDiscordAction.PUBLISHED))
+        }
 
         return ProgramCreateResponse(
             programId = requireNotNull(saved.id),
@@ -138,9 +132,41 @@ class ProgramServiceImpl(
             firstComeServed = saved.firstComeServed,
             manager = saved.managerMemberId?.let { ProgramManagerSummary(it, memberName(it)) },
             status = saved.status,
-            discordDelivery = DiscordDeliveryResult.SKIPPED_NOT_IMPLEMENTED,
             createdAt = saved.createdAt,
         )
+    }
+
+    private fun buildProgram(
+        request: ProgramCreateRequest,
+        createdByMemberId: Long,
+    ): Program =
+        Program(
+            createdByMemberId = createdByMemberId,
+            type = request.programType,
+            title = request.title.trim(),
+            status = request.status,
+        ).apply {
+            bodyMarkdown = request.content
+            location = request.location
+            eventStartedAt = request.startAt
+            eventEndedAt = request.endAt
+            applicationStartedAt = request.applicationStartAt
+            applicationEndedAt = request.applicationEndAt
+            capacity = request.capacity
+            discordChannelId = request.discordChannelId
+        }
+
+    /**
+     * `null`이면 검증하지 않는다 -- 채널을 지정하지 않고 등록하면 DRAFT로는 저장할 수 있고
+     * 게시 시점에 `validateProgramForPublish`가 별도로 필수 여부를 검증한다. 값을 받는 시점에
+     * 바로 허용 목록을 검증하는 이유는 게시 시점까지 미루면 잘못된 채널이 DRAFT로 저장된 뒤
+     * 게시가 막히는 혼란스러운 실패로 이어지기 때문이다(요구사항 §10).
+     */
+    private fun requireAllowedDiscordChannelId(channelId: String?) {
+        val normalized = channelId?.takeIf { it.isNotBlank() } ?: return
+        if (!discordChannelResolver.isAllowedProgramChannelId(normalized)) {
+            throw DiscordChannelNotAllowedException(normalized)
+        }
     }
 
     @Transactional
@@ -185,6 +211,9 @@ class ProgramServiceImpl(
             program.capacity = newCapacity
         }
 
+        // DRAFT는 Discord에 아직 메시지가 없어 발행하지 않는다(§4.2) -- 발행하면 Worker가
+        // MISSING_DISCORD_MESSAGE_ID로 실패 처리할 Row만 쌓인다. publishEvent는 실제로는
+        // AFTER_COMMIT에만 전달되므로 Flush 이전에 호출해도 무방하다.
         if (program.status == ProgramStatus.PUBLISHED) {
             validateProgramForPublish(
                 content = program.bodyMarkdown,
@@ -196,6 +225,7 @@ class ProgramServiceImpl(
                 targetGrades = targetGrades.toList(),
                 discordChannelId = program.discordChannelId,
             )
+            eventPublisher.publishEvent(ProgramDiscordEvent(programId, ProgramDiscordAction.UPDATED))
         }
 
         programRepository.flush()
@@ -210,7 +240,6 @@ class ProgramServiceImpl(
             // (허위 true 반환 금지, 원본 요구사항 문서 17절).
             vacancyNotificationCount = 0,
             notificationCreated = false,
-            discordDelivery = DiscordDeliveryResult.SKIPPED_NOT_IMPLEMENTED,
             updatedAt = program.updatedAt,
         )
     }
@@ -238,6 +267,7 @@ class ProgramServiceImpl(
             }
             throw ProgramStatusTransitionNotAllowedException(program.status, target)
         }
+        val previousStatus = program.status
 
         val now = LocalDateTime.now()
         when (target) {
@@ -271,6 +301,7 @@ class ProgramServiceImpl(
         program.status = target
 
         programRepository.flush()
+        publishProgramDiscordEventFor(programId, target, previousStatus)
 
         return ProgramStatusUpdateResponse(
             programId = programId,
@@ -279,7 +310,6 @@ class ProgramServiceImpl(
             // Notification/빈자리 구독 기능(Phase 6)이 아직 없어 항상 0이다.
             notificationCount = 0,
             expiredVacancySubscriptionCount = 0,
-            discordDelivery = DiscordDeliveryResult.SKIPPED_NOT_IMPLEMENTED,
             updatedAt = program.updatedAt,
         )
     }
@@ -572,6 +602,33 @@ class ProgramServiceImpl(
 
     private fun currentTargetGrades(programId: Long): Set<Int> =
         programTargetGradeRepository.findAllByIdProgramId(programId).map { it.id.grade }.toSet()
+
+    /**
+     * 상태 전이에 대응하는 Discord Event를 발행한다(`docs/notification/discord-event-wiring-plan.md`
+     * §4.2). `allowedTransitions()`가 `target`을 PUBLISHED/DELETED로만 허용하므로 이 두 값만
+     * 처리한다. `DRAFT`였던 프로그램이 삭제되면 Discord에 지울 메시지가 없으므로 발행하지 않는다.
+     */
+    private fun publishProgramDiscordEventFor(
+        programId: Long,
+        target: ProgramStatus,
+        previousStatus: ProgramStatus,
+    ) {
+        val action =
+            when (target) {
+                ProgramStatus.PUBLISHED -> {
+                    ProgramDiscordAction.PUBLISHED
+                }
+
+                ProgramStatus.DELETED -> {
+                    if (previousStatus != ProgramStatus.DRAFT) ProgramDiscordAction.DELETED else null
+                }
+
+                ProgramStatus.DRAFT, ProgramStatus.CLOSED -> {
+                    null
+                }
+            } ?: return
+        eventPublisher.publishEvent(ProgramDiscordEvent(programId, action))
+    }
 
     private fun activeApplicantCount(programId: Long): Int =
         programApplicationRepository.countByProgramIdAndStatus(programId, ProgramApplicationStatus.APPLIED).toInt()

@@ -38,4 +38,12 @@ data class JobUpdateRequest(
     val capacity: Int? = null,
     @param:Schema(description = "선착순 모집 여부", example = "true", nullable = true)
     val firstComeServed: Boolean? = null,
+    @field:Size(max = 255, message = "Discord 채널 Key는 255자를 넘을 수 없습니다.")
+    @param:Schema(
+        description = "게시할 Discord 채널의 논리 Key. 허용 목록에 없으면 거부된다.",
+        example = "job-notice",
+        nullable = true,
+        maxLength = 255,
+    )
+    val discordChannelKey: String? = null,
 )
