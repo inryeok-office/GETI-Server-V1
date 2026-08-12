@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.enums.ParameterIn
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletResponse
+import org.springframework.http.HttpHeaders
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
@@ -15,6 +17,7 @@ import team.inreok.getiserver.domain.auth.dto.AuthorizeResponse
 import team.inreok.getiserver.domain.auth.dto.OAuthLoginResponse
 import team.inreok.getiserver.domain.auth.service.AuthLoginService
 import team.inreok.getiserver.domain.auth.service.OAuthLoginService
+import team.inreok.getiserver.domain.auth.service.RefreshTokenCookieFactory
 import team.inreok.getiserver.global.web.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 
@@ -24,6 +27,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 class OAuthController(
     private val oAuthLoginService: OAuthLoginService,
     private val authLoginService: AuthLoginService,
+    private val refreshTokenCookieFactory: RefreshTokenCookieFactory,
 ) {
     // Frontend(Web/App)가 이 URL로 직접 이동(Redirect)해 Google 로그인 화면을 띄운다. Web/App이
     // 동일한 방식으로 소비할 수 있도록 302 Redirect 대신 JSON으로 URL을 반환한다.
@@ -103,5 +107,11 @@ class OAuthController(
         )
         @RequestParam
         state: String,
-    ): ApiResponse<OAuthLoginResponse> = ApiResponse.of(authLoginService.loginWithOAuth(provider, code, state))
+        response: HttpServletResponse,
+    ): ApiResponse<OAuthLoginResponse> {
+        val login = authLoginService.loginWithOAuth(provider, code, state)
+        // Web Client용 HttpOnly Cookie로도 Refresh Token을 내려준다(Body에도 함께 담김, Issue #105).
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(login.refreshToken).toString())
+        return ApiResponse.of(login)
+    }
 }
