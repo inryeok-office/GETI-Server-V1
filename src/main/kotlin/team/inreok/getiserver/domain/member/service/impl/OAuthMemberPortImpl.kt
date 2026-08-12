@@ -10,6 +10,7 @@ import team.inreok.getiserver.domain.member.entity.MemberRoleId
 import team.inreok.getiserver.domain.member.entity.type.MemberStatus
 import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
 import team.inreok.getiserver.domain.member.entity.type.RoleType
+import team.inreok.getiserver.domain.member.exception.MemberLoginNotAllowedException
 import team.inreok.getiserver.domain.member.exception.OAuthEmailAlreadyRegisteredException
 import team.inreok.getiserver.domain.member.query.OAuthMemberIdentity
 import team.inreok.getiserver.domain.member.query.OAuthMemberPort
@@ -42,7 +43,7 @@ class OAuthMemberPortImpl(
         val oauthProvider = OAuthProvider.valueOf(provider.uppercase())
 
         memberRepository.findByOauthProviderAndOauthSubject(oauthProvider, subject)?.let { existing ->
-            return identityOf(existing, isNewMember = false)
+            return existingIdentity(existing)
         }
 
         // 같은 이메일이 다른 OAuth 계정으로 이미 가입돼 있으면 새 회원을 만들 수 없다(uk_members_email).
@@ -80,7 +81,7 @@ class OAuthMemberPortImpl(
                 val existing =
                     memberRepository.findByOauthProviderAndOauthSubject(oauthProvider, subject)
                         ?: throw OAuthEmailAlreadyRegisteredException(email)
-                return identityOf(existing, isNewMember = false)
+                return existingIdentity(existing)
             }
 
         val memberId = requireNotNull(saved.id) { "저장된 Member는 id를 가져야 합니다." }
@@ -99,6 +100,18 @@ class OAuthMemberPortImpl(
         )
     }
 
+    /**
+     * 기존 회원의 로그인 결과를 만든다. 로그인이 허용되지 않는 상태(REJECTED/SUSPENDED/WITHDRAWN)면
+     * Token을 발급하지 않고 거부한다(Issue #104). 이렇게 하지 않으면 정지·탈퇴된 회원이 재로그인으로
+     * 이전 Role이 담긴 유효 Token을 계속 받는다.
+     */
+    private fun existingIdentity(member: Member): OAuthMemberIdentity {
+        if (member.status !in LOGIN_ALLOWED_STATUSES) {
+            throw MemberLoginNotAllowedException(member.status)
+        }
+        return identityOf(member, isNewMember = false)
+    }
+
     private fun identityOf(
         member: Member,
         isNewMember: Boolean,
@@ -113,6 +126,13 @@ class OAuthMemberPortImpl(
     }
 
     private companion object {
+        /**
+         * 로그인이 허용되는 회원 상태(Issue #104). ACTIVE(정상)와 PENDING(승인 대기 -- 로그인은 되되
+         * #103에서 이미 무권한)만 허용하고, 그 외(REJECTED/SUSPENDED/WITHDRAWN)는 거부한다. 새 상태가
+         * 추가돼도 명시적으로 허용하기 전까지 기본 차단되도록 Allowlist로 둔다.
+         */
+        val LOGIN_ALLOWED_STATUSES = setOf(MemberStatus.ACTIVE, MemberStatus.PENDING)
+
         /**
          * Provider별 최초 로그인 상태. 학생(DG)은 즉시 활성화(ACTIVE)해 로그인 후 바로 서비스를
          * 이용하고, 교직원(GOOGLE)은 승인 대기(PENDING)로 생성한다(Issue #99 완료 조건).
