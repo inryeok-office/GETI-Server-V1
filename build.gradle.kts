@@ -36,7 +36,7 @@ dependencyManagement {
         // AWS SDK v2(S3). Spring Boot Dependency Management가 AWS SDK를 관리하지 않으므로
         // BOM을 직접 Import해 s3/s3-presigner와 전이 의존(http-client, auth 등) Version을
         // 한곳에서 맞춘다(File 도메인, Issue #85).
-        mavenBom("software.amazon.awssdk:bom:2.51.2")
+        mavenBom("software.amazon.awssdk:bom:2.51.3")
     }
 }
 
