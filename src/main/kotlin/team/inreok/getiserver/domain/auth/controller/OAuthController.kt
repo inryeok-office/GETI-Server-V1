@@ -77,6 +77,10 @@ class OAuthController(
             description = "Provider Token 교환·UserInfo 조회 실패(OAUTH_LOGIN_FAILED)",
         ),
         SwaggerApiResponse(
+            responseCode = "403",
+            description = "로그인이 허용되지 않는 회원 상태(정지/탈퇴/거절 등)(MEMBER_LOGIN_NOT_ALLOWED)",
+        ),
+        SwaggerApiResponse(
             responseCode = "409",
             description = "같은 이메일이 다른 방식으로 이미 가입됨(OAUTH_EMAIL_ALREADY_REGISTERED)",
         ),

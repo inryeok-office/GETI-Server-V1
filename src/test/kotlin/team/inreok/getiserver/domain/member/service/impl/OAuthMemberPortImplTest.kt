@@ -4,6 +4,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 import org.mockito.ArgumentCaptor
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
@@ -16,6 +18,7 @@ import team.inreok.getiserver.domain.member.entity.MemberRoleId
 import team.inreok.getiserver.domain.member.entity.type.MemberStatus
 import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
 import team.inreok.getiserver.domain.member.entity.type.RoleType
+import team.inreok.getiserver.domain.member.exception.MemberLoginNotAllowedException
 import team.inreok.getiserver.domain.member.exception.OAuthEmailAlreadyRegisteredException
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.member.repository.MemberRoleRepository
@@ -107,6 +110,30 @@ class OAuthMemberPortImplTest {
         assertThatThrownBy { port.findOrCreateByOAuth("google", "subject-1", "user@example.com") }
             .isInstanceOf(OAuthEmailAlreadyRegisteredException::class.java)
         verify(memberRepository, never()).saveAndFlush(anyMember())
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = MemberStatus::class, names = ["REJECTED", "SUSPENDED", "WITHDRAWN"])
+    fun `로그인이 허용되지 않는 상태의 기존 회원은 Token 없이 거부된다`(status: MemberStatus) {
+        given(memberRepository.findByOauthProviderAndOauthSubject(OAuthProvider.GOOGLE, "subject-1"))
+            .willReturn(member(id = 5L, status = status))
+
+        assertThatThrownBy { port.findOrCreateByOAuth("google", "subject-1", "user@example.com") }
+            .isInstanceOf(MemberLoginNotAllowedException::class.java)
+    }
+
+    @Test
+    fun `PENDING 기존 회원은 로그인이 허용된다(무권한)`() {
+        given(memberRepository.findByOauthProviderAndOauthSubject(OAuthProvider.GOOGLE, "subject-1"))
+            .willReturn(member(id = 6L, status = MemberStatus.PENDING))
+        given(memberRoleRepository.findAllByIdMemberId(6L)).willReturn(emptyList())
+
+        val result = port.findOrCreateByOAuth("google", "subject-1", "user@example.com")
+
+        assertThat(result.memberId).isEqualTo(6L)
+        assertThat(result.status).isEqualTo("PENDING")
+        assertThat(result.roles).isEmpty()
+        assertThat(result.isNewMember).isFalse()
     }
 
     @Test
