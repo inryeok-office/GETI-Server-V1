@@ -15,6 +15,7 @@ import team.inreok.getiserver.domain.auth.exception.OAuthLoginFailedException
 import team.inreok.getiserver.domain.auth.exception.OAuthStateInvalidException
 import team.inreok.getiserver.domain.auth.exception.UnsupportedOAuthProviderException
 import team.inreok.getiserver.domain.auth.service.AuthLoginService
+import team.inreok.getiserver.domain.auth.service.OAuthAuthorization
 import team.inreok.getiserver.domain.auth.service.OAuthLoginService
 import team.inreok.getiserver.domain.member.exception.OAuthEmailAlreadyRegisteredException
 
@@ -31,6 +32,38 @@ class OAuthControllerTest
 
         @MockitoBean
         private lateinit var authLoginService: AuthLoginService
+
+        @Test
+        fun `authorize는 200과 함께 인가 URL과 state를 반환한다`() {
+            given(oAuthLoginService.getAuthorizationUrl("google"))
+                .willReturn(
+                    OAuthAuthorization(
+                        authorizationUrl = "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=state-1",
+                        state = "state-1",
+                    ),
+                )
+
+            mockMvc
+                .perform(get("/api/v1/auth/google/authorize"))
+                .andExpect(status().isOk)
+                .andExpect(
+                    jsonPath(
+                        "$.data.authorizationUrl",
+                    ).value("https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=state-1"),
+                ).andExpect(jsonPath("$.data.state").value("state-1"))
+        }
+
+        @Test
+        fun `authorize에서 지원하지 않는 Provider이면 400을 반환한다`() {
+            willThrow(UnsupportedOAuthProviderException("kakao"))
+                .given(oAuthLoginService)
+                .getAuthorizationUrl("kakao")
+
+            mockMvc
+                .perform(get("/api/v1/auth/kakao/authorize"))
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.error.code").value("UNSUPPORTED_OAUTH_PROVIDER"))
+        }
 
         @Test
         fun `콜백이 성공하면 200과 함께 Token 및 회원 정보를 반환한다`() {
