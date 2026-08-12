@@ -159,6 +159,9 @@ class DiscordPayloadFactoryTest {
         companyId = 1L,
         companyName = companyName,
         recruitmentEndedAt = recruitmentEndedAt,
+        discordChannelKey = "job-notice",
+        targetGrade = null,
+        updatedAt = deadline,
     )
 
     private fun programSnapshot(bodyMarkdown: String? = "설명") =
@@ -168,6 +171,9 @@ class DiscordPayloadFactoryTest {
             bodyMarkdown = bodyMarkdown,
             eventStartedAt = deadline,
             eventEndedAt = deadline.plusDays(1),
+            discordChannelId = "channel-1",
+            targetGrades = emptyList(),
+            updatedAt = deadline,
         )
 
     private fun inquirySnapshot(requesterName: String? = "홍길동") =

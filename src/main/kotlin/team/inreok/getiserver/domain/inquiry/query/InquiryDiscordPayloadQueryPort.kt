@@ -8,9 +8,11 @@ import java.time.LocalDateTime
  * (후속 요구사항 문서 §19·§28). 방향과 이유는
  * [team.inreok.getiserver.domain.job.query.JobDiscordPayloadQueryPort]와 같다.
  *
- * `domain.inquiry.service.InquiryDiscordDeliveryQueryPort`와 혼동하지 않는다 -- 그쪽은 문의
- * 응답에 실을 **전달 상태**를 읽는 Module 내부 계약이고(공개되지 않음), 이쪽은 다른 Module에
- * **문의 내용**을 넘기는 공개 계약이다.
+ * 문의 응답의 `discordDeliveryStatus`/`discordDelivered` 필드와, 그 값을 읽던 Module 내부 계약
+ * `InquiryDiscordDeliveryQueryPort`(항상 `PENDING`만 반환)는 제거됐다 -- Discord 상태는 이제
+ * `discord_deliveries`를 소유한 Notification의 별도 조회 API로만 제공한다
+ * (`discord-event-wiring-plan.md` §6.2). 이 Port는 그 정리와 무관하게 다른 Module에 **문의
+ * 내용**을 넘기는 공개 계약이다.
  *
  * ## 개인정보 최소화 (§40)
  *
