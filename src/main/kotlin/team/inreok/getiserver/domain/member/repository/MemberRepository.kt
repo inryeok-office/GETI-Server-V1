@@ -1,8 +1,10 @@
 package team.inreok.getiserver.domain.member.repository
 
+import jakarta.persistence.LockModeType
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import team.inreok.getiserver.domain.member.entity.Member
@@ -18,6 +20,19 @@ interface MemberRepository : JpaRepository<Member, Long> {
     fun findByOauthProviderAndOauthSubject(
         oauthProvider: OAuthProvider,
         oauthSubject: String,
+    ): Member?
+
+    /**
+     * 교직원 가입 승인·거절 처리를 위해 회원 Row에 Pessimistic Write Lock을 건다(Issue #99 동시성).
+     * 같은 PENDING 회원을 두 개발자가 동시에 승인/거절할 때, 이 Method로 조회한 뒤 상태를 확인·전이해야
+     * 두 요청이 순차적으로 실행되어 최종적으로 하나의 상태 전이만 성공한다
+     * (ProgramRepository.findByIdForUpdate와 동일한 관례). Member에 @Version이 없어 Optimistic Lock
+     * 대신 Pessimistic Lock을 사용한다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT m FROM Member m WHERE m.id = :id")
+    fun findByIdForUpdate(
+        @Param("id") id: Long,
     ): Member?
 
     // :name은 Service 계층에서 LIKE Wildcard(%, _)와 Escape 문자(\)를 미리 이스케이프해 전달한다

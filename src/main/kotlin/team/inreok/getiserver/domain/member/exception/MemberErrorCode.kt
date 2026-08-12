@@ -17,6 +17,9 @@ enum class MemberErrorCode(
     NOT_A_STUDENT(HttpStatus.FORBIDDEN, "학생만 접근할 수 있습니다."),
     OAUTH_EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 다른 방식으로 가입된 이메일입니다."),
     MEMBER_LOGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "로그인이 허용되지 않는 회원 상태입니다."),
+    MEMBER_NOT_PENDING(HttpStatus.CONFLICT, "승인 대기 상태의 회원만 처리할 수 있습니다."),
+    MEMBER_NOT_APPROVAL_TARGET(HttpStatus.BAD_REQUEST, "교직원 승인 대상 회원이 아닙니다."),
+    MEMBER_REJECTION_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "거절 사유를 입력해야 합니다."),
     ;
 
     override val code: String get() = name
