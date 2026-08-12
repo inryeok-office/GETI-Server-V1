@@ -55,6 +55,25 @@ class MemberControllerTest
             ),
         )
 
+        /**
+         * 교사·개발자가 비공개 학생을 조회했을 때 Service가 만드는 응답이다. 마스킹 판정 자체는
+         * `MemberServiceTest`가 검증하고, 여기서는 Controller가 그 응답을 그대로 통과시키는지만 본다.
+         */
+        private fun privateProfileSeenByPrivileged() =
+            MemberProfileResponse(
+                memberId = 1L,
+                name = "홍길동",
+                profileImageUrl = null,
+                cohort = 3,
+                department = DepartmentType.SW_DEVELOPMENT,
+                majors = listOf("소프트웨어"),
+                techStacks = listOf("Kotlin"),
+                desiredJob = "Backend Developer",
+                bio = "비공개 자기소개",
+                isPublic = false,
+                profileRestricted = false,
+            )
+
         @Test
         fun `학생 프로필을 조회하면 200과 함께 프로필을 반환한다`() {
             given(memberService.getProfile(1L, 1L)).willReturn(
@@ -98,11 +117,38 @@ class MemberControllerTest
         }
 
         @Test
-        fun `요청자가 STUDENT가 아니면 403 NOT_A_STUDENT를 반환한다`() {
+        fun `교사도 학생 프로필을 조회할 수 있다`() {
+            given(memberService.getProfile(1L, 2L)).willReturn(privateProfileSeenByPrivileged())
+
             mockMvc
                 .perform(get("/api/v1/members/1").with(authOf(2L, "TEACHER")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.memberId").value(1))
+                // 비공개 프로필이지만 교사에게는 가려지지 않는다(Issue #114).
+                .andExpect(jsonPath("$.data.bio").value("비공개 자기소개"))
+                .andExpect(jsonPath("$.data.isPublic").value(false))
+                .andExpect(jsonPath("$.data.profileRestricted").value(false))
+        }
+
+        @Test
+        fun `개발자도 학생 프로필을 조회할 수 있다`() {
+            given(memberService.getProfile(1L, 3L)).willReturn(privateProfileSeenByPrivileged())
+
+            mockMvc
+                .perform(get("/api/v1/members/1").with(authOf(3L, "DEVELOPER")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.profileRestricted").value(false))
+        }
+
+        @Test
+        fun `Role이 하나도 없으면 403 PROFILE_VIEW_FORBIDDEN을 반환한다`() {
+            // 승인 대기(PENDING) 교직원은 Role을 부여받지 못한 채 로그인할 수 있고
+            // (OAuthMemberPortImpl.autoGrantRoleFor), SecurityConfig는 이 경로에 인증만 요구하므로
+            // Controller까지 도달한다. 여기서 막지 않으면 승인 절차를 우회한다.
+            mockMvc
+                .perform(get("/api/v1/members/1").with(authOf(4L)))
                 .andExpect(status().isForbidden)
-                .andExpect(jsonPath("$.error.code").value("NOT_A_STUDENT"))
+                .andExpect(jsonPath("$.error.code").value("PROFILE_VIEW_FORBIDDEN"))
         }
 
         @Test
