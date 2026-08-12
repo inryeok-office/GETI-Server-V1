@@ -625,7 +625,7 @@ Notification이 `findAllByIds(ids): Map<Long, Snapshot>` 배치 Port를 쓴 선�
 
 | Checker | ownerType | 규칙 |
 | --- | --- | --- |
-| `MemberProfileImageAccessChecker` | `MEMBER` | 본인이거나 `members.profile_public = true` |
+| `MemberProfileImageAccessChecker` | `MEMBER` | 본인·교사·개발자이거나 `members.profile_public = true` (교사·개발자 예외는 Issue #114, 결정 근거는 Issue #89) |
 | `CompanyLogoAccessChecker` | `COMPANY` | 인증된 사용자 모두 (`/api/v1/companies`가 이미 인증만 요구) |
 
 나머지 6개 `ownerType`은 해당 도메인이 파일을 붙이는 기능을 구현하는 PR에서 Checker를 추가한다.
