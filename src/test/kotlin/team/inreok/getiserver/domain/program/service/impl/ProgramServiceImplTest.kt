@@ -4,17 +4,20 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyBoolean
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.ArgumentMatchers.isNull
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.atLeast
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
@@ -33,9 +36,12 @@ import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationActio
 import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationStatus
 import team.inreok.getiserver.domain.program.entity.type.ProgramStatus
 import team.inreok.getiserver.domain.program.entity.type.ProgramType
+import team.inreok.getiserver.domain.program.event.ProgramDiscordAction
+import team.inreok.getiserver.domain.program.event.ProgramDiscordEvent
 import team.inreok.getiserver.domain.program.exception.ActiveApplicationNotFoundException
 import team.inreok.getiserver.domain.program.exception.AlreadyAppliedException
 import team.inreok.getiserver.domain.program.exception.CapacityBelowCurrentApplicantsException
+import team.inreok.getiserver.domain.program.exception.DiscordChannelNotAllowedException
 import team.inreok.getiserver.domain.program.exception.DiscordChannelRequiredException
 import team.inreok.getiserver.domain.program.exception.InvalidCapacityException
 import team.inreok.getiserver.domain.program.exception.NotEnrolledException
@@ -53,6 +59,7 @@ import team.inreok.getiserver.domain.program.repository.ProgramApplicationReposi
 import team.inreok.getiserver.domain.program.repository.ProgramRepository
 import team.inreok.getiserver.domain.program.repository.ProgramTargetGradeRepository
 import team.inreok.getiserver.domain.program.service.ProgramService
+import team.inreok.getiserver.global.discord.DiscordChannelResolver
 import tools.jackson.databind.json.JsonMapper
 import java.time.LocalDateTime
 import java.util.Optional
@@ -75,7 +82,15 @@ class ProgramServiceImplTest {
     @Mock
     private lateinit var memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort
 
+    @Mock
+    private lateinit var eventPublisher: ApplicationEventPublisher
+
+    @Mock
+    private lateinit var discordChannelResolver: DiscordChannelResolver
+
     private val service: ProgramService by lazy {
+        // create() Test 대부분이 publishableRequest()의 기본 채널("channel-1")을 그대로 쓴다.
+        given(discordChannelResolver.isAllowedProgramChannelId("channel-1")).willReturn(true)
         ProgramServiceImpl(
             programRepository,
             programTargetGradeRepository,
@@ -83,6 +98,8 @@ class ProgramServiceImplTest {
             programFormLinkQueryPort,
             memberApplicantSnapshotQueryPort,
             JsonMapper(),
+            eventPublisher,
+            discordChannelResolver,
         )
     }
 
@@ -292,6 +309,96 @@ class ProgramServiceImplTest {
 
         assertThat(response.status).isEqualTo(ProgramStatus.DELETED)
         assertThat(program.deletedAt).isNotNull()
+    }
+
+    // --- Discord Event 발행 (docs/notification/discord-event-wiring-plan.md §4.2) ---
+    //
+    // 한 번도 게시되지 않은 DRAFT는 Discord에 메시지가 없어, UPDATED/DELETED를 발행하면 Worker가
+    // MISSING_DISCORD_MESSAGE_ID로 실패 처리할 Row만 쌓인다. 그래서 발행 단계에서 거른다.
+
+    @Test
+    fun `PUBLISHED로 등록하면 Discord PUBLISHED Event를 발행한다`() {
+        givenSaveAssignsId()
+        given(memberApplicantSnapshotQueryPort.findById(7L)).willReturn(teacherSnapshot(7L))
+
+        service.create(publishableRequest(), createdByMemberId = 7L)
+
+        assertThat(publishedDiscordEvents())
+            .containsExactly(ProgramDiscordEvent(1L, ProgramDiscordAction.PUBLISHED))
+    }
+
+    @Test
+    fun `DRAFT로 등록하면 Discord Event를 발행하지 않는다`() {
+        givenSaveAssignsId()
+
+        service.create(draftRequest(), createdByMemberId = 7L)
+
+        assertThat(publishedDiscordEvents()).isEmpty()
+    }
+
+    @Test
+    fun `허용 목록에 없는 Discord 채널로 등록하면 거부한다`() {
+        given(discordChannelResolver.isAllowedProgramChannelId("random-channel")).willReturn(false)
+
+        assertThatThrownBy { service.create(publishableRequest(discordChannelId = "random-channel"), 7L) }
+            .isInstanceOf(DiscordChannelNotAllowedException::class.java)
+    }
+
+    @Test
+    fun `게시된 프로그램을 수정하면 Discord UPDATED Event를 발행한다`() {
+        given(programRepository.findByIdForUpdate(1L))
+            .willReturn(publishedProgram())
+        given(programApplicationRepository.countByProgramIdAndStatus(1L, ProgramApplicationStatus.APPLIED))
+            .willReturn(0L)
+        given(programTargetGradeRepository.findAllByIdProgramId(1L)).willReturn(targetGradesOf(1L, 2, 3))
+
+        service.update(1L, requesterMemberId = 7L, isDeveloper = false, request = ProgramUpdateRequest(title = "변경"))
+
+        assertThat(publishedDiscordEvents())
+            .containsExactly(ProgramDiscordEvent(1L, ProgramDiscordAction.UPDATED))
+    }
+
+    @Test
+    fun `DRAFT를 수정하면 Discord Event를 발행하지 않는다`() {
+        given(programRepository.findByIdForUpdate(1L))
+            .willReturn(programOf(status = ProgramStatus.DRAFT, createdByMemberId = 7L))
+        given(programApplicationRepository.countByProgramIdAndStatus(1L, ProgramApplicationStatus.APPLIED))
+            .willReturn(0L)
+
+        service.update(1L, requesterMemberId = 7L, isDeveloper = false, request = ProgramUpdateRequest(title = "변경"))
+
+        assertThat(publishedDiscordEvents()).isEmpty()
+    }
+
+    @Test
+    fun `게시된 프로그램을 삭제하면 Discord DELETED Event를 발행한다`() {
+        given(programRepository.findByIdForUpdate(1L))
+            .willReturn(programOf(status = ProgramStatus.PUBLISHED, createdByMemberId = 7L))
+
+        service.changeStatus(
+            1L,
+            requesterMemberId = 7L,
+            isDeveloper = false,
+            request = ProgramStatusUpdateRequest(status = ProgramStatus.DELETED),
+        )
+
+        assertThat(publishedDiscordEvents())
+            .containsExactly(ProgramDiscordEvent(1L, ProgramDiscordAction.DELETED))
+    }
+
+    @Test
+    fun `DRAFT를 삭제하면 Discord Event를 발행하지 않는다`() {
+        given(programRepository.findByIdForUpdate(1L))
+            .willReturn(programOf(status = ProgramStatus.DRAFT, createdByMemberId = 7L))
+
+        service.changeStatus(
+            1L,
+            requesterMemberId = 7L,
+            isDeveloper = false,
+            request = ProgramStatusUpdateRequest(status = ProgramStatus.DELETED),
+        )
+
+        assertThat(publishedDiscordEvents()).isEmpty()
     }
 
     // --- 목록 조회 ---
@@ -531,6 +638,28 @@ class ProgramServiceImplTest {
     }
 
     // --- Fixtures ---
+
+    /**
+     * 발행된 Event 중 [ProgramDiscordEvent]만 골라낸다. Event 종류를 구분하지 않으면 다른
+     * Event가 함께 발행될 때 검증이 흐려진다.
+     */
+    private fun publishedDiscordEvents(): List<ProgramDiscordEvent> {
+        val captor = ArgumentCaptor.forClass(Any::class.java)
+        verify(eventPublisher, atLeast(0)).publishEvent(captor.capture() ?: Any())
+        return captor.allValues.filterIsInstance<ProgramDiscordEvent>()
+    }
+
+    /** 게시 필수값을 모두 갖춘 PUBLISHED 프로그램이다 -- update()가 게시 검증을 다시 수행한다. */
+    private fun publishedProgram() =
+        programOf(status = ProgramStatus.PUBLISHED, createdByMemberId = 7L).apply {
+            bodyMarkdown = "본문"
+            location = "장소"
+            eventStartedAt = now
+            eventEndedAt = now.plusHours(1)
+            applicationStartedAt = now.minusDays(1)
+            applicationEndedAt = now.plusDays(1)
+            discordChannelId = "channel-1"
+        }
 
     private fun givenSaveAssignsId() {
         given(programRepository.saveAndFlush(any(Program::class.java))).willAnswer { invocation ->

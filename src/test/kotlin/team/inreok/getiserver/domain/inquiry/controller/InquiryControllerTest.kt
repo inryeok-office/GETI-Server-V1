@@ -25,7 +25,6 @@ import team.inreok.getiserver.domain.inquiry.dto.InquiryAuthorResponse
 import team.inreok.getiserver.domain.inquiry.dto.InquiryCreateRequest
 import team.inreok.getiserver.domain.inquiry.dto.InquiryCreateResponse
 import team.inreok.getiserver.domain.inquiry.dto.InquiryDetailResponse
-import team.inreok.getiserver.domain.inquiry.entity.type.InquiryDiscordDeliveryStatus
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryStatus
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryType
 import team.inreok.getiserver.domain.inquiry.exception.InquiryAccessDeniedException
@@ -89,11 +88,9 @@ class InquiryControllerTest
                 status = InquiryStatus.RECEIVED,
                 author = author(),
                 files = emptyList(),
-                discordDeliveryStatus = InquiryDiscordDeliveryStatus.PENDING,
                 answers = emptyList(),
                 createdAt = LocalDateTime.now(),
                 updatedAt = LocalDateTime.now(),
-                discordDelivered = false,
             )
 
         private fun detailResponse(assignee: InquiryAssigneeResponse? = null) =
@@ -105,7 +102,6 @@ class InquiryControllerTest
                 status = InquiryStatus.RECEIVED,
                 author = author(),
                 files = emptyList(),
-                discordDeliveryStatus = InquiryDiscordDeliveryStatus.PENDING,
                 assignee = assignee,
                 answers = emptyList(),
                 createdAt = LocalDateTime.now(),
@@ -128,7 +124,6 @@ class InquiryControllerTest
                         ),
                 ).andExpect(status().isCreated)
                 .andExpect(jsonPath("$.data.status").value("RECEIVED"))
-                .andExpect(jsonPath("$.data.discordDeliveryStatus").value("PENDING"))
                 .andExpect(jsonPath("$.meta.requestId").exists())
         }
 

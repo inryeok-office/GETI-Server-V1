@@ -56,6 +56,10 @@ import java.util.concurrent.TimeUnit
         "app.file.storage.region=us-east-1",
         "app.file.storage.access-key=integration-test-only-access-key",
         "app.file.storage.secret-key=integration-test-only-secret-key",
+        // Program 등록이 discordChannelId를 허용 목록에서 검증한다(Issue #97). 이 Test는 채널
+        // 정책이 아니라 신청 동시성을 검증하는 것이 목적이라, 아래에서 쓰는 고정값을 허용 채널로
+        // 등록해 무관한 DiscordChannelNotAllowedException이 나지 않게 한다.
+        "app.discord.channel-policy.channels.concurrency-test.channel-id=concurrency-test-channel",
     ],
 )
 class ProgramApplicationConcurrencyIntegrationTest {

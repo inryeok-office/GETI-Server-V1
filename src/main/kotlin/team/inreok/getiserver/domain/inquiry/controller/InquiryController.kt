@@ -40,13 +40,13 @@ class InquiryController(
     @Operation(
         summary = "문의 등록",
         description = """
-            새 문의를 등록한다. status·담당자·Discord 전달 상태는 클라이언트가 지정할 수 없고
-            서버가 RECEIVED로 고정한다. `fileIds`는 FilePurpose=INQUIRY_ATTACHMENT로 업로드하고
-            본인이 소유한 파일만 연결할 수 있다.
+            새 문의를 등록한다. status·담당자는 클라이언트가 지정할 수 없고 서버가 RECEIVED로
+            고정한다. `fileIds`는 FilePurpose=INQUIRY_ATTACHMENT로 업로드하고 본인이 소유한
+            파일만 연결할 수 있다.
 
-            Discord 접수 알림은 이 Transaction과 분리되어 있어 Discord 장애가 문의 등록 자체를
-            실패시키지 않는다. 응답의 `discordDeliveryStatus`는 Notification 연동(Phase 5) 전이라
-            항상 PENDING이다.
+            문의 접수 시 Discord 관리자 채널로 알림을 예약한다. 이 알림은 원본 Transaction Commit
+            이후 별도로 처리되어, Discord 장애가 문의 등록 자체를 실패시키지 않는다. 이 응답에는
+            Discord 전달 상태를 포함하지 않는다.
         """,
     )
     @ApiResponses(

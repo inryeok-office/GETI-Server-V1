@@ -29,6 +29,9 @@ class JobDiscordPayloadQueryPortImpl(
             // 삭제된 기업이면 null이다. 기업명은 Bot Schema에서 선택 필드라 없으면 생략된다.
             companyName = companyQuery.findActiveSummary(job.companyId)?.name,
             recruitmentEndedAt = job.recruitmentEndedAt,
+            discordChannelKey = job.discordChannelKey,
+            targetGrade = job.targetGrade,
+            updatedAt = requireNotNull(job.updatedAt) { "저장된 Job은 updatedAt을 가져야 합니다." },
         )
     }
 }

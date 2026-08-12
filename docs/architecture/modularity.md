@@ -174,6 +174,7 @@ Repository Interface는 `org.springframework.data.jpa.repository.JpaRepository`�
 | `global.config` | Spring Framework Configuration Class, `@ConfigurationProperties` | 없음. 실제 Class가 생기는 시점에 만든다 |
 | `global.response` | (검토 중) `global.web`과 책임이 겹친다 | 없음. `global.web`에 이미 `ApiResponse`/`PageResponse`가 있어 중복 Package를 만들지 않았다. 실제 필요가 명확해지면 `global.web`을 `global.response`로 재구성할지 별도로 판단한다 |
 | `global.persistence` | 여러 Domain이 공유하는 Persistence 기술 요소(예: 공통 Auditing 설정) | 없음. 19개 Table의 Timestamp Column 구성이 균일하지 않아(예: `files`는 `updated_at`이 없음) 공용 BaseEntity를 아직 도입하지 않았다([`erd.md`](./erd.md)의 "시간 타입과 Timestamp 자동화" 참고) |
+| `global.discord` | `domain.job`·`domain.program`·`domain.notification`이 함께 읽는 Discord 허용 채널·학년별 Mention Role 설정(`DiscordChannelProperties`/`DiscordChannelResolver`) | 있음. `notification`이 이미 `job.query`/`program.query`를 소비해, 채널 설정을 `notification`이나 `job`/`program` 어느 한쪽에 두면 반대 방향 의존이 생겨 순환이 된다(`docs/notification/discord-event-wiring-plan.md` §5) |
 
 다음 규칙을 적용한다.
 

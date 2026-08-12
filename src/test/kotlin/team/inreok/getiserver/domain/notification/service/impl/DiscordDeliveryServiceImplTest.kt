@@ -21,8 +21,10 @@ import team.inreok.getiserver.domain.notification.entity.DiscordDeliveryAttempt
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryAttemptResult
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryAttemptType
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryStatus
+import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryTargetType
 import team.inreok.getiserver.domain.notification.entity.type.DiscordMessageTemplate
 import team.inreok.getiserver.domain.notification.exception.DiscordDeliveryNotFoundException
+import team.inreok.getiserver.domain.notification.exception.DiscordDeliveryNotFoundForTargetException
 import team.inreok.getiserver.domain.notification.exception.DiscordDeliveryNotRetryableException
 import team.inreok.getiserver.domain.notification.exception.DiscordDeliveryRetryLimitExceededException
 import team.inreok.getiserver.domain.notification.repository.DiscordDeliveryAttemptRepository
@@ -412,6 +414,85 @@ class DiscordDeliveryServiceImplTest {
             .isInstanceOf(DiscordDeliveryNotFoundException::class.java)
     }
 
+    // --- 대상 기준 조회·재시도(Admin API) -----------------------------------
+
+    @Test
+    fun `대상 기준으로 최신 상태를 조회한다`() {
+        val target = delivery(id = 1L, status = DiscordDeliveryStatus.DELIVERED, messageId = "m-1")
+        given(
+            deliveryRepository.findFirstByTargetTypeAndTargetIdOrderByIdDesc(DiscordDeliveryTargetType.PROGRAM, 100L),
+        ).willReturn(target)
+
+        val response = service().findStatus(DiscordDeliveryTargetType.PROGRAM, 100L)
+
+        assertThat(response.targetType).isEqualTo(DiscordDeliveryTargetType.PROGRAM)
+        assertThat(response.targetId).isEqualTo(100L)
+        assertThat(response.status).isEqualTo(DiscordDeliveryStatus.DELIVERED)
+        assertThat(response.messageId).isEqualTo("m-1")
+        assertThat(response.maxAutomaticRetryCount).isEqualTo(properties.maxAutomaticRetryCount)
+        assertThat(response.maxManualRetryCount).isEqualTo(properties.maxManualRetryCount)
+    }
+
+    @Test
+    fun `FAILED이고 상한이 남았으면 canRetry가 true다`() {
+        val target = delivery(id = 1L, status = DiscordDeliveryStatus.FAILED, manualRetryCount = 1)
+        given(
+            deliveryRepository.findFirstByTargetTypeAndTargetIdOrderByIdDesc(DiscordDeliveryTargetType.PROGRAM, 100L),
+        ).willReturn(target)
+
+        assertThat(service().findStatus(DiscordDeliveryTargetType.PROGRAM, 100L).canRetry).isTrue()
+    }
+
+    @Test
+    fun `FAILED이어도 수동 재시도 상한을 모두 썼으면 canRetry가 false다`() {
+        val target = delivery(id = 1L, status = DiscordDeliveryStatus.FAILED, manualRetryCount = 3)
+        given(
+            deliveryRepository.findFirstByTargetTypeAndTargetIdOrderByIdDesc(DiscordDeliveryTargetType.PROGRAM, 100L),
+        ).willReturn(target)
+
+        assertThat(service().findStatus(DiscordDeliveryTargetType.PROGRAM, 100L).canRetry).isFalse()
+    }
+
+    @Test
+    fun `DELIVERED면 재시도할 수 없다는 뜻으로 canRetry가 false다`() {
+        val target = delivery(id = 1L, status = DiscordDeliveryStatus.DELIVERED)
+        given(
+            deliveryRepository.findFirstByTargetTypeAndTargetIdOrderByIdDesc(DiscordDeliveryTargetType.PROGRAM, 100L),
+        ).willReturn(target)
+
+        assertThat(service().findStatus(DiscordDeliveryTargetType.PROGRAM, 100L).canRetry).isFalse()
+    }
+
+    @Test
+    fun `대상으로 Delivery를 찾을 수 없으면 조회가 404다`() {
+        // Mockito 기본 응답(unstubbed 호출은 null)을 그대로 쓴다 -- non-null Enum 파라미터에
+        // 바로 any()를 넘기면 Kotlin이 호출부에 끼워 넣는 null 검사 때문에 NPE가 난다.
+
+        assertThatThrownBy { service().findStatus(DiscordDeliveryTargetType.JOB, 999L) }
+            .isInstanceOf(DiscordDeliveryNotFoundForTargetException::class.java)
+    }
+
+    @Test
+    fun `대상 기준 재시도는 Delivery를 찾아 재시도를 예약하고 갱신된 상태를 돌려준다`() {
+        val target = delivery(id = 1L, status = DiscordDeliveryStatus.FAILED)
+        given(
+            deliveryRepository.findFirstByTargetTypeAndTargetIdOrderByIdDesc(DiscordDeliveryTargetType.PROGRAM, 100L),
+        ).willReturn(target)
+        given(deliveryRepository.findById(1L)).willReturn(Optional.of(target))
+
+        val response = service().retryManuallyForTarget(DiscordDeliveryTargetType.PROGRAM, 100L)
+
+        assertThat(target.status).isEqualTo(DiscordDeliveryStatus.PENDING)
+        assertThat(response.status).isEqualTo(DiscordDeliveryStatus.PENDING)
+        assertThat(response.manualRetryCount).isEqualTo(1)
+    }
+
+    @Test
+    fun `대상으로 Delivery를 찾을 수 없으면 대상 기준 재시도도 404다`() {
+        assertThatThrownBy { service().retryManuallyForTarget(DiscordDeliveryTargetType.JOB, 999L) }
+            .isInstanceOf(DiscordDeliveryNotFoundForTargetException::class.java)
+    }
+
     // --- Matcher Helper --------------------------------------------------
 
     // Kotlin non-null 파라미터에 bare any()를 쓰면 null 반환으로 NPE가 나므로
@@ -471,6 +552,9 @@ class DiscordDeliveryServiceImplTest {
         this.discordMessageId = messageId
         this.automaticRetryCount = automaticRetryCount
         this.manualRetryCount = manualRetryCount
+        // @CreationTimestamp는 실제 저장 시점에만 채워진다. findStatus()의 requestedAt이
+        // 이 값을 요구하므로 Test Fixture에서도 채워 둔다.
+        this.createdAt = LocalDateTime.of(2026, 8, 1, 9, 0)
     }
 
     /** Sweep이 이 Delivery를 실제로 집어 처리하도록 Repository Mock을 준비한다. */
@@ -491,6 +575,9 @@ class DiscordDeliveryServiceImplTest {
                         bodyMarkdown = null,
                         eventStartedAt = LocalDateTime.of(2026, 8, 20, 9, 0),
                         eventEndedAt = null,
+                        discordChannelId = "channel-1",
+                        targetGrades = emptyList(),
+                        updatedAt = LocalDateTime.of(2026, 8, 20, 9, 0),
                     )
                 } else {
                     null

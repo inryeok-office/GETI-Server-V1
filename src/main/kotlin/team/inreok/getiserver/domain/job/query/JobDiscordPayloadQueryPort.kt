@@ -46,4 +46,14 @@ data class JobDiscordPayloadSnapshot(
     val companyName: String?,
     /** 모집 마감 시각. Bot Schema의 `deadline`에 대응한다. */
     val recruitmentEndedAt: LocalDateTime?,
+    /** `Job.discordChannelKey`(논리 Key). `DiscordChannelResolver`로 물리 채널을 해석한다. */
+    val discordChannelKey: String?,
+    /** Mention Role 계산에 쓰는 지원 대상 학년. 전 학년 대상이면 null이다. */
+    val targetGrade: Int?,
+    /**
+     * `discord-delivery-plan.md` §6.3의 UPDATE Idempotency Key(`{targetType}:{targetId}:UPDATE:
+     * {원본 updatedAt epochMilli}`)를 만드는 데 쓴다. 저장된 Job은 `@UpdateTimestamp`가 항상
+     * 채우므로 non-null이다.
+     */
+    val updatedAt: LocalDateTime,
 )
