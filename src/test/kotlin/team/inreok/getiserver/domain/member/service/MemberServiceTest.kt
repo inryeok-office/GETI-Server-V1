@@ -18,6 +18,7 @@ import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.entity.type.FilePurpose
 import team.inreok.getiserver.domain.file.link.FileLinkPort
 import team.inreok.getiserver.domain.file.link.FileUrlPort
+import team.inreok.getiserver.domain.member.access.PrivilegedProfileViewer
 import team.inreok.getiserver.domain.member.entity.Member
 import team.inreok.getiserver.domain.member.entity.MemberRole
 import team.inreok.getiserver.domain.member.entity.MemberRoleId
@@ -53,6 +54,11 @@ class MemberServiceTest {
     @Mock
     private lateinit var fileUrlPort: FileUrlPort
 
+    // 기본값 false(권한 없는 요청자)라 기존 Test는 그대로 통과한다. 교사·개발자 경로만 명시적으로
+    // 스텁한다.
+    @Mock
+    private lateinit var privilegedProfileViewer: PrivilegedProfileViewer
+
     private val service: MemberService by lazy {
         // 프로필 이미지 Service는 Mock이 아니라 실제 구현을 쓴다. 이 Class의 Test가 검증하려는
         // 것은 연결/해제가 실제로 어떤 순서로 일어나는가이고, Mock으로 대체하면 그 동작이 사라진다.
@@ -61,6 +67,7 @@ class MemberServiceTest {
             memberRoleRepository,
             memberSelectionQueryService,
             MemberProfileImageServiceImpl(fileLinkPort, fileUrlPort),
+            privilegedProfileViewer,
             JsonMapper(),
         )
     }
@@ -153,6 +160,60 @@ class MemberServiceTest {
         assertThat(result.profileRestricted).isTrue()
         verify(memberSelectionQueryService, never()).getMajorNames(8L)
         verify(memberSelectionQueryService, never()).getTechStackNames(8L)
+    }
+
+    @Test
+    fun `교사와 개발자는 비공개 프로필의 전공-기술스택-희망직무-자기소개를 조회한다`() {
+        // 학생 관리·상담 목적으로 비공개 프로필도 전체를 본다(Issue #114, #89 결정).
+        val member =
+            Member(
+                oauthProvider = OAuthProvider.GOOGLE,
+                oauthSubject = "subject-9",
+                email = "student9@example.com",
+                status = MemberStatus.ACTIVE,
+                profilePublic = false,
+            ).apply {
+                id = 9L
+                name = "홍길동"
+                desiredPositions = """["Backend Developer"]"""
+                introduction = "비공개 자기소개"
+            }
+        given(memberRepository.findById(9L)).willReturn(Optional.of(member))
+        given(memberRoleRepository.findAllByIdMemberId(9L)).willReturn(studentRole(9L))
+        given(memberSelectionQueryService.getMajorNames(9L)).willReturn(listOf("소프트웨어"))
+        given(memberSelectionQueryService.getTechStackNames(9L)).willReturn(listOf("Kotlin"))
+        given(privilegedProfileViewer.canViewPrivateProfile()).willReturn(true)
+
+        val result = service.getProfile(9L, REQUESTER_ID)
+
+        assertThat(result.majors).containsExactly("소프트웨어")
+        assertThat(result.techStacks).containsExactly("Kotlin")
+        assertThat(result.desiredJob).isEqualTo("Backend Developer")
+        assertThat(result.bio).isEqualTo("비공개 자기소개")
+        // isPublic은 대상의 설정값이라 false 그대로다. 가려지지 않았다는 사실은 profileRestricted가
+        // 나타낸다.
+        assertThat(result.isPublic).isFalse()
+        assertThat(result.profileRestricted).isFalse()
+    }
+
+    @Test
+    fun `교사가 조회해도 대상이 학생이 아니면 MemberNotFoundException을 던진다`() {
+        // 이 API는 학생 프로필 조회 용도라는 기존 규칙은 Role 개방과 무관하게 유지된다.
+        val teacher =
+            Member(
+                oauthProvider = OAuthProvider.GOOGLE,
+                oauthSubject = "subject-10",
+                email = "teacher10@example.com",
+                status = MemberStatus.ACTIVE,
+                profilePublic = true,
+            ).apply { id = 10L }
+        given(memberRepository.findById(10L)).willReturn(Optional.of(teacher))
+        given(memberRoleRepository.findAllByIdMemberId(10L)).willReturn(
+            listOf(MemberRole(MemberRoleId(memberId = 10L, role = RoleType.TEACHER))),
+        )
+
+        assertThatThrownBy { service.getProfile(10L, REQUESTER_ID) }
+            .isInstanceOf(MemberNotFoundException::class.java)
     }
 
     @Test

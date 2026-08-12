@@ -2,6 +2,7 @@ package team.inreok.getiserver.domain.member.service.impl
 
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import team.inreok.getiserver.domain.member.access.PrivilegedProfileViewer
 import team.inreok.getiserver.domain.member.dto.MemberProfileResponse
 import team.inreok.getiserver.domain.member.dto.MemberProfileUpdateResponse
 import team.inreok.getiserver.domain.member.dto.MyProfileResponse
@@ -25,6 +26,7 @@ class MemberServiceImpl(
     private val memberRoleRepository: MemberRoleRepository,
     private val memberSelectionQueryService: MemberSelectionQueryService,
     private val memberProfileImageService: MemberProfileImageService,
+    private val privilegedProfileViewer: PrivilegedProfileViewer,
     private val objectMapper: ObjectMapper,
 ) : MemberService {
     @Transactional(readOnly = true)
@@ -160,20 +162,27 @@ class MemberServiceImpl(
     ): MemberProfileResponse {
         val memberId = requireNotNull(member.id) { "저장된 Member는 id를 가져야 합니다." }
         val isPublic = member.profilePublic
-        // isPublic=false인 비공개 프로필은 profileRestricted=true만 표시하고, 전공/기술 스택/희망
-        // 직무/자기소개 같은 상세 Field는 다른 회원에게 노출하지 않는다(코드 리뷰 Blocker 반영).
+        // isPublic=false인 비공개 프로필은 전공/기술 스택/희망 직무/자기소개 같은 상세 Field를 다른
+        // 회원에게 노출하지 않는다(코드 리뷰 Blocker 반영). 단 교사·개발자는 학생 관리·상담 목적으로
+        // 비공개 프로필도 전체를 본다(Issue #114, #89 결정).
+        //
+        // isPublic은 대상 회원이 설정한 값을 그대로 두고, 이번 응답에서 실제로 가렸는지는
+        // profileRestricted가 나타낸다 -- 교사가 비공개 학생을 조회하면 isPublic=false이면서
+        // profileRestricted=false다. 두 Field를 묶어 두면 값은 채워 보내면서 "가렸다"고 말하는
+        // 모순이 생기고, 프론트가 그 신호를 보고 받은 데이터를 다시 숨기게 된다.
+        val disclosed = isPublic || privilegedProfileViewer.canViewPrivateProfile()
         return MemberProfileResponse(
             memberId = memberId,
             name = member.name.orEmpty(),
             profileImageUrl = memberProfileImageService.urlOf(member.profileImageFileId, requesterId),
             cohort = member.cohort,
             department = member.department,
-            majors = if (isPublic) memberSelectionQueryService.getMajorNames(memberId) else emptyList(),
-            techStacks = if (isPublic) memberSelectionQueryService.getTechStackNames(memberId) else emptyList(),
-            desiredJob = if (isPublic) readStringList(member.desiredPositions).firstOrNull() else null,
-            bio = if (isPublic) member.introduction else null,
+            majors = if (disclosed) memberSelectionQueryService.getMajorNames(memberId) else emptyList(),
+            techStacks = if (disclosed) memberSelectionQueryService.getTechStackNames(memberId) else emptyList(),
+            desiredJob = if (disclosed) readStringList(member.desiredPositions).firstOrNull() else null,
+            bio = if (disclosed) member.introduction else null,
             isPublic = isPublic,
-            profileRestricted = !isPublic,
+            profileRestricted = !disclosed,
         )
     }
 
