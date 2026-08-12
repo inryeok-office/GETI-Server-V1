@@ -4,11 +4,15 @@ import com.redis.testcontainers.RedisContainer
 import jakarta.persistence.EntityManagerFactory
 import org.assertj.core.api.Assertions.assertThat
 import org.hibernate.SessionFactory
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.data.domain.PageRequest
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.core.context.SecurityContextHolder
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
@@ -106,6 +110,57 @@ class MemberSearchImageUrlQueryCountIntegrationTest {
             ).isEqualTo(fewResult.statements)
     }
 
+    /**
+     * 교사·개발자 예외(Issue #114)가 Query를 늘리지 않는지 측정한다. 요청자 Role을
+     * `MemberRoleRepository`로 조회하는 구현이었다면 파생 Query라 1차 캐시가 걸리지 않아 파일마다
+     * SELECT가 나갔을 것이고, 이 Test가 그 회귀를 잡는다.
+     */
+    @Test
+    fun `교사가 검색해도 비공개 학생 수에 따라 Query 수는 늘지 않는다`() {
+        val teacherId = createTeacher("teacher-${UUID.randomUUID().toString().take(8)}").let { requireNotNull(it.id) }
+        val fewName = "교사쿼리${UUID.randomUUID().toString().take(8)}"
+        val manyName = "교사쿼리${UUID.randomUUID().toString().take(8)}"
+        createStudentsWithProfileImage(fewName, count = FEW, profilePublic = false)
+        createStudentsWithProfileImage(manyName, count = MANY, profilePublic = false)
+
+        authenticateAsTeacher(teacherId)
+
+        val statistics = entityManagerFactory.unwrap(SessionFactory::class.java).statistics
+        statistics.isStatisticsEnabled = true
+
+        val fewResult = searchAndCount(statistics, teacherId, fewName)
+        val manyResult = searchAndCount(statistics, teacherId, manyName)
+
+        // 전제 확인: 대상이 모두 비공개인데도 URL이 발급됐다면 교사 예외가 실제로 동작한 것이다.
+        assertThat(fewResult.urlCount).isEqualTo(FEW)
+        assertThat(manyResult.urlCount).isEqualTo(MANY)
+
+        assertThat(manyResult.statements)
+            .describedAs(
+                "교사가 회원 %d명을 검색할 때 %d명 검색보다 Statement를 더 쓰면 안 된다 (few=%d, many=%d)",
+                MANY,
+                FEW,
+                fewResult.statements,
+                manyResult.statements,
+            ).isEqualTo(fewResult.statements)
+    }
+
+    // SecurityContextHolder는 ThreadLocal이라 정리하지 않으면 같은 Thread를 재사용하는 다른 Test로
+    // 교사 권한이 새어 나간다.
+    @AfterEach
+    fun clearSecurityContext() {
+        SecurityContextHolder.clearContext()
+    }
+
+    private fun authenticateAsTeacher(memberId: Long) {
+        SecurityContextHolder.getContext().authentication =
+            UsernamePasswordAuthenticationToken(
+                memberId,
+                null,
+                listOf(SimpleGrantedAuthority("ROLE_${RoleType.TEACHER}")),
+            )
+    }
+
     private fun searchAndCount(
         statistics: org.hibernate.stat.Statistics,
         requesterId: Long,
@@ -132,9 +187,10 @@ class MemberSearchImageUrlQueryCountIntegrationTest {
     private fun createStudentsWithProfileImage(
         name: String,
         count: Int,
+        profilePublic: Boolean = true,
     ) {
         repeat(count) { index ->
-            val member = createStudent("$name-$index", displayName = name)
+            val member = createStudent("$name-$index", displayName = name, profilePublic = profilePublic)
             val memberId = requireNotNull(member.id)
             val file =
                 storedFileRepository.saveAndFlush(
@@ -159,6 +215,19 @@ class MemberSearchImageUrlQueryCountIntegrationTest {
     private fun createStudent(
         subject: String,
         displayName: String = subject,
+        // 공개 프로필이라야 다른 학생에게 URL이 발급되어 권한 판정 경로를 실제로 탄다. 교사 경로
+        // 측정에서는 비공개로 만들어, URL이 나갔다는 사실 자체가 교사 예외가 동작했다는 근거가 된다.
+        profilePublic: Boolean = true,
+    ): Member = createMember(subject, RoleType.STUDENT, displayName, profilePublic)
+
+    private fun createTeacher(subject: String): Member =
+        createMember(subject, RoleType.TEACHER, subject, profilePublic = true)
+
+    private fun createMember(
+        subject: String,
+        role: RoleType,
+        displayName: String,
+        profilePublic: Boolean,
     ): Member {
         val member =
             memberRepository.saveAndFlush(
@@ -167,11 +236,10 @@ class MemberSearchImageUrlQueryCountIntegrationTest {
                     oauthSubject = subject,
                     email = "$subject@example.com",
                     status = MemberStatus.ACTIVE,
-                    // 공개 프로필이라야 다른 회원에게 URL이 발급되어 권한 판정 경로를 실제로 탄다.
-                    profilePublic = true,
+                    profilePublic = profilePublic,
                 ).apply { name = displayName },
             )
-        memberRoleRepository.saveAndFlush(MemberRole(MemberRoleId(requireNotNull(member.id), RoleType.STUDENT)))
+        memberRoleRepository.saveAndFlush(MemberRole(MemberRoleId(requireNotNull(member.id), role)))
         return member
     }
 
