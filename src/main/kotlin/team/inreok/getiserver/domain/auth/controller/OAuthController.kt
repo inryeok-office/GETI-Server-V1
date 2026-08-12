@@ -74,9 +74,11 @@ class OAuthController(
         SwaggerApiResponse(responseCode = "200", description = "로그인 성공(Token 및 회원 정보 반환)"),
         SwaggerApiResponse(
             responseCode = "400",
-            description =
-                "state가 만료되었거나 유효하지 않음(OAUTH_STATE_INVALID), " +
-                    "Provider Token 교환·UserInfo 조회 실패(OAUTH_LOGIN_FAILED)",
+            description = "state가 만료되었거나 유효하지 않음(OAUTH_STATE_INVALID)",
+        ),
+        SwaggerApiResponse(
+            responseCode = "401",
+            description = "Provider Token 교환·UserInfo 조회 실패(OAUTH_LOGIN_FAILED)",
         ),
         SwaggerApiResponse(
             responseCode = "403",

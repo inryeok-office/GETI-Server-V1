@@ -35,6 +35,7 @@ class TokenController(
         description = """
             유효한 Refresh Token을 즉시 폐기(1회용 Rotation)하고 새 Access/Refresh Token 쌍을 발급한다.
             Refresh Token은 Cookie(refreshToken) > X-Refresh-Token Header > Body(refreshToken) 순으로 읽는다.
+            새 Access Token의 역할(roles) Claim은 해당 회원의 현재 Member Role을 다시 조회해 반영한다.
             새 Refresh Token은 HttpOnly Cookie(Set-Cookie)로도 내려주며, 응답 Body에도 함께 담는다.
             Access Token(Authorization Header) 없이 호출한다.
         """,
