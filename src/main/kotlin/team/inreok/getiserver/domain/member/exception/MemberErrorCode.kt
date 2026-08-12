@@ -16,6 +16,7 @@ enum class MemberErrorCode(
     NAME_REQUIRED(HttpStatus.BAD_REQUEST, "검색할 이름을 입력해야 합니다."),
     NOT_A_STUDENT(HttpStatus.FORBIDDEN, "학생만 접근할 수 있습니다."),
     OAUTH_EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 다른 방식으로 가입된 이메일입니다."),
+    MEMBER_LOGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "로그인이 허용되지 않는 회원 상태입니다."),
     ;
 
     override val code: String get() = name

@@ -17,6 +17,8 @@ import team.inreok.getiserver.domain.auth.exception.UnsupportedOAuthProviderExce
 import team.inreok.getiserver.domain.auth.service.AuthLoginService
 import team.inreok.getiserver.domain.auth.service.OAuthAuthorization
 import team.inreok.getiserver.domain.auth.service.OAuthLoginService
+import team.inreok.getiserver.domain.member.entity.type.MemberStatus
+import team.inreok.getiserver.domain.member.exception.MemberLoginNotAllowedException
 import team.inreok.getiserver.domain.member.exception.OAuthEmailAlreadyRegisteredException
 
 @WebMvcTest(controllers = [OAuthController::class])
@@ -140,5 +142,17 @@ class OAuthControllerTest
                 .perform(get("/api/v1/auth/google/callback").param("code", "auth-code").param("state", "state-value"))
                 .andExpect(status().isConflict)
                 .andExpect(jsonPath("$.error.code").value("OAUTH_EMAIL_ALREADY_REGISTERED"))
+        }
+
+        @Test
+        fun `로그인이 허용되지 않는 회원 상태이면 403을 반환한다`() {
+            willThrow(MemberLoginNotAllowedException(MemberStatus.SUSPENDED))
+                .given(authLoginService)
+                .loginWithOAuth("google", "auth-code", "state-value")
+
+            mockMvc
+                .perform(get("/api/v1/auth/google/callback").param("code", "auth-code").param("state", "state-value"))
+                .andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.error.code").value("MEMBER_LOGIN_NOT_ALLOWED"))
         }
     }
