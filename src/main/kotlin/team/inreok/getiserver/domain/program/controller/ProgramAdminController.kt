@@ -133,7 +133,7 @@ class ProgramAdminController(
             ```
 
             `PUBLISHED -> CLOSED`는 이 API로 지정할 수 없다 — 신청 종료 시각 도달 시 서버
-            Scheduler가 자동으로 처리한다(이번 범위에 미포함). DELETED는 Soft Delete로 처리해
+            Scheduler(`ProgramCloseScheduler`)가 자동으로 처리한다. DELETED는 Soft Delete로 처리해
             실제 행을 지우지 않으므로 기존 신청·이력이 보존된다. 등록자 또는 담당 교사만 변경할
             수 있다(개발자는 이 검증을 우회한다).
         """,
