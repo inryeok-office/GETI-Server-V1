@@ -3,9 +3,13 @@ package team.inreok.getiserver.domain.program
 import com.redis.testcontainers.RedisContainer
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentCaptor
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
@@ -13,6 +17,9 @@ import org.testcontainers.utility.DockerImageName
 import team.inreok.getiserver.domain.member.entity.Member
 import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
 import team.inreok.getiserver.domain.member.repository.MemberRepository
+import team.inreok.getiserver.domain.notification.dto.DiscordDeliveryEnqueueCommand
+import team.inreok.getiserver.domain.notification.entity.type.DiscordMessageTemplate
+import team.inreok.getiserver.domain.notification.service.DiscordDeliveryService
 import team.inreok.getiserver.domain.program.entity.Program
 import team.inreok.getiserver.domain.program.entity.ProgramApplication
 import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationStatus
@@ -28,7 +35,9 @@ import java.time.LocalDateTime
  * `ProgramCloseScheduler`가 실제 PostgreSQL에서 신청 종료 시각이 지난 PUBLISHED Program만
  * 골라 CLOSED로 전이하는지 검증한다(원본 요구사항 문서 8절, Phase 7). Service Test(Mock
  * Repository)는 `ProgramRepository.findExpiredPublishedIds` Query 자체를 재현할 수 없어 이
- * Test에서만 확인된다.
+ * Test에서만 확인된다. Discord `PROGRAM_CLOSED` 연동(Issue #120) 검증도 여기에 포함한다 --
+ * `ProgramDiscordEventIntegrationTest`와 같은 이유로 실제 Commit 경계를 사이에 둔 AFTER_COMMIT
+ * 전달을 확인하려면 Testcontainers PostgreSQL이 필요하다.
  */
 @Testcontainers
 @SpringBootTest(
@@ -41,6 +50,8 @@ import java.time.LocalDateTime
         "app.file.storage.region=us-east-1",
         "app.file.storage.access-key=integration-test-only-access-key",
         "app.file.storage.secret-key=integration-test-only-secret-key",
+        // Discord `PROGRAM_CLOSED` 연동 검증에 필요한 허용 채널(Issue #97과 같은 방식).
+        "app.discord.channel-policy.channels.program-close-scheduler-test.channel-id=program-close-scheduler-test-channel",
     ],
 )
 class ProgramCloseSchedulerIntegrationTest {
@@ -58,6 +69,9 @@ class ProgramCloseSchedulerIntegrationTest {
 
     @Autowired
     private lateinit var memberRepository: MemberRepository
+
+    @MockitoBean
+    private lateinit var discordDeliveryService: DiscordDeliveryService
 
     @Test
     fun `신청 종료 시각이 지난 PUBLISHED Program은 CLOSED로 전이되고, 남은 Program은 그대로다`() {
@@ -123,6 +137,51 @@ class ProgramCloseSchedulerIntegrationTest {
         assertThat(preserved.applicantMemberId).isEqualTo(studentId)
     }
 
+    @Test
+    fun `자동 마감되면 PROGRAM_CLOSED Template로 Discord Delivery를 예약한다`() {
+        val teacherId = createMember("close-scheduler-discord-teacher")
+        val now = LocalDateTime.now()
+        val programId =
+            createProgram(
+                teacherId,
+                ProgramStatus.PUBLISHED,
+                applicationEndedAt = now.minusDays(1),
+                discordChannelId = "program-close-scheduler-test-channel",
+            )
+
+        // closeExpiredPrograms()는 대상 Program마다 별도 Transaction(ProgramCloseServiceImpl)을
+        // 열고 닫으므로, 이 호출이 반환한 시점에는 AFTER_COMMIT Listener(ProgramDiscordEventListener)도
+        // 이미 같은 Thread에서 동기 실행을 마친 뒤다.
+        programCloseScheduler.closeExpiredPrograms()
+
+        assertThat(statusOf(programId)).isEqualTo(ProgramStatus.CLOSED)
+        val captor = ArgumentCaptor.forClass(DiscordDeliveryEnqueueCommand::class.java)
+        verify(discordDeliveryService).enqueue(captureCommand(captor))
+        assertThat(captor.value.template).isEqualTo(DiscordMessageTemplate.PROGRAM_CLOSED)
+        assertThat(captor.value.targetId).isEqualTo(programId)
+        assertThat(captor.value.channelId).isEqualTo("program-close-scheduler-test-channel")
+        assertThat(captor.value.roleIds).isEmpty()
+    }
+
+    @Test
+    fun `전이가 일어나지 않으면 Discord Delivery를 예약하지 않는다`() {
+        val teacherId = createMember("close-scheduler-discord-not-expired-teacher")
+        val now = LocalDateTime.now()
+        createProgram(
+            teacherId,
+            ProgramStatus.PUBLISHED,
+            applicationEndedAt = now.plusDays(1),
+            discordChannelId = "program-close-scheduler-test-channel",
+        )
+
+        programCloseScheduler.closeExpiredPrograms()
+
+        verifyNoInteractions(discordDeliveryService)
+    }
+
+    private fun captureCommand(captor: ArgumentCaptor<DiscordDeliveryEnqueueCommand>): DiscordDeliveryEnqueueCommand =
+        captor.capture() ?: DiscordDeliveryEnqueueCommand(DiscordMessageTemplate.PROGRAM_CLOSED, 0L, "")
+
     private fun statusOf(programId: Long): ProgramStatus = programRepository.findById(programId).orElseThrow().status
 
     private fun createMember(subject: String): Long {
@@ -141,6 +200,7 @@ class ProgramCloseSchedulerIntegrationTest {
         createdByMemberId: Long,
         status: ProgramStatus,
         applicationEndedAt: LocalDateTime?,
+        discordChannelId: String? = null,
     ): Long {
         val program =
             programRepository.saveAndFlush(
@@ -152,6 +212,7 @@ class ProgramCloseSchedulerIntegrationTest {
                 ).apply {
                     this.applicationEndedAt = applicationEndedAt
                     applicationStartedAt = applicationEndedAt?.minusDays(7)
+                    this.discordChannelId = discordChannelId
                 },
             )
         return requireNotNull(program.id)

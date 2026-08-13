@@ -7,10 +7,14 @@ import org.mockito.BDDMockito.given
 import org.mockito.Mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
+import org.springframework.context.ApplicationEventPublisher
 import team.inreok.getiserver.domain.program.entity.Program
 import team.inreok.getiserver.domain.program.entity.type.ProgramStatus
 import team.inreok.getiserver.domain.program.entity.type.ProgramType
+import team.inreok.getiserver.domain.program.event.ProgramDiscordAction
+import team.inreok.getiserver.domain.program.event.ProgramDiscordEvent
 import team.inreok.getiserver.domain.program.repository.ProgramRepository
 import java.time.LocalDateTime
 
@@ -19,7 +23,10 @@ class ProgramCloseServiceImplTest {
     @Mock
     private lateinit var programRepository: ProgramRepository
 
-    private val service: ProgramCloseServiceImpl by lazy { ProgramCloseServiceImpl(programRepository) }
+    @Mock
+    private lateinit var eventPublisher: ApplicationEventPublisher
+
+    private val service: ProgramCloseServiceImpl by lazy { ProgramCloseServiceImpl(programRepository, eventPublisher) }
 
     private val now = LocalDateTime.of(2026, 8, 13, 12, 0, 0)
 
@@ -48,6 +55,16 @@ class ProgramCloseServiceImplTest {
         verify(programRepository).flush()
     }
 
+    @Test
+    fun `실제로 CLOSED로 전이하면 ProgramDiscordEvent(CLOSED)를 발행한다`() {
+        val program = programOf(applicationEndedAt = now.minusSeconds(1))
+        given(programRepository.findByIdForUpdate(1L)).willReturn(program)
+
+        service.closeIfExpired(1L, now)
+
+        verify(eventPublisher).publishEvent(ProgramDiscordEvent(1L, ProgramDiscordAction.CLOSED))
+    }
+
     // ProgramEligibility.computeProgramEligibilityReason의 `now.isAfter(applicationEndedAt)`와
     // 동일한 경계다 -- applicationEndedAt과 정확히 같은 시각에는 아직 마감이 아니다.
     @Test
@@ -60,6 +77,7 @@ class ProgramCloseServiceImplTest {
         assertThat(closed).isFalse()
         assertThat(program.status).isEqualTo(ProgramStatus.PUBLISHED)
         verify(programRepository, never()).flush()
+        verifyNoInteractions(eventPublisher)
     }
 
     @Test
@@ -71,6 +89,7 @@ class ProgramCloseServiceImplTest {
 
         assertThat(closed).isFalse()
         assertThat(program.status).isEqualTo(ProgramStatus.PUBLISHED)
+        verifyNoInteractions(eventPublisher)
     }
 
     @Test
@@ -82,6 +101,7 @@ class ProgramCloseServiceImplTest {
 
         assertThat(closed).isFalse()
         assertThat(program.status).isEqualTo(ProgramStatus.DRAFT)
+        verifyNoInteractions(eventPublisher)
     }
 
     @Test
@@ -92,6 +112,7 @@ class ProgramCloseServiceImplTest {
         val closed = service.closeIfExpired(1L, now)
 
         assertThat(closed).isFalse()
+        verifyNoInteractions(eventPublisher)
     }
 
     @Test
@@ -101,5 +122,6 @@ class ProgramCloseServiceImplTest {
         val closed = service.closeIfExpired(1L, now)
 
         assertThat(closed).isFalse()
+        verifyNoInteractions(eventPublisher)
     }
 }

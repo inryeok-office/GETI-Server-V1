@@ -76,6 +76,7 @@ class ProgramDiscordEventListener(
         when (action) {
             ProgramDiscordAction.PUBLISHED -> DiscordMessageTemplate.PROGRAM_PUBLISHED
             ProgramDiscordAction.UPDATED -> DiscordMessageTemplate.PROGRAM_UPDATED
+            ProgramDiscordAction.CLOSED -> DiscordMessageTemplate.PROGRAM_CLOSED
             ProgramDiscordAction.DELETED -> DiscordMessageTemplate.PROGRAM_DELETED
         }
 }
