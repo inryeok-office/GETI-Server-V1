@@ -104,6 +104,20 @@ class ProgramCloseServiceImplTest {
         verifyNoInteractions(eventPublisher)
     }
 
+    // 이미 CLOSED인 Program이 다시 closeIfExpired 대상으로 들어오는 경로(중복 Scheduler 실행,
+    // 동시성 재확인 등)에서도 멱등하게 아무 것도 하지 않아야 한다.
+    @Test
+    fun `이미 CLOSED인 Program은 건드리지 않는다`() {
+        val program = programOf(status = ProgramStatus.CLOSED, applicationEndedAt = now.minusDays(1))
+        given(programRepository.findByIdForUpdate(1L)).willReturn(program)
+
+        val closed = service.closeIfExpired(1L, now)
+
+        assertThat(closed).isFalse()
+        assertThat(program.status).isEqualTo(ProgramStatus.CLOSED)
+        verifyNoInteractions(eventPublisher)
+    }
+
     @Test
     fun `applicationEndedAt이 없는 Program은 건드리지 않는다`() {
         val program = programOf(applicationEndedAt = null)
