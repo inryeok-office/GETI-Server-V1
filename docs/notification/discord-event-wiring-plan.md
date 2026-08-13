@@ -31,7 +31,7 @@
 
 ---
 
-## 2. 확정된 제약 — `PROGRAM_CLOSED`는 연결하지 않는다
+## 2. 확정된 제약 — `PROGRAM_CLOSED`는 연결하지 않는다 (Issue #120에서 연결 완료)
 
 `ProgramStatus.CLOSED`는 Enum과 전이표에 존재하지만 **그 값을 대입하는 코드가 없다.** `ProgramStatusUpdateRequest` KDoc과 `ProgramAdminController`(:133)는 이렇게 적어 두었다.
 
@@ -40,6 +40,8 @@
 그런데 그 Scheduler가 아직 구현되지 않았다. 따라서 `PROGRAM_CLOSED` Template은 **현재 어떤 경로로도 발동할 수 없다.**
 
 이번 범위에서는 연결하지 않고 사유를 코드 주석과 이 문서에 남긴다(사용자 확정). Program 자동 마감 Scheduler가 생기는 시점에 `PROGRAM_CLOSED`를 연결한다. 이는 Discord와 무관한 **Program 도메인 자체의 공백**이므로 별도 Issue 후보로 보고한다 — 신청 기간이 끝나도 프로그램이 계속 `PUBLISHED`로 보인다.
+
+> **갱신(Issue #120):** 위 문단은 Issue #97 작업 당시(Scheduler 부재) 기준으로 작성된 원본 기록이다. Program 자동 마감 Scheduler는 Issue #117/PR #119로 구현됐고, `ProgramCloseServiceImpl.closeIfExpired`가 실제 `PUBLISHED -> CLOSED` 전이에 성공했을 때만 `ProgramDiscordEvent(programId, ProgramDiscordAction.CLOSED)`를 발행하도록 Issue #120에서 연결을 완료했다. `ProgramDiscordEventListener`는 `CLOSED`를 `DiscordMessageTemplate.PROGRAM_CLOSED`로 매핑한다. API(`ProgramServiceImpl.changeStatus()`)로는 여전히 `PUBLISHED -> CLOSED`를 지정할 수 없어 이 Event는 오직 Scheduler 경로에서만 발행된다.
 
 Job은 `changeStatus`로 `PUBLISHED → CLOSED`가 정상 도달하므로 `JOB_CLOSED`는 이번에 연결한다.
 
@@ -293,7 +295,7 @@ Discord·실제 Bot을 호출하지 않는다.
 | --- | --- | --- |
 | 1 | 허용 채널 4개의 이름·용도·Snowflake | 임시 Key 3개로 구조만 만든다. 확정되면 설정만 추가 |
 | 2 | 학년별 Role ID | 동일 |
-| 3 | Program 자동 마감 Scheduler | 이번 범위 밖. `PROGRAM_CLOSED` 미연결(§2) |
+| 3 | Program 자동 마감 Scheduler | 이번 범위 밖. `PROGRAM_CLOSED` 미연결(§2) — Issue #117/PR #119(Scheduler)와 Issue #120(`PROGRAM_CLOSED` 연결)로 이후 해소됨 |
 | 4 | `Program.discordMessageId`·`Inquiry.discord*` Column DROP | 이번 PR은 Mapping만 제거, DROP은 다음 Migration |
 
 가장 큰 설계 위험이던 "Program·Inquiry가 Discord 상태를 읽는 방향"은 결정 9로 해소했다 — 응답에서 필드를 제거해 역방향 의존 자체를 만들지 않는다.
@@ -304,8 +306,8 @@ Discord·실제 Bot을 호출하지 않는다.
 
 ```text
 Collector Discord Webhook 이관              요구사항 §34, 별도 Issue
-Program 자동 마감 Scheduler                 Program 도메인 기능 추가
-PROGRAM_CLOSED 연결                         §2 (자동 마감 Scheduler 선행)
+Program 자동 마감 Scheduler                 Program 도메인 기능 추가 (Issue #117/PR #119로 구현 완료)
+PROGRAM_CLOSED 연결                         §2 (자동 마감 Scheduler 선행) (Issue #120으로 연결 완료)
 Inquiry 수동 재시도 API                     명세에 없다(요구사항 §37)
 Discord Column 물리 DROP                    다음 Migration
 모바일 Push                                 요구사항 §63

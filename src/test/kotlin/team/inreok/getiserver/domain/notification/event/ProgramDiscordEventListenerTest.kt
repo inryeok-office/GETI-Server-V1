@@ -79,6 +79,19 @@ class ProgramDiscordEventListenerTest {
     }
 
     @Test
+    fun `CLOSED는 PROGRAM_CLOSED Template로 예약하고 Mention하지 않는다`() {
+        given(programDiscordPayloadQueryPort.findById(1L)).willReturn(snapshot(targetGrades = listOf(2, 3)))
+        given(discordChannelResolver.resolveProgramChannelId("channel-1")).willReturn("channel-1")
+
+        listener.onProgramDiscordEvent(ProgramDiscordEvent(1L, ProgramDiscordAction.CLOSED))
+
+        val command = captureCommand()
+        assertThat(command.template).isEqualTo(DiscordMessageTemplate.PROGRAM_CLOSED)
+        assertThat(command.roleIds).isEmpty()
+        assertThat(command.sourceUpdatedAt).isNull()
+    }
+
+    @Test
     fun `대상을 찾을 수 없으면 예약하지 않는다`() {
         given(programDiscordPayloadQueryPort.findById(1L)).willReturn(null)
 
