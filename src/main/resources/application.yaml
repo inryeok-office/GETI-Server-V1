@@ -97,6 +97,12 @@ app:
   oauth:
     google:
       scope: openid,email,profile
+  program:
+    close-scheduler:
+      # 신청 종료 시각이 지난 PUBLISHED Program을 CLOSED로 전이하는 주기(ms, 원본 요구사항
+      # 문서 8절, Phase 7). DiscordDeliveryWorker(sweep-interval-ms)와 동일한 60초 기본값 --
+      # 최소 자동 재시도 백오프(1분)보다 촘촘하게 돌 이유가 없다.
+      interval-ms: 60000
   collector:
     scheduler:
       # 일일 수집 실행 시각(초 분 시 일 월 요일). 매일 03:00에 실행한다(Issue #62).
