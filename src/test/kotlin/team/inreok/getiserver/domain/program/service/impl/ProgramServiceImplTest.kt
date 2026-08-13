@@ -46,6 +46,7 @@ import team.inreok.getiserver.domain.program.exception.DiscordChannelRequiredExc
 import team.inreok.getiserver.domain.program.exception.InvalidCapacityException
 import team.inreok.getiserver.domain.program.exception.NotEnrolledException
 import team.inreok.getiserver.domain.program.exception.ProgramActionNotAvailableException
+import team.inreok.getiserver.domain.program.exception.ProgramClosedException
 import team.inreok.getiserver.domain.program.exception.ProgramDeletedException
 import team.inreok.getiserver.domain.program.exception.ProgramFormNotLinkableException
 import team.inreok.getiserver.domain.program.exception.ProgramFullException
@@ -565,6 +566,24 @@ class ProgramServiceImplTest {
                 request = ProgramApplicationActionRequest(action = ProgramApplicationAction.APPLY),
             )
         }.isInstanceOf(AlreadyAppliedException::class.java)
+    }
+
+    // apply()는 상태(status)만 보는 게 아니라 computeProgramEligibilityReason에 applicationEndedAt도
+    // 함께 넘겨 별도로 비교한다(ProgramEligibility.kt 참고). 이 Test는 status=CLOSED인 경우를
+    // 검증한다 -- ProgramCloseScheduler가 실제로 만들기 시작하는 상태이므로, CLOSED로 전이된
+    // Program에 신청 시도가 여전히 차단되는지(PROGRAM_CLOSED로) 확인한다.
+    @Test
+    fun `CLOSED 상태 프로그램에 신청하면 PROGRAM_CLOSED로 거부한다`() {
+        val program = programOf(status = ProgramStatus.CLOSED)
+        given(programRepository.findByIdForUpdate(1L)).willReturn(program)
+
+        assertThatThrownBy {
+            service.executeApplicationAction(
+                1L,
+                studentMemberId = 1L,
+                request = ProgramApplicationActionRequest(action = ProgramApplicationAction.APPLY),
+            )
+        }.isInstanceOf(ProgramClosedException::class.java)
     }
 
     @Test
