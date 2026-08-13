@@ -86,8 +86,15 @@ class ProgramCloseSchedulerIntegrationTest {
         val teacherId = createMember("close-scheduler-boundary-teacher")
         val boundary = LocalDateTime.now().plusMinutes(5)
         val programId = createProgram(teacherId, ProgramStatus.PUBLISHED, applicationEndedAt = boundary)
+        // PostgreSQL timestamp는 마이크로초까지만 저장하는데 LocalDateTime.now()는 나노초 정밀도를
+        // 가질 수 있어, 저장 후 다시 읽은 값이 저장 전 boundary보다 더 과거로 잘릴 수 있다(정밀도
+        // 절삭). "정확히 같은 시각"이라는 전제를 실제로 성립시키려면 원본 boundary가 아니라 DB에
+        // 실제 저장된 값을 다시 읽어 그 값을 그대로 now로 써야 한다 -- 그래야 두 값이 항상
+        // 정확히 같다는 것을 DB 정밀도와 무관하게 보장할 수 있다.
+        val persistedApplicationEndedAt =
+            requireNotNull(programRepository.findById(programId).orElseThrow().applicationEndedAt)
 
-        val closed = programCloseService.closeIfExpired(programId, boundary)
+        val closed = programCloseService.closeIfExpired(programId, persistedApplicationEndedAt)
 
         assertThat(closed).isFalse()
         assertThat(statusOf(programId)).isEqualTo(ProgramStatus.PUBLISHED)
