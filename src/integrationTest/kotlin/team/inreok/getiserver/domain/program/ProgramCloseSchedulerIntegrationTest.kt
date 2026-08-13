@@ -4,6 +4,8 @@ import com.redis.testcontainers.RedisContainer
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.beans.factory.annotation.Autowired
@@ -179,8 +181,48 @@ class ProgramCloseSchedulerIntegrationTest {
         verifyNoInteractions(discordDeliveryService)
     }
 
+    // 이미 CLOSED인 Program은 findExpiredPublishedIds의 `status = PUBLISHED` 조건 자체에서
+    // 걸러진다 -- ProgramCloseServiceImpl.closeIfExpired의 상태 재확인(status != PUBLISHED)과는
+    // 별개로, Scheduler가 대상을 고르는 단계에서부터 제외되는지를 직접 검증한다.
+    @Test
+    fun `이미 CLOSED인 Program은 findExpiredPublishedIds 조회 대상에서 제외된다`() {
+        val teacherId = createMember("close-scheduler-already-closed-teacher")
+        val now = LocalDateTime.now()
+        val closedId = createProgram(teacherId, ProgramStatus.CLOSED, applicationEndedAt = now.minusDays(1))
+        val expiredId = createProgram(teacherId, ProgramStatus.PUBLISHED, applicationEndedAt = now.minusDays(1))
+
+        val expiredIds = programRepository.findExpiredPublishedIds(ProgramStatus.PUBLISHED, now)
+
+        assertThat(expiredIds).doesNotContain(closedId)
+        assertThat(expiredIds).contains(expiredId)
+    }
+
+    @Test
+    fun `Scheduler를 다시 실행해도 이미 CLOSED로 전이된 Program에는 Discord Delivery가 추가로 생성되지 않는다`() {
+        val teacherId = createMember("close-scheduler-rerun-teacher")
+        val now = LocalDateTime.now()
+        val programId =
+            createProgram(
+                teacherId,
+                ProgramStatus.PUBLISHED,
+                applicationEndedAt = now.minusDays(1),
+                discordChannelId = "program-close-scheduler-test-channel",
+            )
+
+        programCloseScheduler.closeExpiredPrograms()
+        assertThat(statusOf(programId)).isEqualTo(ProgramStatus.CLOSED)
+
+        programCloseScheduler.closeExpiredPrograms()
+
+        assertThat(statusOf(programId)).isEqualTo(ProgramStatus.CLOSED)
+        verify(discordDeliveryService, times(1)).enqueue(anyCommand())
+    }
+
     private fun captureCommand(captor: ArgumentCaptor<DiscordDeliveryEnqueueCommand>): DiscordDeliveryEnqueueCommand =
         captor.capture() ?: DiscordDeliveryEnqueueCommand(DiscordMessageTemplate.PROGRAM_CLOSED, 0L, "")
+
+    private fun anyCommand(): DiscordDeliveryEnqueueCommand =
+        any() ?: DiscordDeliveryEnqueueCommand(DiscordMessageTemplate.PROGRAM_CLOSED, 0L, "")
 
     private fun statusOf(programId: Long): ProgramStatus = programRepository.findById(programId).orElseThrow().status
 
