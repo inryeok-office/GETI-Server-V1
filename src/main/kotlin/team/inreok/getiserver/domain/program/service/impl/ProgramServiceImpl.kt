@@ -30,6 +30,7 @@ import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationEligi
 import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationStatus
 import team.inreok.getiserver.domain.program.entity.type.ProgramStatus
 import team.inreok.getiserver.domain.program.entity.type.ProgramType
+import team.inreok.getiserver.domain.program.event.ProgramDeletedEvent
 import team.inreok.getiserver.domain.program.event.ProgramDiscordAction
 import team.inreok.getiserver.domain.program.event.ProgramDiscordEvent
 import team.inreok.getiserver.domain.program.exception.ActiveApplicationNotFoundException
@@ -302,6 +303,13 @@ class ProgramServiceImpl(
 
         programRepository.flush()
         publishProgramDiscordEventFor(programId, target, previousStatus)
+        // 신청자에게 보낼 인앱 알림용 Event다(Issue #118). Discord Event와 달리 DRAFT였던
+        // 프로그램도 거르지 않는다 -- 게시된 적 없는 프로그램에는 신청자가 있을 수 없어
+        // (PUBLISHED로만 신청 가능, computeProgramEligibilityReason 참고) 구독 측이 수신자 0명으로
+        // 자연히 아무 알림도 만들지 않으므로, 여기서 상태별 예외를 따로 두지 않는다.
+        if (target == ProgramStatus.DELETED) {
+            eventPublisher.publishEvent(ProgramDeletedEvent(programId, program.title))
+        }
 
         return ProgramStatusUpdateResponse(
             programId = programId,
