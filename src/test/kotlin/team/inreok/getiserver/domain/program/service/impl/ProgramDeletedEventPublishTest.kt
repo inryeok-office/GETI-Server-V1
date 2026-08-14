@@ -14,8 +14,10 @@ import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
 import org.springframework.context.ApplicationEventPublisher
 import team.inreok.getiserver.domain.application.query.ProgramFormLinkQueryPort
+import team.inreok.getiserver.domain.file.link.FileLinkPort
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshot
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
+import team.inreok.getiserver.domain.member.query.MemberRoleQueryPort
 import team.inreok.getiserver.domain.program.dto.ProgramStatusUpdateRequest
 import team.inreok.getiserver.domain.program.entity.Program
 import team.inreok.getiserver.domain.program.entity.ProgramTargetGrade
@@ -60,21 +62,33 @@ class ProgramDeletedEventPublishTest {
     private lateinit var memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort
 
     @Mock
+    private lateinit var memberRoleQueryPort: MemberRoleQueryPort
+
+    @Mock
+    private lateinit var fileLinkPort: FileLinkPort
+
+    @Mock
     private lateinit var eventPublisher: ApplicationEventPublisher
 
     @Mock
     private lateinit var discordChannelResolver: DiscordChannelResolver
 
+    // 위치 인자로 두면 ProgramServiceImpl 생성자에 Parameter가 추가/재배치될 때마다(Issue #118의
+    // memberRoleQueryPort/fileLinkPort 추가가 실제로 이 Test를 깨뜨렸다) 자리만 밀려 엉뚱한 Mock이
+    // 엉뚱한 위치에 들어가도 컴파일이 통과해버릴 수 있다. Named Argument는 Parameter 이름이
+    // 바뀌지 않는 한 순서가 바뀌어도 안전하다.
     private val service: ProgramService by lazy {
         ProgramServiceImpl(
-            programRepository,
-            programTargetGradeRepository,
-            programApplicationRepository,
-            programFormLinkQueryPort,
-            memberApplicantSnapshotQueryPort,
-            JsonMapper(),
-            eventPublisher,
-            discordChannelResolver,
+            programRepository = programRepository,
+            programTargetGradeRepository = programTargetGradeRepository,
+            programApplicationRepository = programApplicationRepository,
+            programFormLinkQueryPort = programFormLinkQueryPort,
+            memberApplicantSnapshotQueryPort = memberApplicantSnapshotQueryPort,
+            memberRoleQueryPort = memberRoleQueryPort,
+            fileLinkPort = fileLinkPort,
+            objectMapper = JsonMapper(),
+            eventPublisher = eventPublisher,
+            discordChannelResolver = discordChannelResolver,
         )
     }
 
