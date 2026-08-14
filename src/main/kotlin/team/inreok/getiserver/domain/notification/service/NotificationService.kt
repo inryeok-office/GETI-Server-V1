@@ -41,6 +41,15 @@ interface NotificationService {
     /**
      * 인앱 알림을 생성하고 생성된 알림 ID를 반환한다. **REST로 노출되지 않는 Module 내부
      * 계약**이며, Domain Event를 수신해 알림을 만드는 후속 작업이 이 Method를 호출한다.
+     *
+     * **항상 새 Transaction에서 독립적으로 Commit되며(`REQUIRES_NEW`), 호출자의 Transaction이
+     * Rollback되어도 이미 만들어진 알림은 취소되지 않는다.** 이 Method는 원본 Transaction이
+     * Commit된 뒤에 실행되는 `@TransactionalEventListener(AFTER_COMMIT)` Listener가 호출하는
+     * 것을 전제로 하기 때문이다 -- 그 시점에는 이미 끝난 Transaction에 참여해 봐야 Insert가
+     * Commit되지 않고 조용히 사라진다(구현체 KDoc 참고).
+     *
+     * 따라서 "본문 작업과 알림이 함께 Rollback되어야 하는" 용도로 일반 Service Method 안에서
+     * 직접 호출하면 안 된다. 그런 요구가 생기면 Event를 발행해 `AFTER_COMMIT`에서 처리한다.
      */
     fun create(command: NotificationCreateCommand): Long
 }

@@ -1,5 +1,6 @@
 package team.inreok.getiserver.domain.member.service.impl
 
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.member.dto.ApprovalAction
@@ -11,6 +12,7 @@ import team.inreok.getiserver.domain.member.entity.MemberRoleId
 import team.inreok.getiserver.domain.member.entity.type.MemberStatus
 import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
 import team.inreok.getiserver.domain.member.entity.type.RoleType
+import team.inreok.getiserver.domain.member.event.MemberApprovalProcessedEvent
 import team.inreok.getiserver.domain.member.exception.MemberNotApprovalTargetException
 import team.inreok.getiserver.domain.member.exception.MemberNotFoundException
 import team.inreok.getiserver.domain.member.exception.MemberNotPendingException
@@ -31,11 +33,16 @@ import java.time.LocalDateTime
  *
  * 무결성: 상태 변경(Dirty Checking)과 TEACHER Role 저장이 같은 `@Transactional` 안에서 이뤄져,
  * "status는 ACTIVE인데 Role 저장 실패" 같은 부분 성공 상태가 남지 않는다.
+ *
+ * 알림: 처리 결과를 [MemberApprovalProcessedEvent]로 발행해 `domain.notification`이 대상 회원에게
+ * 인앱 알림을 만들게 한다(Issue #118). 이 Transaction 안에서 발행하지만 구독 측이 `AFTER_COMMIT`
+ * 이므로, 아래 상태 전이가 Rollback되면 알림도 만들어지지 않는다.
  */
 @Service
 class MemberApprovalServiceImpl(
     private val memberRepository: MemberRepository,
     private val memberRoleRepository: MemberRoleRepository,
+    private val eventPublisher: ApplicationEventPublisher,
 ) : MemberApprovalService {
     @Transactional
     override fun process(
@@ -76,6 +83,10 @@ class MemberApprovalServiceImpl(
             memberRoleRepository.save(MemberRole(roleId))
         }
 
+        eventPublisher.publishEvent(
+            MemberApprovalProcessedEvent(memberId = memberId, approved = true, rejectionReason = null),
+        )
+
         return MemberApprovalResponse(
             memberId = memberId,
             status = member.status,
@@ -99,6 +110,10 @@ class MemberApprovalServiceImpl(
         member.rejectionReason = trimmedReason
         // PENDING 교직원은 Role이 없으므로(위 approve 주석 참고) 거절 시 TEACHER Role은 애초에
         // 존재하지 않는다. 별도 Role 제거 없이도 "거절된 회원에게 TEACHER Role 없음" 불변식이 유지된다.
+
+        eventPublisher.publishEvent(
+            MemberApprovalProcessedEvent(memberId = memberId, approved = false, rejectionReason = trimmedReason),
+        )
 
         return MemberApprovalResponse(
             memberId = memberId,
