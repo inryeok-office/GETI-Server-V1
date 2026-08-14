@@ -14,10 +14,15 @@ import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.dao.DataIntegrityViolationException
 import team.inreok.getiserver.domain.application.dto.ApplicationAnswer
 import team.inreok.getiserver.domain.application.dto.CreateJobApplicationRequest
+import team.inreok.getiserver.domain.application.dto.FormFieldSchema
+import team.inreok.getiserver.domain.application.dto.JobApplicationAction
+import team.inreok.getiserver.domain.application.dto.JobApplicationActionRequest
 import team.inreok.getiserver.domain.application.dto.SaveJobApplicationDraftRequest
 import team.inreok.getiserver.domain.application.entity.Form
+import team.inreok.getiserver.domain.application.entity.FormVersion
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.JobApplicationForm
+import team.inreok.getiserver.domain.application.entity.type.FormFieldType
 import team.inreok.getiserver.domain.application.entity.type.FormStatus
 import team.inreok.getiserver.domain.application.entity.type.FormType
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
@@ -25,8 +30,10 @@ import team.inreok.getiserver.domain.application.exception.ActiveApplicationExis
 import team.inreok.getiserver.domain.application.exception.ApplicationAccessForbiddenException
 import team.inreok.getiserver.domain.application.exception.ApplicationActionNotAvailableException
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
+import team.inreok.getiserver.domain.application.exception.ApplicationRequiredAnswerMissingException
 import team.inreok.getiserver.domain.application.exception.JobNotApplicableException
 import team.inreok.getiserver.domain.application.repository.FormRepository
+import team.inreok.getiserver.domain.application.repository.FormVersionRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationFormRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationService
@@ -50,6 +57,9 @@ class JobApplicationServiceImplTest {
     private lateinit var formRepository: FormRepository
 
     @Mock
+    private lateinit var formVersionRepository: FormVersionRepository
+
+    @Mock
     private lateinit var jobApplicationSnapshotQueryPort: JobApplicationSnapshotQueryPort
 
     @Mock
@@ -58,14 +68,17 @@ class JobApplicationServiceImplTest {
     @Captor
     private lateinit var jobApplicationCaptor: ArgumentCaptor<JobApplication>
 
+    private val jsonMapper = JsonMapper()
+
     private val service: JobApplicationService by lazy {
         JobApplicationServiceImpl(
             jobApplicationRepository,
             jobApplicationFormRepository,
             formRepository,
+            formVersionRepository,
             jobApplicationSnapshotQueryPort,
             memberApplicantSnapshotQueryPort,
-            JsonMapper(),
+            jsonMapper,
         )
     }
 
@@ -290,15 +303,20 @@ class JobApplicationServiceImplTest {
         id: Long = 1L,
         applicantMemberId: Long = 1L,
         status: JobApplicationStatus = JobApplicationStatus.DRAFT,
+        formId: Long? = null,
+        formVersion: Int? = null,
+        answers: String = "[]",
     ) = JobApplication(
         jobId = 1L,
         applicantMemberId = applicantMemberId,
         attemptNumber = 1,
         contactEmail = "student@example.com",
-        answers = "[]",
+        answers = answers,
         status = status,
     ).apply {
         this.id = id
+        this.formId = formId
+        this.formVersion = formVersion
         createdAt = fixedTime
         updatedAt = fixedTime
     }
@@ -341,12 +359,171 @@ class JobApplicationServiceImplTest {
     }
 
     @Test
-    fun `DRAFT가 아닌 지원서를 임시저장하면 ApplicationActionNotAvailableException을 던진다`() {
+    fun `임시저장이 허용되지 않는 상태면 ApplicationActionNotAvailableException을 던진다`() {
         given(
             jobApplicationRepository.findById(1L),
         ).willReturn(Optional.of(draftOf(status = JobApplicationStatus.SUBMITTED)))
 
         assertThatThrownBy { service.saveDraft(1L, 1L, SaveJobApplicationDraftRequest()) }
             .isInstanceOf(ApplicationActionNotAvailableException::class.java)
+    }
+
+    @Test
+    fun `EDIT_ALLOWED REVISION_REQUESTED 상태의 지원서도 임시저장할 수 있다`() {
+        given(jobApplicationRepository.findById(1L))
+            .willReturn(Optional.of(draftOf(status = JobApplicationStatus.EDIT_ALLOWED)))
+        given(jobApplicationRepository.findById(2L))
+            .willReturn(Optional.of(draftOf(id = 2L, status = JobApplicationStatus.REVISION_REQUESTED)))
+
+        assertThat(
+            service.saveDraft(1L, 1L, SaveJobApplicationDraftRequest(contactPhone = "010-1111-2222")).contactPhone,
+        ).isEqualTo("010-1111-2222")
+        assertThat(
+            service.saveDraft(2L, 1L, SaveJobApplicationDraftRequest(contactPhone = "010-3333-4444")).contactPhone,
+        ).isEqualTo("010-3333-4444")
+    }
+
+    // ---------- executeAction ----------
+
+    private fun formVersionOf(
+        formId: Long = 10L,
+        version: Int = 1,
+        requiredKeys: List<String> = listOf("motivation"),
+    ) = FormVersion(
+        formId = formId,
+        version = version,
+        schemaData =
+            jsonMapper.writeValueAsString(
+                requiredKeys.map { key ->
+                    FormFieldSchema(
+                        key = key,
+                        type = FormFieldType.TEXT,
+                        label = key,
+                        description = null,
+                        required = true,
+                        order = 0,
+                        options = null,
+                        filePolicy = null,
+                    )
+                },
+            ),
+    )
+
+    private fun answersJsonOf(fieldId: String) =
+        jsonMapper.writeValueAsString(
+            listOf(ApplicationAnswer(fieldId = fieldId, value = jsonMapper.readTree("\"답변\""))),
+        )
+
+    @Test
+    fun `DRAFT 지원서에 필수 답변이 채워져 있으면 SUBMIT하면 SUBMITTED로 전이하고 submittedAt을 기록한다`() {
+        val application =
+            draftOf(formId = 10L, formVersion = 1, answers = answersJsonOf("motivation"))
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(application)
+        given(formVersionRepository.findByFormIdAndVersion(10L, 1)).willReturn(formVersionOf())
+
+        val result = service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.SUBMIT))
+
+        assertThat(result.status).isEqualTo(JobApplicationStatus.SUBMITTED)
+        assertThat(result.submittedAt).isNotNull()
+    }
+
+    @Test
+    fun `필수 답변이 비어 있으면 SUBMIT하면 ApplicationRequiredAnswerMissingException을 던진다`() {
+        val application = draftOf(formId = 10L, formVersion = 1, answers = "[]")
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(application)
+        given(formVersionRepository.findByFormIdAndVersion(10L, 1)).willReturn(formVersionOf())
+
+        assertThatThrownBy { service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.SUBMIT)) }
+            .isInstanceOf(ApplicationRequiredAnswerMissingException::class.java)
+    }
+
+    @Test
+    fun `DRAFT가 아닌 지원서를 SUBMIT하면 ApplicationActionNotAvailableException을 던진다`() {
+        given(jobApplicationRepository.findByIdForUpdate(1L))
+            .willReturn(draftOf(status = JobApplicationStatus.SUBMITTED))
+
+        assertThatThrownBy { service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.SUBMIT)) }
+            .isInstanceOf(ApplicationActionNotAvailableException::class.java)
+    }
+
+    @Test
+    fun `SUBMITTED 지원서를 REQUEST_EDIT하면 EDIT_REQUESTED로 전이한다`() {
+        given(jobApplicationRepository.findByIdForUpdate(1L))
+            .willReturn(draftOf(status = JobApplicationStatus.SUBMITTED))
+
+        val result = service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.REQUEST_EDIT))
+
+        assertThat(result.status).isEqualTo(JobApplicationStatus.EDIT_REQUESTED)
+    }
+
+    @Test
+    fun `EDIT_ALLOWED 지원서를 RESUBMIT하면 SUBMITTED로 전이한다`() {
+        val application =
+            draftOf(
+                status = JobApplicationStatus.EDIT_ALLOWED,
+                formId = 10L,
+                formVersion = 1,
+                answers = answersJsonOf("motivation"),
+            )
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(application)
+        given(formVersionRepository.findByFormIdAndVersion(10L, 1)).willReturn(formVersionOf())
+
+        val result = service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.RESUBMIT))
+
+        assertThat(result.status).isEqualTo(JobApplicationStatus.SUBMITTED)
+    }
+
+    @Test
+    fun `REVISION_REQUESTED 지원서를 RESUBMIT하면 SUBMITTED로 전이한다`() {
+        val application =
+            draftOf(
+                status = JobApplicationStatus.REVISION_REQUESTED,
+                formId = 10L,
+                formVersion = 1,
+                answers = answersJsonOf("motivation"),
+            )
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(application)
+        given(formVersionRepository.findByFormIdAndVersion(10L, 1)).willReturn(formVersionOf())
+
+        val result = service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.RESUBMIT))
+
+        assertThat(result.status).isEqualTo(JobApplicationStatus.SUBMITTED)
+    }
+
+    @Test
+    fun `DRAFT 지원서를 WITHDRAW하면 WITHDRAWN으로 전이하고 withdrawnAt을 기록한다`() {
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(draftOf())
+
+        val result = service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.WITHDRAW))
+
+        assertThat(result.status).isEqualTo(JobApplicationStatus.WITHDRAWN)
+        assertThat(result.withdrawnAt).isNotNull()
+    }
+
+    @Test
+    fun `최종 상태의 지원서를 WITHDRAW하면 ApplicationActionNotAvailableException을 던진다`() {
+        given(jobApplicationRepository.findByIdForUpdate(1L))
+            .willReturn(draftOf(status = JobApplicationStatus.APPROVED))
+
+        assertThatThrownBy { service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.WITHDRAW)) }
+            .isInstanceOf(ApplicationActionNotAvailableException::class.java)
+    }
+
+    @Test
+    fun `존재하지 않는 지원서에 Action을 수행하면 ApplicationNotFoundException을 던진다`() {
+        given(jobApplicationRepository.findByIdForUpdate(999L)).willReturn(null)
+
+        assertThatThrownBy {
+            service.executeAction(999L, 1L, JobApplicationActionRequest(JobApplicationAction.WITHDRAW))
+        }.isInstanceOf(ApplicationNotFoundException::class.java)
+    }
+
+    @Test
+    fun `다른 학생의 지원서에 Action을 수행하면 ApplicationAccessForbiddenException을 던진다`() {
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(draftOf(applicantMemberId = 1L))
+
+        assertThatThrownBy {
+            service.executeAction(1L, 2L, JobApplicationActionRequest(JobApplicationAction.WITHDRAW))
+        }.isInstanceOf(ApplicationAccessForbiddenException::class.java)
     }
 }

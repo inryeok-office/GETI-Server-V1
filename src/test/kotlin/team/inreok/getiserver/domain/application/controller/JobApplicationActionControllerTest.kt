@@ -14,24 +14,26 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.inreok.getiserver.domain.application.dto.JobApplicationAction
+import team.inreok.getiserver.domain.application.dto.JobApplicationActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
-import team.inreok.getiserver.domain.application.dto.SaveJobApplicationDraftRequest
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.exception.ApplicationAccessForbiddenException
 import team.inreok.getiserver.domain.application.exception.ApplicationActionNotAvailableException
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
+import team.inreok.getiserver.domain.application.exception.ApplicationRequiredAnswerMissingException
 import team.inreok.getiserver.domain.application.service.JobApplicationService
 import team.inreok.getiserver.global.security.JwtTokenProvider
 import team.inreok.getiserver.global.security.SecurityConfig
 import java.time.LocalDateTime
 
-@WebMvcTest(controllers = [JobApplicationDraftController::class])
+@WebMvcTest(controllers = [JobApplicationActionController::class])
 @Import(SecurityConfig::class)
 @EnableWebSecurity
-class JobApplicationDraftControllerTest
+class JobApplicationActionControllerTest
     @Autowired
     constructor(
         private val mockMvc: MockMvc,
@@ -49,21 +51,21 @@ class JobApplicationDraftControllerTest
             UsernamePasswordAuthenticationToken(memberId, null, roles.map { SimpleGrantedAuthority("ROLE_$it") }),
         )
 
-        private fun anySaveRequest(): SaveJobApplicationDraftRequest =
-            any(SaveJobApplicationDraftRequest::class.java) ?: SaveJobApplicationDraftRequest()
+        private fun anyActionRequest(): JobApplicationActionRequest =
+            any(JobApplicationActionRequest::class.java) ?: JobApplicationActionRequest(JobApplicationAction.SUBMIT)
 
         private val fixedTime = LocalDateTime.of(2026, 3, 1, 10, 0, 0)
 
-        private fun draftResponse() =
+        private fun draftResponse(status: JobApplicationStatus = JobApplicationStatus.SUBMITTED) =
             JobApplicationDraftResponse(
                 applicationId = 1L,
                 jobId = 1L,
                 formId = 10L,
                 formVersion = 1,
-                status = JobApplicationStatus.DRAFT,
+                status = status,
                 statusReason = null,
                 contactEmail = "student@example.com",
-                contactPhone = "010-0000-0000",
+                contactPhone = null,
                 privacyConsent = true,
                 applicantName = null,
                 applicantCohort = null,
@@ -72,79 +74,95 @@ class JobApplicationDraftControllerTest
                 applicantDesiredJob = null,
                 applicantTechStacks = emptyList(),
                 answers = emptyList(),
-                submittedAt = null,
-                withdrawnAt = null,
+                submittedAt = if (status == JobApplicationStatus.SUBMITTED) fixedTime else null,
+                withdrawnAt = if (status == JobApplicationStatus.WITHDRAWN) fixedTime else null,
                 createdAt = fixedTime,
                 updatedAt = fixedTime,
             )
 
         @Test
-        fun `본인 지원서를 임시저장하면 200과 함께 결과를 반환한다`() {
-            given(jobApplicationService.saveDraft(anyLong(), anyLong(), anySaveRequest())).willReturn(draftResponse())
+        fun `본인 지원서를 SUBMIT하면 200과 함께 SUBMITTED 결과를 반환한다`() {
+            given(jobApplicationService.executeAction(anyLong(), anyLong(), anyActionRequest()))
+                .willReturn(draftResponse())
 
             mockMvc
                 .perform(
-                    patch("/api/v1/job-applications/1")
+                    post("/api/v1/job-applications/1/actions")
                         .with(authOf(1L, "STUDENT"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""{ "contactPhone": "010-0000-0000", "privacyConsent": true }"""),
+                        .content("""{ "action": "SUBMIT" }"""),
                 ).andExpect(status().isOk)
-                .andExpect(jsonPath("$.data.contactPhone").value("010-0000-0000"))
-                .andExpect(jsonPath("$.data.privacyConsent").value(true))
+                .andExpect(jsonPath("$.data.status").value("SUBMITTED"))
+                .andExpect(jsonPath("$.data.submittedAt").exists())
         }
 
         @Test
         fun `존재하지 않는 지원서면 404 APPLICATION_NOT_FOUND를 반환한다`() {
-            given(jobApplicationService.saveDraft(anyLong(), anyLong(), anySaveRequest()))
+            given(jobApplicationService.executeAction(anyLong(), anyLong(), anyActionRequest()))
                 .willThrow(ApplicationNotFoundException(999L))
 
             mockMvc
                 .perform(
-                    patch("/api/v1/job-applications/999")
+                    post("/api/v1/job-applications/999/actions")
                         .with(authOf(1L, "STUDENT"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"),
+                        .content("""{ "action": "WITHDRAW" }"""),
                 ).andExpect(status().isNotFound)
                 .andExpect(jsonPath("$.error.code").value("APPLICATION_NOT_FOUND"))
         }
 
         @Test
         fun `다른 학생의 지원서면 403 APPLICATION_ACCESS_FORBIDDEN을 반환한다`() {
-            given(jobApplicationService.saveDraft(anyLong(), anyLong(), anySaveRequest()))
+            given(jobApplicationService.executeAction(anyLong(), anyLong(), anyActionRequest()))
                 .willThrow(ApplicationAccessForbiddenException())
 
             mockMvc
                 .perform(
-                    patch("/api/v1/job-applications/1")
+                    post("/api/v1/job-applications/1/actions")
                         .with(authOf(2L, "STUDENT"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"),
+                        .content("""{ "action": "WITHDRAW" }"""),
                 ).andExpect(status().isForbidden)
                 .andExpect(jsonPath("$.error.code").value("APPLICATION_ACCESS_FORBIDDEN"))
         }
 
         @Test
-        fun `DRAFT 상태가 아니면 409 APPLICATION_ACTION_NOT_AVAILABLE을 반환한다`() {
-            given(jobApplicationService.saveDraft(anyLong(), anyLong(), anySaveRequest()))
+        fun `현재 상태에서 허용되지 않는 Action이면 409 APPLICATION_ACTION_NOT_AVAILABLE을 반환한다`() {
+            given(jobApplicationService.executeAction(anyLong(), anyLong(), anyActionRequest()))
                 .willThrow(ApplicationActionNotAvailableException())
 
             mockMvc
                 .perform(
-                    patch("/api/v1/job-applications/1")
+                    post("/api/v1/job-applications/1/actions")
                         .with(authOf(1L, "STUDENT"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"),
+                        .content("""{ "action": "SUBMIT" }"""),
                 ).andExpect(status().isConflict)
                 .andExpect(jsonPath("$.error.code").value("APPLICATION_ACTION_NOT_AVAILABLE"))
         }
 
         @Test
-        fun `인증 없이 임시저장하면 401을 반환한다`() {
+        fun `SUBMIT 시 필수 답변이 누락되면 400 APPLICATION_REQUIRED_ANSWER_MISSING을 반환한다`() {
+            given(jobApplicationService.executeAction(anyLong(), anyLong(), anyActionRequest()))
+                .willThrow(ApplicationRequiredAnswerMissingException(listOf("motivation")))
+
             mockMvc
                 .perform(
-                    patch("/api/v1/job-applications/1")
+                    post("/api/v1/job-applications/1/actions")
+                        .with(authOf(1L, "STUDENT"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"),
+                        .content("""{ "action": "SUBMIT" }"""),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.error.code").value("APPLICATION_REQUIRED_ANSWER_MISSING"))
+        }
+
+        @Test
+        fun `인증 없이 Action을 요청하면 401을 반환한다`() {
+            mockMvc
+                .perform(
+                    post("/api/v1/job-applications/1/actions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "action": "SUBMIT" }"""),
                 ).andExpect(status().isUnauthorized)
         }
     }

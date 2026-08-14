@@ -1,10 +1,26 @@
 package team.inreok.getiserver.domain.application.repository
 
+import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 
 interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
+    /**
+     * 학생 Action(SUBMIT/REQUEST_EDIT/RESUBMIT/WITHDRAW)이 같은 지원서를 동시에 전이시키려는
+     * 경합을 막기 위해 Pessimistic Write Lock으로 조회한다(요구사항 "동시성/데이터 무결성" 절).
+     * `ProgramRepository.findByIdForUpdate`/`InquiryRepository.findByIdForUpdate`와 같은 이유와
+     * 방식이다 -- 상태를 확인·전이하는 모든 Action은 이 Method로 조회한 뒤 재확인해야 한다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM JobApplication a WHERE a.id = :id")
+    fun findByIdForUpdate(
+        @Param("id") id: Long,
+    ): JobApplication?
+
     fun findByJobIdAndApplicantMemberIdAndAttemptNumber(
         jobId: Long,
         applicantMemberId: Long,
