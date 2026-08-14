@@ -94,6 +94,16 @@ OR
 
 `contains_personal_information`과 `expires_at`은 V2 그대로 두고 아직 사용하지 않는다(판단 주체와 보존 정책 미확정).
 
+## job_ai_analyses의 AI Analysis Phase 1 확장 (V20)
+
+V2의 `job_ai_analyses`는 Persistence Skeleton 단계라 `summary`/`eligibility_summary`/`extracted_skills`처럼 비정형 Text/JSONB만 있었다. AI Analysis Phase 1(Issue #132, OpenAI Structured Outputs 연동)이 확정한 계약에 맞춰 V20이 `eligibility_summary`/`extracted_skills`를 제거하고 다음을 추가했다(실사용 Row가 없는 단계라 값 이관 없이 바로 DROP했다).
+
+- `required_skills`/`preferred_skills`(JSONB): `{"techStackId": Long?, "name": String}` 목록. OpenAI는 기술 이름만 추출하고, `member.tech_stacks`와의 정규화 매칭(정확 매칭만, 공격적 병합 없음)은 Application 계층이 수행한다.
+- `high_school_graduate_fit`/`entry_level_fit`(VARCHAR, `AiFitLevel`: `SUITABLE`/`CONDITIONAL`/`UNSUITABLE`), `difficulty`(VARCHAR, `AiDifficulty`: `EASY`/`NORMAL`/`HARD`) — CHECK 제약으로 값 집합을 강제한다.
+- `provider`/`model`/`prompt_version`/`analysis_version` — 운영·재현성을 위한 최소 메타데이터. OpenAI Raw Response 전체는 저장하지 않는다(개인정보·보존기간 정책 미확정).
+
+`status`(`AiStatus`)는 Phase 1에서 `PENDING`/`PROCESSING`/`COMPLETED`/`FAILED`로 정리했다(과거 Skeleton의 `PARTIAL`/`INSUFFICIENT`는 CHECK 제약도 없고 실사용 이력도 없어 제거). `reanalysis_count`의 `ck_job_ai_analyses_reanalysis_count CHECK (BETWEEN 0 AND 3)`는 V2 그대로 유지되며, 수동 재분석 최대 3회 계약과 일치한다.
+
 ## FK 삭제 정책
 
 Migration 파일 상단 주석과 `V2__create_core_domain_schema.sql`의 각 `ON DELETE` 절이 최종 근거다. 원칙은 다음과 같다.
