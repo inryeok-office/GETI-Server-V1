@@ -104,6 +104,15 @@ class JobApplicationAdminServiceImplTest {
         assertThat(result.status).isEqualTo(JobApplicationStatus.SUBMITTED)
     }
 
+    @Test
+    fun `상세 조회 시 DRAFT 상태면 ApplicationNotFoundException을 던진다`() {
+        given(
+            jobApplicationRepository.findById(1L),
+        ).willReturn(Optional.of(applicationOf(status = JobApplicationStatus.DRAFT)))
+
+        assertThatThrownBy { service.getDetail(1L) }.isInstanceOf(ApplicationNotFoundException::class.java)
+    }
+
     // ---------- executeAction ----------
 
     @Test

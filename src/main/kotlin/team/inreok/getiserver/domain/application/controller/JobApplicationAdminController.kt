@@ -44,8 +44,9 @@ class JobApplicationAdminController(
         summary = "지원서 목록 조회",
         description = """
             제출된 지원서를 조회·검색한다. jobId·status 필터는 함께 조합할 수 있고(AND), 지정하지
-            않은 Filter는 적용하지 않는다. 담당 공고 여부와 무관하게 모든 교사·개발자가 조회할 수
-            있다. 기본 page=0, size=20이며 최신 등록순으로 고정된다.
+            않은 Filter는 적용하지 않는다. DRAFT(임시저장 중, 미제출) 상태는 status에 명시 지정해도
+            항상 결과에서 제외된다. 담당 공고 여부와 무관하게 모든 교사·개발자가 조회할 수 있다.
+            기본 page=0, size=20이며 최신 등록순으로 고정된다.
         """,
     )
     @ApiResponses(
@@ -64,13 +65,15 @@ class JobApplicationAdminController(
 
     @Operation(
         summary = "지원서 상세 조회",
-        description = "지원서 1건의 전체 내용(답변 포함)을 조회한다. 담당 공고 여부와 무관하게 모든 교사·개발자가 조회할 수 있다.",
+        description =
+            "지원서 1건의 전체 내용(답변 포함)을 조회한다. 담당 공고 여부와 무관하게 모든 교사·개발자가 조회할 수 있다. " +
+                "DRAFT(임시저장 중, 미제출) 상태의 지원서는 존재하지 않는 것으로 취급되어 404를 반환한다.",
     )
     @ApiResponses(
         SwaggerApiResponse(responseCode = "200", description = "조회 성공"),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "403", description = "교사 또는 개발자 권한이 없음 (FORBIDDEN)"),
-        SwaggerApiResponse(responseCode = "404", description = "지원서가 없음 (APPLICATION_NOT_FOUND)"),
+        SwaggerApiResponse(responseCode = "404", description = "지원서가 없음(DRAFT 상태 포함) (APPLICATION_NOT_FOUND)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @GetMapping("/{applicationId}")
