@@ -1,6 +1,8 @@
 package team.inreok.getiserver.domain.application.repository
 
 import jakarta.persistence.LockModeType
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
@@ -45,4 +47,20 @@ interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
         applicantMemberId: Long,
         statuses: Collection<JobApplicationStatus>,
     ): List<JobApplication>
+
+    // 교사·개발자용 지원서 목록 조회다(Issue #125 요구사항 "모든 교사가 조회 가능"). :jobId,
+    // :status는 null이면 조건을 적용하지 않는다(FormRepository.search와 동일한 관례).
+    @Query(
+        """
+        SELECT a FROM JobApplication a
+        WHERE (:jobId IS NULL OR a.jobId = :jobId)
+          AND (:status IS NULL OR a.status = :status)
+        ORDER BY a.id DESC
+        """,
+    )
+    fun search(
+        @Param("jobId") jobId: Long?,
+        @Param("status") status: JobApplicationStatus?,
+        pageable: Pageable,
+    ): Page<JobApplication>
 }

@@ -191,7 +191,7 @@ class JobApplicationServiceImpl(
                 }
             }
 
-        return toDraftResponse(saveNewApplication(application))
+        return toJobApplicationDraftResponse(objectMapper, saveNewApplication(application))
     }
 
     @Transactional
@@ -213,7 +213,7 @@ class JobApplicationServiceImpl(
         request.answers?.let { application.answers = writeAnswers(it) }
 
         jobApplicationRepository.flush()
-        return toDraftResponse(application)
+        return toJobApplicationDraftResponse(objectMapper, application)
     }
 
     @Transactional
@@ -235,7 +235,7 @@ class JobApplicationServiceImpl(
         applyJobApplicationAction(formVersionRepository, objectMapper, application, request.action)
 
         jobApplicationRepository.flush()
-        return toDraftResponse(application)
+        return toJobApplicationDraftResponse(objectMapper, application)
     }
 
     // 호출부(createDraft)의 hasActiveApplication() 확인과 이 saveAndFlush 사이에는 DB 잠금이
@@ -265,42 +265,8 @@ class JobApplicationServiceImpl(
                 ACTIVE_JOB_APPLICATION_STATUSES,
             ).isNotEmpty()
 
-    private fun toDraftResponse(application: JobApplication): JobApplicationDraftResponse =
-        JobApplicationDraftResponse(
-            applicationId = requireNotNull(application.id),
-            jobId = application.jobId,
-            formId = application.formId,
-            formVersion = application.formVersion,
-            status = application.status,
-            statusReason = application.statusReason,
-            contactEmail = application.contactEmail,
-            contactPhone = application.contactPhone,
-            privacyConsent = application.privacyConsent,
-            applicantName = application.applicantName,
-            applicantCohort = application.applicantCohort,
-            applicantDepartment = application.applicantDepartment,
-            applicantMajors = readStringList(application.applicantMajors),
-            applicantDesiredJob = application.applicantDesiredJob,
-            applicantTechStacks = readStringList(application.applicantTechStacks),
-            answers = readAnswers(application.answers),
-            submittedAt = application.submittedAt,
-            withdrawnAt = application.withdrawnAt,
-            createdAt = requireNotNull(application.createdAt),
-            updatedAt = requireNotNull(application.updatedAt),
-        )
-
     private fun writeStringList(values: List<String>): String? =
         if (values.isEmpty()) null else objectMapper.writeValueAsString(values)
 
-    private fun readStringList(json: String?): List<String> {
-        if (json.isNullOrBlank()) return emptyList()
-        return objectMapper.readValue(json, Array<String>::class.java).toList()
-    }
-
     private fun writeAnswers(answers: List<ApplicationAnswer>): String = objectMapper.writeValueAsString(answers)
-
-    private fun readAnswers(json: String): List<ApplicationAnswer> {
-        if (json.isBlank()) return emptyList()
-        return objectMapper.readValue(json, Array<ApplicationAnswer>::class.java).toList()
-    }
 }
