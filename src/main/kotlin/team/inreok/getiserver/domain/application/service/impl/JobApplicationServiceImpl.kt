@@ -79,6 +79,9 @@ private fun applyJobApplicationAction(
             validateRequiredAnswersFilled(formVersionRepository, objectMapper, application)
             application.submittedAt = LocalDateTime.now()
             application.status = JobApplicationStatus.SUBMITTED
+            // RESUBMIT 직전 REVISION_REQUESTED/EDIT_REQUESTED 단계에서 교사가 남긴 statusReason이
+            // 재제출 후에도 남아있으면 이미 반영된 과거 사유가 그대로 노출된다(PR #130 Review 반영).
+            application.statusReason = null
         }
 
         JobApplicationAction.REQUEST_EDIT -> {

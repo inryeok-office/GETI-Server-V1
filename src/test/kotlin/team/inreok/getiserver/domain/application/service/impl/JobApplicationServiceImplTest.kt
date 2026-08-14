@@ -306,6 +306,7 @@ class JobApplicationServiceImplTest {
         formId: Long? = null,
         formVersion: Int? = null,
         answers: String = "[]",
+        statusReason: String? = null,
     ) = JobApplication(
         jobId = 1L,
         applicantMemberId = applicantMemberId,
@@ -317,6 +318,7 @@ class JobApplicationServiceImplTest {
         this.id = id
         this.formId = formId
         this.formVersion = formVersion
+        this.statusReason = statusReason
         createdAt = fixedTime
         updatedAt = fixedTime
     }
@@ -488,6 +490,24 @@ class JobApplicationServiceImplTest {
         val result = service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.RESUBMIT))
 
         assertThat(result.status).isEqualTo(JobApplicationStatus.SUBMITTED)
+    }
+
+    @Test
+    fun `REVISION_REQUESTED 지원서를 RESUBMIT하면 기존 statusReason을 초기화한다`() {
+        val application =
+            draftOf(
+                status = JobApplicationStatus.REVISION_REQUESTED,
+                formId = 10L,
+                formVersion = 1,
+                answers = answersJsonOf("motivation"),
+                statusReason = "자기소개서 보완 필요",
+            )
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(application)
+        given(formVersionRepository.findByFormIdAndVersion(10L, 1)).willReturn(formVersionOf())
+
+        val result = service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.RESUBMIT))
+
+        assertThat(result.statusReason).isNull()
     }
 
     @Test
