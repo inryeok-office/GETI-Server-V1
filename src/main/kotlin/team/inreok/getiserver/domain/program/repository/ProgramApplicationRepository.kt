@@ -58,6 +58,19 @@ interface ProgramApplicationRepository : JpaRepository<ProgramApplication, Long>
         @Param("applicantMemberId") applicantMemberId: Long,
         @Param("status") status: ProgramApplicationStatus,
     ): List<Long>
+
+    // 프로그램 삭제 시 알림을 보낼 신청자를 찾는다(Issue #118, ProgramApplicantQueryPort). Entity를
+    // 통째로 읽지 않고 회원 id만 Projection한다 -- 수신자 목록 외에는 쓰지 않기 때문이다.
+    @Query(
+        """
+        SELECT pa.applicantMemberId FROM ProgramApplication pa
+        WHERE pa.programId = :programId AND pa.status = :status
+        """,
+    )
+    fun findApplicantMemberIdsByProgramIdAndStatus(
+        @Param("programId") programId: Long,
+        @Param("status") status: ProgramApplicationStatus,
+    ): List<Long>
 }
 
 // countActiveApplicantsByProgramIds 전용 Interface Projection이다. Kotlin Property는
