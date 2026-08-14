@@ -564,6 +564,9 @@ class ProgramServiceImplTest {
         assertThat(publishedDiscordEvents()).isEmpty()
     }
 
+    // 신청자 인앱 알림용 [ProgramDeletedEvent] 발행(Issue #118)은 이 Class가 detekt LargeClass
+    // 임계값에 이미 근접해 있어 ProgramDeletedEventPublishTest로 분리했다.
+
     // --- 목록 조회 ---
 
     // list()가 Page 항목마다 activeApplicantCount()/hasActiveApplication()을 개별 호출하던 N+1

@@ -4,6 +4,7 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.notification.dto.NotificationCreateCommand
 import team.inreok.getiserver.domain.notification.dto.NotificationListResponse
@@ -82,7 +83,21 @@ class NotificationServiceImpl(
         return NotificationReadAllResponse(updatedCount = updatedCount.toLong(), readAt = readAt)
     }
 
-    @Transactional
+    /**
+     * 항상 새 Transaction에서 저장한다(Issue #118).
+     *
+     * 이 Method의 유일한 호출자는 `@TransactionalEventListener(AFTER_COMMIT)` Listener들이다. 그
+     * 시점에는 원본 Transaction이 **이미 Commit됐지만 Thread에 아직 바인딩된 상태**라, 기본
+     * `REQUIRED`로 두면 새 Insert가 그 끝난 Transaction에 참여한다 -- 참여 Transaction은 스스로
+     * Commit하지 않고 바깥 Transaction은 이미 Commit을 마쳤으므로, 예외 하나 없이 Row가 사라진다
+     * (Issue #118이 보고한 "알림이 생성되지 않는" 증상의 직접 원인이다).
+     *
+     * `AFTER_COMMIT` Listener는 원본 Transaction이 Rollback되면 아예 실행되지 않으므로,
+     * `REQUIRES_NEW`로 바꿔도 "원본이 실패하면 알림도 없다"라는 일관성은 그대로 유지된다.
+     * 수신자가 여럿인 알림(프로그램 삭제 등)에서 한 건의 저장 실패가 나머지 수신자의 알림까지
+     * 되돌리지 않는 효과도 함께 얻는다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     override fun create(command: NotificationCreateCommand): Long {
         val notification =
             Notification(

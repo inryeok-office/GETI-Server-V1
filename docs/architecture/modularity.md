@@ -91,7 +91,7 @@ team.inreok.getiserver.domain
 │   ├── query                                       (다른 Domain에 공개하는 Named Interface — JobIndexQueryPort, JobDiscordPayloadQueryPort 등)
 │   ├── event                                       (JobChangedEvent — Named Interface)
 │   └── upsert                                      (collector가 사용하는 CollectedJobUpsertUseCase, + impl)
-├── member       entity(+type), repository, service(+impl), controller, dto, exception, query, access
+├── member       entity(+type), repository, service(+impl), controller, dto, exception, query, event, access
 ├── auth         entity, repository, service(+impl), controller, dto, exception (Refresh Token 발급/재발급)
 ├── file         entity(+type), repository, service(+impl), controller, dto, exception, link, access, policy, storage
 ├── company      entity(+type), repository, service(+impl), controller, dto, exception, query, external(+impl), access
