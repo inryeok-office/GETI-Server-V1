@@ -9,6 +9,7 @@ import team.inreok.getiserver.domain.application.dto.CreateJobApplicationRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationAction
 import team.inreok.getiserver.domain.application.dto.JobApplicationActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.dto.JobEligibilityResponse
 import team.inreok.getiserver.domain.application.dto.SaveJobApplicationDraftRequest
 import team.inreok.getiserver.domain.application.entity.JobApplication
@@ -23,6 +24,8 @@ import team.inreok.getiserver.domain.application.repository.FormRepository
 import team.inreok.getiserver.domain.application.repository.FormVersionRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationFormRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
+import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
+import team.inreok.getiserver.domain.application.repository.JobApplicationSubmissionRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationService
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
@@ -103,6 +106,8 @@ class JobApplicationServiceImpl(
     private val formVersionRepository: FormVersionRepository,
     private val jobApplicationSnapshotQueryPort: JobApplicationSnapshotQueryPort,
     private val memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort,
+    private val jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository,
+    private val jobApplicationSubmissionRepository: JobApplicationSubmissionRepository,
     private val objectMapper: ObjectMapper,
 ) : JobApplicationService {
     private val log = LoggerFactory.getLogger(JobApplicationServiceImpl::class.java)
@@ -234,11 +239,38 @@ class JobApplicationServiceImpl(
                 ?: throw ApplicationNotFoundException(applicationId)
         if (application.applicantMemberId != studentMemberId) throw ApplicationAccessForbiddenException()
 
-        requireAllowedTransition(application.status, request.action)
+        val fromStatus = application.status
+        requireAllowedTransition(fromStatus, request.action)
         applyJobApplicationAction(formVersionRepository, objectMapper, application, request.action)
 
         jobApplicationRepository.flush()
+        // 상태 변경(flush)과 이력·Snapshot 저장이 같은 Transaction(@Transactional) 안에서
+        // 원자적으로 처리된다(요구사항 "Transaction 일관성" 절, Issue #133).
+        recordStatusHistory(
+            jobApplicationStatusHistoryRepository,
+            application,
+            fromStatus,
+            request.action.name,
+            studentMemberId,
+            reason = null,
+        )
+        if (request.action == JobApplicationAction.SUBMIT || request.action == JobApplicationAction.RESUBMIT) {
+            recordSubmissionSnapshot(jobApplicationSubmissionRepository, application)
+        }
         return toJobApplicationDraftResponse(objectMapper, application)
+    }
+
+    @Transactional(readOnly = true)
+    override fun getHistory(
+        applicationId: Long,
+        studentMemberId: Long,
+    ): List<JobApplicationStatusHistoryResponse> {
+        val application =
+            jobApplicationRepository.findById(applicationId).orElseThrow { ApplicationNotFoundException(applicationId) }
+        if (application.applicantMemberId != studentMemberId) throw ApplicationAccessForbiddenException()
+        return jobApplicationStatusHistoryRepository
+            .findByApplicationIdOrderByCreatedAtAsc(applicationId)
+            .map(::toJobApplicationStatusHistoryResponse)
     }
 
     // 호출부(createDraft)의 hasActiveApplication() 확인과 이 saveAndFlush 사이에는 DB 잠금이
