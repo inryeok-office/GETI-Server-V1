@@ -440,6 +440,22 @@ class JobApplicationServiceImplTest {
     }
 
     @Test
+    fun `필수 답변 value가 명시적 JSON null이면 SUBMIT하면 ApplicationRequiredAnswerMissingException을 던진다`() {
+        // Jackson은 {"fieldId":"motivation","value":null}을 역직렬화할 때 Kotlin null이 아닌
+        // NullNode Instance를 채운다(PR #129 Review 반영) — 이 차이를 검증한다.
+        val answers =
+            jsonMapper.writeValueAsString(
+                listOf(ApplicationAnswer(fieldId = "motivation", value = jsonMapper.readTree("null"))),
+            )
+        val application = draftOf(formId = 10L, formVersion = 1, answers = answers)
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(application)
+        given(formVersionRepository.findByFormIdAndVersion(10L, 1)).willReturn(formVersionOf())
+
+        assertThatThrownBy { service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.SUBMIT)) }
+            .isInstanceOf(ApplicationRequiredAnswerMissingException::class.java)
+    }
+
+    @Test
     fun `DRAFT가 아닌 지원서를 SUBMIT하면 ApplicationActionNotAvailableException을 던진다`() {
         given(jobApplicationRepository.findByIdForUpdate(1L))
             .willReturn(draftOf(status = JobApplicationStatus.SUBMITTED))

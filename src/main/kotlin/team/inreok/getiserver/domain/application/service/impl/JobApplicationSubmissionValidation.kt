@@ -27,7 +27,10 @@ fun validateRequiredAnswersFilled(
         requiredSchemas
             .filter { schema ->
                 val answer = answersByKey[schema.key]
-                answer == null || (answer.value == null && answer.fileIds.isNullOrEmpty())
+                // value가 JSON null({"fieldId":"...","value":null})로 명시된 경우 Jackson이 Kotlin null이
+                // 아닌 NullNode Instance로 역직렬화하므로 value == null만으로는 걸러지지 않는다(PR #129
+                // Review 반영). isNull로 NullNode도 "값 없음"으로 함께 취급한다.
+                answer == null || ((answer.value == null || answer.value.isNull) && answer.fileIds.isNullOrEmpty())
             }.map(FormFieldSchema::key)
     if (missing.isNotEmpty()) throw ApplicationRequiredAnswerMissingException(missing)
 }
