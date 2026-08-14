@@ -48,10 +48,11 @@ class ProgramAdminController(
             검증한다. PUBLISHED로 등록하면 등록자가 단일 담당 교사로 지정된다.
 
             `formId`를 지정하면 본인 소유의 FormType=PROGRAM, FormStatus=ACTIVE 양식만 연결할 수
-            있다. 본문 첨부파일(fileIds)은 이번 범위에 포함되지 않는다(File 도메인에 공개 Use
-            Case가 아직 없음). `discordChannelId`는 학교 Discord 서버의 허용 채널 중 하나여야
-            하며, 허용 목록에 없으면 즉시 거부된다. Discord 전달 상태는 이 응답에 포함되지 않고
-            `GET /api/v1/admin/programs/{programId}/discord`로 별도 조회한다.
+            있다. `fileIds`를 지정하면 본인이 FilePurpose=PROGRAM_ATTACHMENT로 업로드하고 아직
+            연결하지 않은 파일만 본문 첨부파일로 연결할 수 있다. `discordChannelId`는 학교 Discord
+            서버의 허용 채널 중 하나여야 하며, 허용 목록에 없으면 즉시 거부된다. Discord 전달
+            상태는 이 응답에 포함되지 않고 `GET /api/v1/admin/programs/{programId}/discord`로
+            별도 조회한다.
         """,
     )
     @ApiResponses(
@@ -64,10 +65,16 @@ class ProgramAdminController(
                     "게시 시 Discord 채널 누락(DISCORD_CHANNEL_REQUIRED), " +
                     "허용되지 않은 Discord 채널(DISCORD_CHANNEL_NOT_ALLOWED), " +
                     "연결할 수 없는 양식(PROGRAM_FORM_NOT_LINKABLE), " +
-                    "그 외 게시 필수값 누락(PROGRAM_VALIDATION_FAILED), 요청 값 형식 오류(VALIDATION_FAILED)",
+                    "그 외 게시 필수값 누락(PROGRAM_VALIDATION_FAILED), 요청 값 형식 오류(VALIDATION_FAILED), " +
+                    "첨부파일 목적 불일치(FILE_PURPOSE_MISMATCH), 첨부파일 개수 초과(FILE_COUNT_EXCEEDED)",
         ),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
-        SwaggerApiResponse(responseCode = "403", description = "교사 또는 개발자 권한이 없음 (FORBIDDEN)"),
+        SwaggerApiResponse(
+            responseCode = "403",
+            description = "교사 또는 개발자 권한이 없음 (FORBIDDEN), 본인이 업로드하지 않은 파일 (FILE_NOT_OWNED)",
+        ),
+        SwaggerApiResponse(responseCode = "404", description = "존재하지 않는 첨부파일 (FILE_NOT_FOUND)"),
+        SwaggerApiResponse(responseCode = "409", description = "이미 다른 곳에 연결된 첨부파일 (FILE_ALREADY_LINKED)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @PostMapping
@@ -87,6 +94,11 @@ class ProgramAdminController(
             기존 값을 유지한다. 게시 후 변경할 수 없는 프로그램 유형·대상 학년은 이 요청에 포함되지
             않는다. 정원 증가는 항상 허용되고 감소는 현재 활성 신청 인원 이상까지만 허용된다.
             등록자 또는 담당 교사만 수정할 수 있다(개발자는 이 검증을 우회한다).
+
+            `fileIds`를 전달하지 않으면 기존 첨부파일을 유지한다. 전달하면(빈 배열 포함) 그 목록을
+            최종 상태로 취급해 기존 연결을 모두 해제한 뒤 다시 연결한다 — 유지할 파일도 다시
+            포함해야 하며, 본인이 업로드한 파일만 연결할 수 있다(다른 관리자가 업로드한 기존
+            첨부는 본인이 아니면 재전송해도 거부된다).
         """,
     )
     @ApiResponses(
@@ -95,17 +107,25 @@ class ProgramAdminController(
             responseCode = "400",
             description =
                 "일정 역전(INVALID_PROGRAM_PERIOD), 연결할 수 없는 양식(PROGRAM_FORM_NOT_LINKABLE), " +
-                    "게시 필수값 미충족(PROGRAM_VALIDATION_FAILED 등), 요청 값 형식 오류(VALIDATION_FAILED)",
+                    "게시 필수값 미충족(PROGRAM_VALIDATION_FAILED 등), 요청 값 형식 오류(VALIDATION_FAILED), " +
+                    "첨부파일 목적 불일치(FILE_PURPOSE_MISMATCH), 첨부파일 개수 초과(FILE_COUNT_EXCEEDED)",
         ),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(
             responseCode = "403",
-            description = "교사·개발자가 아니거나 등록자·담당 교사가 아님 (FORBIDDEN, PROGRAM_MANAGE_FORBIDDEN)",
+            description =
+                "교사·개발자가 아니거나 등록자·담당 교사가 아님 (FORBIDDEN, PROGRAM_MANAGE_FORBIDDEN), " +
+                    "본인이 업로드하지 않은 첨부파일 (FILE_NOT_OWNED)",
         ),
-        SwaggerApiResponse(responseCode = "404", description = "프로그램이 없거나 삭제됨 (PROGRAM_NOT_FOUND)"),
+        SwaggerApiResponse(
+            responseCode = "404",
+            description = "프로그램이 없거나 삭제됨 (PROGRAM_NOT_FOUND), 존재하지 않는 첨부파일 (FILE_NOT_FOUND)",
+        ),
         SwaggerApiResponse(
             responseCode = "409",
-            description = "정원을 현재 활성 신청 인원보다 적게 설정 (CAPACITY_BELOW_CURRENT_APPLICANTS)",
+            description =
+                "정원을 현재 활성 신청 인원보다 적게 설정 (CAPACITY_BELOW_CURRENT_APPLICANTS), " +
+                    "이미 다른 곳에 연결된 첨부파일 (FILE_ALREADY_LINKED)",
         ),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
@@ -136,6 +156,9 @@ class ProgramAdminController(
             Scheduler(`ProgramCloseScheduler`)가 자동으로 처리한다. DELETED는 Soft Delete로 처리해
             실제 행을 지우지 않으므로 기존 신청·이력이 보존된다. 등록자 또는 담당 교사만 변경할
             수 있다(개발자는 이 검증을 우회한다).
+
+            DELETED로 전이하면 본문 첨부파일 연결도 함께 해제한다(Storage의 실제 파일은 지우지
+            않는다 — 연결 해제만 이 시점에 일어나고, 물리 삭제는 별도 Cleanup이 처리한다).
         """,
     )
     @ApiResponses(

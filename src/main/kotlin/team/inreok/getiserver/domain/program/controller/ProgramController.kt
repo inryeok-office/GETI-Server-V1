@@ -76,6 +76,10 @@ class ProgramController(
             사용자 기준으로 `canApply`/`eligibilityReason`/`eligibilityMessage`/`availableActions`를
             서버가 계산해 함께 반환한다 — 클라이언트가 대상 학년·재학 여부·모집 기간·정원·신청
             여부를 직접 조합해 계산하지 않는다. 삭제된 프로그램은 410로 응답한다.
+
+            `files`(본문 첨부파일 목록)는 게시(PUBLISHED)·마감(CLOSED) 상태에서는 누구나 볼 수
+            있고, DRAFT 상태에서는 등록자·담당 교사·개발자에게만 실제 목록이 담기며 그 외
+            요청자에게는 빈 배열이 반환된다.
         """,
     )
     @ApiResponses(
