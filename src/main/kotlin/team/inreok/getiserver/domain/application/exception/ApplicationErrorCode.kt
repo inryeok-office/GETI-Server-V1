@@ -4,8 +4,7 @@ import org.springframework.http.HttpStatus
 import team.inreok.getiserver.global.error.ErrorCode
 
 // Phase 1(Form)·Phase 2(공고-양식 연결, 지원가능여부, 초안·임시저장)·Phase 3(학생 제출·수정요청·
-// 재제출·철회) 범위에서 실제로 발생하는 Error Code만 정의한다. 요구사항 24절의 나머지 Application
-// Error Code(교사 Action 등)는 해당 Phase(4) 구현 시점에 추가한다.
+// 재제출·철회)·Phase 4(교사 검토) 범위에서 실제로 발생하는 Error Code만 정의한다.
 enum class ApplicationErrorCode(
     override val status: HttpStatus,
     override val defaultMessage: String,
@@ -31,6 +30,9 @@ enum class ApplicationErrorCode(
 
     // 학생 제출·수정요청·재제출·철회 (Phase 3)
     APPLICATION_REQUIRED_ANSWER_MISSING(HttpStatus.BAD_REQUEST, "필수 항목에 대한 답변이 누락되었습니다."),
+
+    // 교사 검토(ALLOW_EDIT/REQUEST_REVISION/APPROVE/REJECT) (Phase 4)
+    APPLICATION_REVIEW_FORBIDDEN(HttpStatus.FORBIDDEN, "해당 공고의 등록자·담당 교사·개발자만 지원서를 검토할 수 있습니다."),
     ;
 
     override val code: String get() = name
