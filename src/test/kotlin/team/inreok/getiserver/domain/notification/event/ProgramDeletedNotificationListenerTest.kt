@@ -12,6 +12,7 @@ import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
+import org.springframework.core.task.SyncTaskExecutor
 import team.inreok.getiserver.domain.notification.dto.NotificationCreateCommand
 import team.inreok.getiserver.domain.notification.entity.type.NotificationTargetType
 import team.inreok.getiserver.domain.notification.entity.type.NotificationType
@@ -28,8 +29,10 @@ class ProgramDeletedNotificationListenerTest {
     @Mock
     private lateinit var notificationService: NotificationService
 
+    // 실행 Thread 분리 자체는 이 Test의 관심사가 아니라 동기 Executor를 넣어 호출 결과를 그대로
+    // 검증한다. 실제 비동기 실행은 DomainEventNotificationIntegrationTest가 확인한다.
     private val listener by lazy {
-        ProgramDeletedNotificationListener(programApplicantQueryPort, notificationService)
+        ProgramDeletedNotificationListener(programApplicantQueryPort, notificationService, SyncTaskExecutor())
     }
 
     private val event = ProgramDeletedEvent(programId = 1L, title = "여름 캠프")

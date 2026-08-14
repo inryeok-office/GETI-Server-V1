@@ -45,6 +45,11 @@ import java.util.UUID
  * 만든다"까지만 검증한다. 둘을 잇는 `@TransactionalEventListener(AFTER_COMMIT)` 배선과 Rollback
  * 시 알림이 생기지 않는 일관성은 실제 Transaction 경계가 있어야 확인할 수 있어 이 Test에서만
  * 검증된다.
+ *
+ * 알림 생성은 전용 `notificationTaskExecutor`에서 비동기로 실행되므로(PR #128 리뷰 지적), 생성을
+ * 기대하는 Test는 [awaitNotifications]로 기다리고, 생성되지 않아야 하는 Test는
+ * [assertNoNotificationAppears]로 잠시 기다린 뒤에도 비어 있음을 확인한다. 곧바로 조회하면
+ * 아직 실행되지 않은 Task 때문에 양쪽 모두 잘못된 결과를 낼 수 있다.
  */
 @Testcontainers
 @SpringBootTest(
@@ -82,12 +87,9 @@ class DomainEventNotificationIntegrationTest {
     fun `교직원 승인 처리 후 대상 회원에게 MEMBER_APPROVAL_RESULT 알림이 생성된다`() {
         val memberId = createPendingGoogleTeacher()
 
-        // process는 @Transactional Method라 반환 시점에는 이미 Commit이 끝나 있고, AFTER_COMMIT
-        // Listener도 같은 호출 Thread 안에서 동기 실행을 마친 뒤다 -- 별도 Thread/Sleep 없이
-        // 곧바로 조회해도 된다.
         memberApprovalService.process(memberId, MemberApprovalRequest(action = ApprovalAction.APPROVE))
 
-        val notification = singleNotificationOf(memberId)
+        val notification = awaitSingleNotification(memberId)
         assertThat(notification.type).isEqualTo(NotificationType.MEMBER_APPROVAL_RESULT)
         assertThat(notification.targetType).isEqualTo(NotificationTargetType.MEMBER_APPROVAL)
         assertThat(notification.targetId).isEqualTo(memberId)
@@ -104,7 +106,7 @@ class DomainEventNotificationIntegrationTest {
             MemberApprovalRequest(action = ApprovalAction.REJECT, reason = "재직 증명 자료 미확인"),
         )
 
-        val notification = singleNotificationOf(memberId)
+        val notification = awaitSingleNotification(memberId)
         assertThat(notification.type).isEqualTo(NotificationType.MEMBER_APPROVAL_RESULT)
         assertThat(notification.content).contains("재직 증명 자료 미확인")
     }
@@ -114,15 +116,16 @@ class DomainEventNotificationIntegrationTest {
         val memberId = createPendingGoogleTeacher()
         // 첫 처리로 PENDING을 벗어나게 한 뒤 같은 회원을 다시 승인하면 409로 거부되고 Rollback된다.
         memberApprovalService.process(memberId, MemberApprovalRequest(action = ApprovalAction.APPROVE))
-        val notificationCountAfterFirstApproval = notificationsOf(memberId).size
+        awaitSingleNotification(memberId)
 
         assertThatThrownBy {
             memberApprovalService.process(memberId, MemberApprovalRequest(action = ApprovalAction.APPROVE))
         }.isInstanceOf(MemberNotPendingException::class.java)
 
-        // AFTER_COMMIT Listener는 Commit되지 않은 Transaction에서는 실행되지 않으므로 알림이
-        // 늘어나지 않아야 한다.
-        assertThat(notificationsOf(memberId)).hasSize(notificationCountAfterFirstApproval)
+        // AFTER_COMMIT Listener는 Commit되지 않은 Transaction에서는 실행되지 않으므로 첫 승인의
+        // 알림 1건에서 늘어나지 않아야 한다.
+        Thread.sleep(SETTLE_MILLIS)
+        assertThat(notificationsOf(memberId)).hasSize(1)
     }
 
     @Test
@@ -141,14 +144,14 @@ class DomainEventNotificationIntegrationTest {
             request = ProgramStatusUpdateRequest(status = ProgramStatus.DELETED),
         )
 
-        val notification = singleNotificationOf(applicantId)
+        val notification = awaitSingleNotification(applicantId)
         assertThat(notification.type).isEqualTo(NotificationType.PROGRAM_DELETED)
         assertThat(notification.targetType).isEqualTo(NotificationTargetType.PROGRAM)
         assertThat(notification.targetId).isEqualTo(programId)
         assertThat(notification.content).contains("삭제 알림 Test용 특강")
 
         // 취소한 신청자는 알림 대상이 아니다.
-        assertThat(notificationsOf(canceledApplicantId)).isEmpty()
+        assertNoNotificationAppears(canceledApplicantId)
     }
 
     @Test
@@ -169,13 +172,31 @@ class DomainEventNotificationIntegrationTest {
             )
         }.isInstanceOf(ProgramManageForbiddenException::class.java)
 
-        assertThat(notificationsOf(applicantId)).isEmpty()
+        assertNoNotificationAppears(applicantId)
     }
 
-    private fun singleNotificationOf(memberId: Long): Notification {
-        val notifications = notificationsOf(memberId)
+    /**
+     * 알림이 생길 때까지 짧게 Polling한다. 알림 생성이 `notificationTaskExecutor`에서 비동기로
+     * 실행되므로 고정 Sleep 대신 조건이 만족되면 바로 진행해 Test 시간을 낭비하지 않는다.
+     */
+    private fun awaitSingleNotification(memberId: Long): Notification {
+        val deadline = System.nanoTime() + AWAIT_TIMEOUT_MILLIS * NANOS_PER_MILLI
+        var notifications = notificationsOf(memberId)
+        while (notifications.isEmpty() && System.nanoTime() < deadline) {
+            Thread.sleep(POLL_INTERVAL_MILLIS)
+            notifications = notificationsOf(memberId)
+        }
         assertThat(notifications).hasSize(1)
         return notifications.single()
+    }
+
+    /**
+     * 알림이 "생기지 않아야 한다"는 것은 Polling으로 증명할 수 없어, 비동기 Task가 실행되기에
+     * 충분한 시간을 기다린 뒤에도 비어 있는지 확인한다.
+     */
+    private fun assertNoNotificationAppears(memberId: Long) {
+        Thread.sleep(SETTLE_MILLIS)
+        assertThat(notificationsOf(memberId)).isEmpty()
     }
 
     private fun notificationsOf(memberId: Long): List<Notification> =
@@ -240,6 +261,10 @@ class DomainEventNotificationIntegrationTest {
 
     companion object {
         private const val PAGE_SIZE = 20
+        private const val AWAIT_TIMEOUT_MILLIS = 5_000L
+        private const val POLL_INTERVAL_MILLIS = 50L
+        private const val SETTLE_MILLIS = 1_000L
+        private const val NANOS_PER_MILLI = 1_000_000L
 
         @Container
         @ServiceConnection

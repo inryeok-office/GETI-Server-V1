@@ -10,6 +10,7 @@ import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
+import org.springframework.core.task.SyncTaskExecutor
 import team.inreok.getiserver.domain.member.event.MemberApprovalProcessedEvent
 import team.inreok.getiserver.domain.notification.dto.NotificationCreateCommand
 import team.inreok.getiserver.domain.notification.entity.type.NotificationTargetType
@@ -22,7 +23,11 @@ class MemberApprovalProcessedNotificationListenerTest {
     @Mock
     private lateinit var notificationService: NotificationService
 
-    private val listener by lazy { MemberApprovalProcessedNotificationListener(notificationService) }
+    // 실행 Thread 분리 자체는 이 Test의 관심사가 아니라 동기 Executor를 넣어 호출 결과를 그대로
+    // 검증한다. 실제 비동기 실행은 DomainEventNotificationIntegrationTest가 확인한다.
+    private val listener by lazy {
+        MemberApprovalProcessedNotificationListener(notificationService, SyncTaskExecutor())
+    }
 
     @Test
     fun `승인 결과는 MEMBER_APPROVAL_RESULT 알림으로 대상 회원에게 생성된다`() {

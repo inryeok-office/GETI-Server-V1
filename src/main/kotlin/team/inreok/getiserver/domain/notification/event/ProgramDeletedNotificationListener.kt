@@ -1,6 +1,7 @@
 package team.inreok.getiserver.domain.notification.event
 
 import org.slf4j.LoggerFactory
+import org.springframework.core.task.TaskExecutor
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
@@ -20,16 +21,26 @@ import team.inreok.getiserver.domain.program.query.ProgramApplicantQueryPort
  * [team.inreok.getiserver.domain.notification.service.NotificationTargetResolver]가 삭제된
  * 프로그램으로 판정하게 한다 -- 알림에서 이동을 시도하면 `targetAvailable=false`,
  * `targetUnavailableReason=DELETED`로 내려가 클라이언트가 "삭제된 프로그램"임을 표시할 수 있다.
+ *
+ * 수신자 수만큼 Insert가 이어지므로 실제 알림 생성은 전용 `notificationTaskExecutor`로 넘긴다
+ * (PR #128 리뷰 지적). `AFTER_COMMIT` Listener는 원본 Transaction을 Commit하는 같은 호출
+ * 흐름에서 동기 실행되어, 그대로 두면 삭제 API 응답이 신청자 수에 비례해 느려진다
+ * ([team.inreok.getiserver.domain.search.event.JobIndexSyncEventListener]와 동일한 이유·방식).
  */
 @Component
 class ProgramDeletedNotificationListener(
     private val programApplicantQueryPort: ProgramApplicantQueryPort,
     private val notificationService: NotificationService,
+    private val notificationTaskExecutor: TaskExecutor,
 ) {
     private val log = LoggerFactory.getLogger(ProgramDeletedNotificationListener::class.java)
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onProgramDeleted(event: ProgramDeletedEvent) {
+        notificationTaskExecutor.execute { createNotifications(event) }
+    }
+
+    private fun createNotifications(event: ProgramDeletedEvent) {
         val applicantMemberIds =
             runCatching { programApplicantQueryPort.findActiveApplicantMemberIds(event.programId) }
                 .getOrElse { ex ->

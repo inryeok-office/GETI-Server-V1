@@ -1,6 +1,7 @@
 package team.inreok.getiserver.domain.notification.event
 
 import org.slf4j.LoggerFactory
+import org.springframework.core.task.TaskExecutor
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
@@ -21,15 +22,24 @@ import team.inreok.getiserver.domain.notification.service.NotificationService
  * 않는다 -- 승인 결과는 이동해서 볼 별도 리소스 화면이 없어(제목·본문이 결과 전부다) 지금
  * 해석기를 붙이면 없는 Deep Link를 지어내는 셈이 된다. Resolver는 이 대상을 "이동 불가, 이유
  * 없음"으로 내려주며, 이는 그 KDoc이 명시한 기본 동작이다.
+ *
+ * 알림 생성은 [ProgramDeletedNotificationListener]와 동일하게 전용 `notificationTaskExecutor`로
+ * 넘겨 승인/거절 API 응답을 막지 않는다(PR #128 리뷰 지적). 이쪽은 수신자가 1명이라 지연이
+ * 작지만, 같은 Module의 두 Listener가 서로 다른 실행 방식을 갖지 않도록 맞춘다.
  */
 @Component
 class MemberApprovalProcessedNotificationListener(
     private val notificationService: NotificationService,
+    private val notificationTaskExecutor: TaskExecutor,
 ) {
     private val log = LoggerFactory.getLogger(MemberApprovalProcessedNotificationListener::class.java)
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onMemberApprovalProcessed(event: MemberApprovalProcessedEvent) {
+        notificationTaskExecutor.execute { createNotification(event) }
+    }
+
+    private fun createNotification(event: MemberApprovalProcessedEvent) {
         runCatching {
             notificationService.create(
                 NotificationCreateCommand(
