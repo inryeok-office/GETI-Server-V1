@@ -16,6 +16,9 @@ import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import team.inreok.getiserver.domain.ai.entity.JobAiAnalysis
+import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
+import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
+import team.inreok.getiserver.domain.ai.entity.type.AiStatus
 import team.inreok.getiserver.domain.ai.repository.JobAiAnalysisRepository
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
@@ -368,6 +371,57 @@ class CoreDomainSchemaIntegrationTest
                     ).apply { reanalysisCount = 4 },
                 )
             }.isInstanceOf(DataIntegrityViolationException::class.java)
+        }
+
+        @Test
+        fun `job_ai_analyses는 V20이 추가한 구조화 결과 Column을 저장·조회한다`() {
+            val company = persistCompany()
+            val job = jobRepository.saveAndFlush(newJob(company.id!!))
+
+            val saved =
+                jobAiAnalysisRepository.saveAndFlush(
+                    JobAiAnalysis(
+                        jobId = job.id!!,
+                        status = AiStatus.COMPLETED,
+                        requestedAt = LocalDateTime.now(),
+                    ).apply {
+                        summary = "요약"
+                        requiredSkills = """[{"techStackId":1,"name":"Spring Boot"}]"""
+                        preferredSkills = """[{"techStackId":null,"name":"Docker"}]"""
+                        highSchoolGraduateFit = AiFitLevel.SUITABLE
+                        entryLevelFit = AiFitLevel.SUITABLE
+                        difficulty = AiDifficulty.NORMAL
+                        provider = "OPENAI"
+                        model = "gpt-4o-mini"
+                        promptVersion = "JOB_ANALYSIS_V1"
+                        analysisVersion = 1
+                        completedAt = LocalDateTime.now()
+                    },
+                )
+            entityManager.flush()
+            entityManager.clear()
+
+            val found = jobAiAnalysisRepository.findById(saved.jobId).orElseThrow()
+            assertThat(found.requiredSkills).contains("Spring Boot")
+            assertThat(found.highSchoolGraduateFit).isEqualTo(AiFitLevel.SUITABLE)
+            assertThat(found.difficulty).isEqualTo(AiDifficulty.NORMAL)
+            assertThat(found.provider).isEqualTo("OPENAI")
+            assertThat(found.analysisVersion).isEqualTo(1)
+        }
+
+        @Test
+        fun `job_ai_analyses의 difficulty는 잘못된 값을 CHECK 제약으로 거부한다`() {
+            val company = persistCompany()
+            val job = jobRepository.saveAndFlush(newJob(company.id!!))
+
+            assertThatThrownBy {
+                entityManager
+                    .createNativeQuery(
+                        "INSERT INTO job_ai_analyses (job_id, status, reanalysis_count, requested_at, difficulty) " +
+                            "VALUES (:jobId, 'PENDING', 0, now(), 'IMPOSSIBLE')",
+                    ).setParameter("jobId", job.id!!)
+                    .executeUpdate()
+            }.isInstanceOf(Exception::class.java)
         }
 
         @Test
