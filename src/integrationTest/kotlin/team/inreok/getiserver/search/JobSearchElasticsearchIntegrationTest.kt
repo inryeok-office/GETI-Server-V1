@@ -300,6 +300,51 @@ class JobSearchElasticsearchIntegrationTest {
     }
 
     @Test
+    fun `AI 분석 결과 필드가 색인에 그대로 왕복된다`() {
+        // List<Long>/Keyword Field가 실제 Elasticsearch Mapping에서 깨지지 않는지 확인한다
+        // (Issue #144 -- JobSearchDocument.publishedAt의 Date Format처럼 실제 Elasticsearch로
+        // 확인하지 않으면 Mapping 문제를 놓칠 수 있다). JobSummaryResponse는 AI 필드를 그대로
+        // 노출하지 않으므로(Issue #144 제외 범위 -- 새 API Field 확장은 하지 않음), Elasticsearch
+        // Document를 직접 다시 읽어 검증한다.
+        indexManager.upsert(
+            documentOf(jobId = 1L, title = "AI 분석 완료 공고").copy(
+                requiredTechStackIds = listOf(10L, 11L),
+                preferredTechStackIds = listOf(20L),
+                highSchoolGraduateFit = "SUITABLE",
+                entryLevelFit = "CONDITIONAL",
+                difficulty = "HARD",
+            ),
+        )
+        refresh()
+
+        val stored =
+            elasticsearchOperations.get("1", JobSearchDocument::class.java, IndexCoordinates.of(TEST_INDEX))
+
+        assertThat(stored).isNotNull
+        assertThat(stored!!.requiredTechStackIds).containsExactlyInAnyOrder(10L, 11L)
+        assertThat(stored.preferredTechStackIds).containsExactly(20L)
+        assertThat(stored.highSchoolGraduateFit).isEqualTo("SUITABLE")
+        assertThat(stored.entryLevelFit).isEqualTo("CONDITIONAL")
+        assertThat(stored.difficulty).isEqualTo("HARD")
+    }
+
+    @Test
+    fun `AI 분석이 아직 없는 공고는 AI 필드가 빈 값으로 색인된다`() {
+        indexDocument(jobId = 1L, title = "AI 분석 전 공고")
+        refresh()
+
+        val stored =
+            elasticsearchOperations.get("1", JobSearchDocument::class.java, IndexCoordinates.of(TEST_INDEX))
+
+        assertThat(stored).isNotNull
+        assertThat(stored!!.requiredTechStackIds).isEmpty()
+        assertThat(stored.preferredTechStackIds).isEmpty()
+        assertThat(stored.highSchoolGraduateFit).isNull()
+        assertThat(stored.entryLevelFit).isNull()
+        assertThat(stored.difficulty).isNull()
+    }
+
+    @Test
     fun `Bulk 색인은 여러 건을 한 번에 반영한다`() {
         val documents = (1..5).map { documentOf(jobId = it.toLong(), title = "공고 $it") }
         indexManager.bulkIndex(TEST_INDEX, documents)
