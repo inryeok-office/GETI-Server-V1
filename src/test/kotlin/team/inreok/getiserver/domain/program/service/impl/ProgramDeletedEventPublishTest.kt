@@ -73,7 +73,7 @@ class ProgramDeletedEventPublishTest {
     @Mock
     private lateinit var discordChannelResolver: DiscordChannelResolver
 
-    // 위치 인자로 두면 ProgramServiceImpl 생성자에 Parameter가 추가/재배치될 때마다(Issue #118의
+    // 위치 인자로 두면 ProgramServiceImpl 생성자에 Parameter가 추가/재배치될 때마다(Issue #127의
     // memberRoleQueryPort/fileLinkPort 추가가 실제로 이 Test를 깨뜨렸다) 자리만 밀려 엉뚱한 Mock이
     // 엉뚱한 위치에 들어가도 컴파일이 통과해버릴 수 있다. Named Argument는 Parameter 이름이
     // 바뀌지 않는 한 순서가 바뀌어도 안전하다.
