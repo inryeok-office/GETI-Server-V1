@@ -76,6 +76,7 @@ class JobApplicationActionControllerTest
                 applicantDesiredJob = null,
                 applicantTechStacks = emptyList(),
                 answers = emptyList(),
+                files = emptyList(),
                 submittedAt = if (status == JobApplicationStatus.SUBMITTED) fixedTime else null,
                 withdrawnAt = if (status == JobApplicationStatus.WITHDRAWN) fixedTime else null,
                 createdAt = fixedTime,

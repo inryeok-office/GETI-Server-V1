@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.BDDMockito.given
 import org.mockito.Captor
 import org.mockito.Mock
@@ -42,6 +43,10 @@ import team.inreok.getiserver.domain.application.repository.JobApplicationReposi
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationSubmissionRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationService
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.entity.type.FilePurpose
+import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.file.link.FileSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshot
@@ -76,6 +81,9 @@ class JobApplicationServiceImplTest {
     @Mock
     private lateinit var jobApplicationSubmissionRepository: JobApplicationSubmissionRepository
 
+    @Mock
+    private lateinit var fileLinkPort: FileLinkPort
+
     @Captor
     private lateinit var jobApplicationCaptor: ArgumentCaptor<JobApplication>
 
@@ -91,6 +99,7 @@ class JobApplicationServiceImplTest {
             memberApplicantSnapshotQueryPort,
             jobApplicationStatusHistoryRepository,
             jobApplicationSubmissionRepository,
+            fileLinkPort,
             jsonMapper,
         )
     }
@@ -645,6 +654,80 @@ class JobApplicationServiceImplTest {
         assertThatThrownBy {
             service.executeAction(1L, 2L, JobApplicationActionRequest(JobApplicationAction.WITHDRAW))
         }.isInstanceOf(ApplicationAccessForbiddenException::class.java)
+    }
+
+    // ---------- 첨부파일 연동(Issue #134) ----------
+
+    private fun fileSnapshotOf(
+        fileId: Long,
+        originalName: String = "file-$fileId.pdf",
+    ) = FileSnapshot(fileId = fileId, originalName = originalName, contentType = "application/pdf", size = 100)
+
+    // Kotlin에서 Mockito의 any()는 null을 반환해 Kotlin이 non-null로 추론하는 Object 타입 인자에
+    // 쓰면 NullPointerException이 난다(이 파일의 anyJobApplication()과 같은 이유). ownerId 같은
+    // Long Parameter는 실제로는 primitive long으로 컴파일되므로 anyLong()이면 충분하다.
+    private fun anyFileOwnerType(): FileOwnerType = any(FileOwnerType::class.java) ?: FileOwnerType.JOB_APPLICATION
+
+    private fun anyFilePurpose(): FilePurpose = any(FilePurpose::class.java) ?: FilePurpose.JOB_APPLICATION
+
+    @Suppress("UNCHECKED_CAST")
+    private fun anyFileIdCollection(): Collection<Long> =
+        any(Collection::class.java) as Collection<Long>? ?: emptyList()
+
+    // SUBMIT/RESUBMIT의 실제 연결·해제·Diff 로직은 syncApplicationFiles 자체를 직접 호출하는
+    // JobApplicationFileSyncTest가 담당한다(detekt LargeClass 회피 목적도 있음, 순수 함수라
+    // Service 전체를 세팅하지 않고도 검증할 수 있다). 이 Class는 executeAction이 Action별로
+    // 그 함수를 호출/생략하는지, 응답에 파일 목록을 올바르게 싣는지만 확인한다.
+
+    @Test
+    fun `WITHDRAW하면 첨부파일을 연결·해제하지 않는다`() {
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(draftOf())
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, 1L)).willReturn(emptyList())
+
+        service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.WITHDRAW))
+
+        verify(fileLinkPort, never()).unlinkAllOf(anyFileOwnerType(), anyLong())
+        verify(fileLinkPort, never()).validateAndLink(anyLong(), anyFileIdCollection(), anyFilePurpose(), anyLong())
+    }
+
+    @Test
+    fun `새 초안 생성 응답은 첨부파일 목록이 비어 있고 File 도메인을 조회하지 않는다`() {
+        given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf())
+        given(memberApplicantSnapshotQueryPort.findById(1L)).willReturn(memberOf())
+        stubActiveLink()
+        given(
+            jobApplicationRepository.findByJobIdAndApplicantMemberIdAndStatusIn(
+                1L,
+                1L,
+                ACTIVE_JOB_APPLICATION_STATUSES,
+            ),
+        ).willReturn(emptyList())
+        given(jobApplicationRepository.findTopByJobIdAndApplicantMemberIdOrderByAttemptNumberDesc(1L, 1L))
+            .willReturn(null)
+        given(jobApplicationRepository.saveAndFlush(anyJobApplication())).willAnswer { invocation ->
+            (invocation.arguments[0] as JobApplication).apply {
+                id = 1L
+                createdAt = fixedTime
+                updatedAt = fixedTime
+            }
+        }
+
+        val result = service.createDraft(1L, 1L, CreateJobApplicationRequest())
+
+        assertThat(result.files).isEmpty()
+        verify(fileLinkPort, never()).linkedFilesOf(anyFileOwnerType(), anyLong())
+    }
+
+    @Test
+    fun `임시저장 응답에는 현재 연결된 첨부파일 목록이 담긴다`() {
+        given(jobApplicationRepository.findById(1L)).willReturn(Optional.of(draftOf()))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, 1L)).willReturn(listOf(fileSnapshotOf(5L)))
+
+        val result = service.saveDraft(1L, 1L, SaveJobApplicationDraftRequest())
+
+        assertThat(result.files).hasSize(1)
+        assertThat(result.files[0].fileId).isEqualTo(5L)
+        assertThat(result.files[0].downloadUrl).isEqualTo("/api/v1/files/5/download")
     }
 
     // ---------- getHistory ----------

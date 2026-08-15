@@ -22,6 +22,7 @@ import team.inreok.getiserver.domain.application.exception.ApplicationReviewForb
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
+import team.inreok.getiserver.domain.file.link.FileLinkPort
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
 import tools.jackson.databind.json.JsonMapper
@@ -39,11 +40,15 @@ class JobApplicationAdminServiceImplTest {
     @Mock
     private lateinit var jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository
 
+    @Mock
+    private lateinit var fileLinkPort: FileLinkPort
+
     private val service: JobApplicationAdminService by lazy {
         JobApplicationAdminServiceImpl(
             jobApplicationRepository,
             jobApplicationSnapshotQueryPort,
             jobApplicationStatusHistoryRepository,
+            fileLinkPort,
             JsonMapper(),
         )
     }

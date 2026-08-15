@@ -15,6 +15,8 @@ import team.inreok.getiserver.domain.application.exception.ApplicationReviewForb
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.link.FileLinkPort
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
 import tools.jackson.databind.ObjectMapper
 
@@ -23,6 +25,7 @@ class JobApplicationAdminServiceImpl(
     private val jobApplicationRepository: JobApplicationRepository,
     private val jobApplicationSnapshotQueryPort: JobApplicationSnapshotQueryPort,
     private val jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository,
+    private val fileLinkPort: FileLinkPort,
     private val objectMapper: ObjectMapper,
 ) : JobApplicationAdminService {
     @Transactional(readOnly = true)
@@ -44,8 +47,10 @@ class JobApplicationAdminServiceImpl(
     }
 
     @Transactional(readOnly = true)
-    override fun getDetail(applicationId: Long): JobApplicationDraftResponse =
-        toJobApplicationDraftResponse(objectMapper, findApplication(applicationId))
+    override fun getDetail(applicationId: Long): JobApplicationDraftResponse {
+        val application = findApplication(applicationId)
+        return toJobApplicationDraftResponse(objectMapper, application, currentFiles(application))
+    }
 
     @Transactional
     override fun executeAction(
@@ -77,7 +82,7 @@ class JobApplicationAdminServiceImpl(
             requesterMemberId,
             request.reason,
         )
-        return toJobApplicationDraftResponse(objectMapper, application)
+        return toJobApplicationDraftResponse(objectMapper, application, currentFiles(application))
     }
 
     @Transactional(readOnly = true)
@@ -112,6 +117,11 @@ class JobApplicationAdminServiceImpl(
             job != null && (requesterMemberId == job.createdByMemberId || requesterMemberId == job.managerMemberId)
         if (!isManager) throw ApplicationReviewForbiddenException()
     }
+
+    // getDetail/executeAction 응답에 실을 "현재 연결된 첨부파일" 목록을 조회한다(Issue #134,
+    // toJobApplicationDraftResponse KDoc 참고).
+    private fun currentFiles(application: JobApplication) =
+        fileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, requireNotNull(application.id))
 
     private fun toListItem(application: JobApplication): JobApplicationAdminListItemResponse =
         JobApplicationAdminListItemResponse(
