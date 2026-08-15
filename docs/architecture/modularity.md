@@ -98,7 +98,7 @@ team.inreok.getiserver.domain
 ├── ai           entity(+type), repository, service(+impl), controller, dto, exception, query, event, config, provider(OpenAI Adapter) (AI Analysis Phase 1, Issue #132)
 ├── recommendation entity(+type), repository (MemberJobPreference, Recommendation — 아직 Service/Controller 없음)
 ├── application  entity(+type), repository, service(+impl), controller, dto, exception, query, access
-├── program      entity(+type), repository, service(+impl), controller, dto, exception, query, event, scheduler
+├── program      entity(+type), repository, service(+impl), controller, dto, exception, query, event, scheduler, access
 ├── portfolio    entity(+type), repository (PortfolioRequest, PortfolioSubmission — 아직 Service/Controller 없음)
 ├── notification entity(+type), repository, service(+impl), controller, dto, exception, event, scheduler, config (인앱 알림 + Discord Delivery)
 ├── inquiry      entity(+type), repository, service(+impl), controller, dto, exception, query, event, access

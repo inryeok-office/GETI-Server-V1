@@ -7,13 +7,21 @@ import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.application.query.ProgramFormLinkQueryPort
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.entity.type.FilePurpose
+import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.file.link.FileSnapshot
+import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
+import team.inreok.getiserver.domain.member.query.MemberRoleQueryPort
+import team.inreok.getiserver.domain.program.access.canViewProgramFiles
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionRequest
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionResponse
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationAnswer
 import team.inreok.getiserver.domain.program.dto.ProgramCreateRequest
 import team.inreok.getiserver.domain.program.dto.ProgramCreateResponse
 import team.inreok.getiserver.domain.program.dto.ProgramDetailResponse
+import team.inreok.getiserver.domain.program.dto.ProgramFileResponse
 import team.inreok.getiserver.domain.program.dto.ProgramListResponse
 import team.inreok.getiserver.domain.program.dto.ProgramManagerSummary
 import team.inreok.getiserver.domain.program.dto.ProgramStatusUpdateRequest
@@ -75,6 +83,8 @@ class ProgramServiceImpl(
     private val programApplicationRepository: ProgramApplicationRepository,
     private val programFormLinkQueryPort: ProgramFormLinkQueryPort,
     private val memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort,
+    private val memberRoleQueryPort: MemberRoleQueryPort,
+    private val fileLinkPort: FileLinkPort,
     private val objectMapper: ObjectMapper,
     private val eventPublisher: ApplicationEventPublisher,
     private val discordChannelResolver: DiscordChannelResolver,
@@ -118,9 +128,24 @@ class ProgramServiceImpl(
         }
 
         val saved = programRepository.saveAndFlush(program)
-        saveTargetGrades(requireNotNull(saved.id), targetGrades)
+        val programId = requireNotNull(saved.id)
+        saveTargetGrades(programId, targetGrades)
+
+        // 저장 이후에만 연결한다 -- 연결 대상(ownerId)으로 쓸 programId가 저장 전에는 없다
+        // (InquiryServiceImpl.create와 동일한 순서). 소유권·목적·상태·개수 검증은
+        // FileLinkPort.validateAndLink가 수행하며, 거부되면 예외가 Transaction을 되돌려
+        // 프로그램도 함께 만들어지지 않는다.
+        if (request.fileIds.isNotEmpty()) {
+            fileLinkPort.validateAndLink(
+                requesterId = createdByMemberId,
+                fileIds = request.fileIds,
+                purpose = FilePurpose.PROGRAM_ATTACHMENT,
+                ownerId = programId,
+            )
+        }
+
         if (saved.status == ProgramStatus.PUBLISHED) {
-            eventPublisher.publishEvent(ProgramDiscordEvent(requireNotNull(saved.id), ProgramDiscordAction.PUBLISHED))
+            eventPublisher.publishEvent(ProgramDiscordEvent(programId, ProgramDiscordAction.PUBLISHED))
         }
 
         return ProgramCreateResponse(
@@ -190,6 +215,7 @@ class ProgramServiceImpl(
             request.applicationEndAt?.let { applicationEndedAt = it }
         }
         applyFormLinkUpdate(program, request, requesterMemberId)
+        applyFileIdsUpdate(programId, requesterMemberId, request)
 
         // capacity "형식" 검증(0 이하 → INVALID_CAPACITY, 400)이 "정원 < 활성 신청자 수" 비교
         // (CapacityBelowCurrentApplicantsException, 409)보다 항상 먼저 실행되어야 한다(PR #81
@@ -290,6 +316,12 @@ class ProgramServiceImpl(
             // Soft Delete: 실제 행을 지우지 않아 신청·이력이 보존된다(요구사항 8절/21절).
             ProgramStatus.DELETED -> {
                 program.deletedAt = now
+                // Storage Binary는 지우지 않는다(FileLinkPort.unlinkAllOf KDoc 참고) -- 연결만
+                // 해제해 이 Program이 더 이상 첨부파일을 "쓰고 있지 않은" 상태로 만든다. 물리
+                // 삭제는 Cleanup(Phase 5)이 보존 기간을 보고 판단한다(Issue #127 §5 결정).
+                // findForUpdate가 이미 이 Program Row를 Lock한 같은 Transaction 안에서 호출해
+                // 새 Transaction을 열지 않는다.
+                fileLinkPort.unlinkAllOf(FileOwnerType.PROGRAM, programId)
             }
 
             // allowedTransitions()는 어떤 현재 상태에서도 DRAFT/CLOSED를 target으로 반환하지 않아
@@ -394,6 +426,7 @@ class ProgramServiceImpl(
                 if (canApply) add(ProgramApplicationAction.APPLY.name)
                 if (canCancel) add(ProgramApplicationAction.CANCEL.name)
             }
+        val files = programFilesFor(program, programId, requesterMemberId)
 
         val response =
             ProgramDetailResponse(
@@ -419,6 +452,7 @@ class ProgramServiceImpl(
                 vacancySubscribed = false,
                 vacancySubscriptionStatus = null,
                 status = program.status,
+                files = files,
             )
         programRepository.incrementViewCount(programId)
         return response
@@ -598,6 +632,30 @@ class ProgramServiceImpl(
         }
     }
 
+    /**
+     * `fileIds`를 전달하지 않으면(null) 기존 첨부파일을 그대로 둔다. 전달하면(빈 List 포함) 그
+     * 목록을 최종 상태로 취급해 기존 연결을 모두 해제한 뒤 다시 연결한다(2단계 결정 A/B안,
+     * `ProgramUpdateRequest` KDoc 참고). 항상 먼저 `unlinkAllOf`로 끊는 이유는
+     * `FileLinkPortImpl.verifyCount`가 "현재 연결된 개수 + 새로 연결할 개수"로 상한을 검사하기
+     * 때문이다 -- 먼저 끊지 않으면 교체가 아니라 추가로 계산되어 상한을 잘못 초과 판정한다.
+     */
+    private fun applyFileIdsUpdate(
+        programId: Long,
+        requesterMemberId: Long,
+        request: ProgramUpdateRequest,
+    ) {
+        val fileIds = request.fileIds ?: return
+        fileLinkPort.unlinkAllOf(FileOwnerType.PROGRAM, programId)
+        if (fileIds.isNotEmpty()) {
+            fileLinkPort.validateAndLink(
+                requesterId = requesterMemberId,
+                fileIds = fileIds,
+                purpose = FilePurpose.PROGRAM_ATTACHMENT,
+                ownerId = programId,
+            )
+        }
+    }
+
     private fun saveTargetGrades(
         programId: Long,
         targetGrades: List<Int>,
@@ -637,6 +695,39 @@ class ProgramServiceImpl(
             } ?: return
         eventPublisher.publishEvent(ProgramDiscordEvent(programId, action))
     }
+
+    /**
+     * DRAFT 상태에서 조회 권한이 없는 요청자에게는 빈 목록을 반환한다 -- `ProgramFileAccessChecker`
+     * 의 다운로드 권한 판정과 같은 규칙(`canViewProgramFiles`)을 써야 상세 응답이 실제 다운로드
+     * 가능 여부보다 더 많은 첨부파일 메타데이터(파일명 등)를 흘리지 않는다.
+     *
+     * DEVELOPER 판정은 `ProgramFileAccessChecker.canDownload`와 동일하게
+     * [memberRoleQueryPort]로 DB에서 직접 조회한다 -- Controller가 넘기는 JWT 기반 `isDeveloper`
+     * (`requireManager`가 쓰는 값, `update`/`changeStatus` 전용)를 여기서 재사용하면 두 판정 경로가
+     * 서로 다른 Role 출처(JWT 발급 시점 스냅샷 vs 현재 DB 상태)를 쓰게 되어, 토큰 발급 이후 역할이
+     * 바뀐 사용자에게 다운로드 권한과 상세 응답의 파일 목록 노출 여부가 어긋날 수 있다.
+     */
+    private fun programFilesFor(
+        program: Program,
+        programId: Long,
+        requesterMemberId: Long,
+    ): List<ProgramFileResponse> {
+        val isDeveloper = { RoleType.DEVELOPER in memberRoleQueryPort.findRoles(requesterMemberId) }
+        return if (canViewProgramFiles(program, requesterMemberId, isDeveloper)) {
+            fileLinkPort.linkedFilesOf(FileOwnerType.PROGRAM, programId).map { it.toResponse() }
+        } else {
+            emptyList()
+        }
+    }
+
+    private fun FileSnapshot.toResponse(): ProgramFileResponse =
+        ProgramFileResponse(
+            fileId = fileId,
+            originalName = originalName,
+            contentType = contentType,
+            size = size,
+            downloadUrl = "/api/v1/files/$fileId/download",
+        )
 
     private fun activeApplicantCount(programId: Long): Int =
         programApplicationRepository.countByProgramIdAndStatus(programId, ProgramApplicationStatus.APPLIED).toInt()

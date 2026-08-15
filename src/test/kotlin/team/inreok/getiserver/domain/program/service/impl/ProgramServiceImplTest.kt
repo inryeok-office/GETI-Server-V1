@@ -7,11 +7,13 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyBoolean
+import org.mockito.ArgumentMatchers.anyList
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.ArgumentMatchers.isNull
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
 import org.mockito.Mockito.atLeast
+import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
@@ -22,8 +24,15 @@ import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import team.inreok.getiserver.domain.application.query.ProgramFormLinkQueryPort
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.entity.type.FilePurpose
+import team.inreok.getiserver.domain.file.exception.FileNotOwnedException
+import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.file.link.FileSnapshot
+import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshot
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
+import team.inreok.getiserver.domain.member.query.MemberRoleQueryPort
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionRequest
 import team.inreok.getiserver.domain.program.dto.ProgramCreateRequest
 import team.inreok.getiserver.domain.program.dto.ProgramStatusUpdateRequest
@@ -65,6 +74,12 @@ import tools.jackson.databind.json.JsonMapper
 import java.time.LocalDateTime
 import java.util.Optional
 
+// ProgramServiceImpl 자체가 등록·수정·상태 변경·목록·상세·신청/취소를 한 Class에 담당해(Class
+// KDoc 참고) 이 Class를 검증하는 Test도 자연히 커진다. Service Method 단위로 여러 Test Class로
+// 쪼개면 Fixture(programOf/draftRequest 등)를 중복 정의하거나 별도 Test Support Package가
+// 필요해져(docs/architecture/modularity.md "실제 공유 Fixture가 필요해지기 전에는 Test Support
+// Package를 만들지 않는다"), Production Class와 Test Class의 1:1 대응을 깨는 비용이 더 크다.
+@Suppress("LargeClass")
 @ExtendWith(MockitoExtension::class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class ProgramServiceImplTest {
@@ -84,6 +99,12 @@ class ProgramServiceImplTest {
     private lateinit var memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort
 
     @Mock
+    private lateinit var memberRoleQueryPort: MemberRoleQueryPort
+
+    @Mock
+    private lateinit var fileLinkPort: FileLinkPort
+
+    @Mock
     private lateinit var eventPublisher: ApplicationEventPublisher
 
     @Mock
@@ -98,6 +119,8 @@ class ProgramServiceImplTest {
             programApplicationRepository,
             programFormLinkQueryPort,
             memberApplicantSnapshotQueryPort,
+            memberRoleQueryPort,
+            fileLinkPort,
             JsonMapper(),
             eventPublisher,
             discordChannelResolver,
@@ -149,6 +172,45 @@ class ProgramServiceImplTest {
             .isInstanceOf(ProgramFormNotLinkableException::class.java)
     }
 
+    @Test
+    fun `등록 시 fileIds가 있으면 저장된 programId로 FileLinkPort를 호출한다`() {
+        givenSaveAssignsId()
+
+        service.create(draftRequest(fileIds = listOf(1L, 2L)), createdByMemberId = 7L)
+
+        verify(fileLinkPort).validateAndLink(
+            requesterId = 7L,
+            fileIds = listOf(1L, 2L),
+            purpose = FilePurpose.PROGRAM_ATTACHMENT,
+            ownerId = 1L,
+        )
+    }
+
+    @Test
+    fun `등록 시 fileIds가 비어 있으면 FileLinkPort를 호출하지 않는다`() {
+        givenSaveAssignsId()
+
+        service.create(draftRequest(), createdByMemberId = 7L)
+
+        verify(fileLinkPort, never()).validateAndLink(anyLong(), anyList(), anyPurpose(), anyLong())
+    }
+
+    @Test
+    fun `등록 시 타인이 업로드한 파일이면 FILE_NOT_OWNED로 등록이 실패한다`() {
+        givenSaveAssignsId()
+        given(
+            fileLinkPort.validateAndLink(
+                requesterId = 7L,
+                fileIds = listOf(1L),
+                purpose = FilePurpose.PROGRAM_ATTACHMENT,
+                ownerId = 1L,
+            ),
+        ).willThrow(FileNotOwnedException(1L))
+
+        assertThatThrownBy { service.create(draftRequest(fileIds = listOf(1L)), createdByMemberId = 7L) }
+            .isInstanceOf(FileNotOwnedException::class.java)
+    }
+
     // --- 수정 ---
 
     @Test
@@ -191,6 +253,82 @@ class ProgramServiceImplTest {
                 request = ProgramUpdateRequest(capacity = 10),
             )
         }.isInstanceOf(CapacityBelowCurrentApplicantsException::class.java)
+    }
+
+    @Test
+    fun `수정 시 fileIds를 전달하지 않으면 기존 첨부파일을 유지한다`() {
+        given(programRepository.findByIdForUpdate(1L)).willReturn(programOf(createdByMemberId = 7L))
+        given(programApplicationRepository.countByProgramIdAndStatus(1L, ProgramApplicationStatus.APPLIED))
+            .willReturn(0L)
+
+        service.update(1L, requesterMemberId = 7L, isDeveloper = false, request = ProgramUpdateRequest(title = "새 제목"))
+
+        verify(fileLinkPort, never()).unlinkAllOf(FileOwnerType.PROGRAM, 1L)
+        verify(fileLinkPort, never()).validateAndLink(anyLong(), anyList(), anyPurpose(), anyLong())
+    }
+
+    @Test
+    fun `수정 시 fileIds를 전달하면 기존 연결을 해제한 뒤 다시 연결한다`() {
+        given(programRepository.findByIdForUpdate(1L)).willReturn(programOf(createdByMemberId = 7L))
+        given(programApplicationRepository.countByProgramIdAndStatus(1L, ProgramApplicationStatus.APPLIED))
+            .willReturn(0L)
+
+        service.update(
+            1L,
+            requesterMemberId = 7L,
+            isDeveloper = false,
+            request = ProgramUpdateRequest(fileIds = listOf(3L)),
+        )
+
+        val ordered = inOrder(fileLinkPort)
+        ordered.verify(fileLinkPort).unlinkAllOf(FileOwnerType.PROGRAM, 1L)
+        ordered.verify(fileLinkPort).validateAndLink(
+            requesterId = 7L,
+            fileIds = listOf(3L),
+            purpose = FilePurpose.PROGRAM_ATTACHMENT,
+            ownerId = 1L,
+        )
+    }
+
+    @Test
+    fun `수정 시 fileIds로 빈 배열을 전달하면 전체 해제만 하고 다시 연결하지 않는다`() {
+        given(programRepository.findByIdForUpdate(1L)).willReturn(programOf(createdByMemberId = 7L))
+        given(programApplicationRepository.countByProgramIdAndStatus(1L, ProgramApplicationStatus.APPLIED))
+            .willReturn(0L)
+
+        service.update(
+            1L,
+            requesterMemberId = 7L,
+            isDeveloper = false,
+            request = ProgramUpdateRequest(fileIds = emptyList()),
+        )
+
+        verify(fileLinkPort).unlinkAllOf(FileOwnerType.PROGRAM, 1L)
+        verify(fileLinkPort, never()).validateAndLink(anyLong(), anyList(), anyPurpose(), anyLong())
+    }
+
+    @Test
+    fun `수정 시 타인이 업로드한 파일을 재전송하면 FILE_NOT_OWNED로 거부한다`() {
+        given(programRepository.findByIdForUpdate(1L)).willReturn(programOf(createdByMemberId = 7L))
+        given(programApplicationRepository.countByProgramIdAndStatus(1L, ProgramApplicationStatus.APPLIED))
+            .willReturn(0L)
+        given(
+            fileLinkPort.validateAndLink(
+                requesterId = 99L,
+                fileIds = listOf(3L),
+                purpose = FilePurpose.PROGRAM_ATTACHMENT,
+                ownerId = 1L,
+            ),
+        ).willThrow(FileNotOwnedException(3L))
+
+        assertThatThrownBy {
+            service.update(
+                1L,
+                requesterMemberId = 99L,
+                isDeveloper = true,
+                request = ProgramUpdateRequest(fileIds = listOf(3L)),
+            )
+        }.isInstanceOf(FileNotOwnedException::class.java)
     }
 
     // PR #81 리뷰 MINOR 지적: capacity "형식" 검증(0 이하 → INVALID_CAPACITY, 400)이 "정원 <
@@ -310,6 +448,30 @@ class ProgramServiceImplTest {
 
         assertThat(response.status).isEqualTo(ProgramStatus.DELETED)
         assertThat(program.deletedAt).isNotNull()
+        verify(fileLinkPort).unlinkAllOf(FileOwnerType.PROGRAM, 1L)
+    }
+
+    @Test
+    fun `PUBLISHED로 전이하면 첨부파일 연결을 해제하지 않는다`() {
+        val program = programOf(status = ProgramStatus.DRAFT, createdByMemberId = 7L)
+        program.bodyMarkdown = "본문"
+        program.location = "장소"
+        program.eventStartedAt = now
+        program.eventEndedAt = now.plusHours(1)
+        program.applicationStartedAt = now.minusDays(1)
+        program.applicationEndedAt = now.plusDays(1)
+        program.discordChannelId = "channel-1"
+        given(programRepository.findByIdForUpdate(1L)).willReturn(program)
+        given(programTargetGradeRepository.findAllByIdProgramId(1L)).willReturn(targetGradesOf(1L, 2))
+
+        service.changeStatus(
+            1L,
+            requesterMemberId = 7L,
+            isDeveloper = false,
+            request = ProgramStatusUpdateRequest(status = ProgramStatus.PUBLISHED),
+        )
+
+        verify(fileLinkPort, never()).unlinkAllOf(FileOwnerType.PROGRAM, 1L)
     }
 
     // --- Discord Event 발행 (docs/notification/discord-event-wiring-plan.md §4.2) ---
@@ -466,7 +628,9 @@ class ProgramServiceImplTest {
     fun `존재하지 않는 프로그램 상세 조회는 PROGRAM_NOT_FOUND다`() {
         given(programRepository.findById(1L)).willReturn(Optional.empty())
 
-        assertThatThrownBy { service.getDetail(1L, 1L) }.isInstanceOf(ProgramNotFoundException::class.java)
+        assertThatThrownBy {
+            service.getDetail(1L, 1L)
+        }.isInstanceOf(ProgramNotFoundException::class.java)
     }
 
     @Test
@@ -475,7 +639,77 @@ class ProgramServiceImplTest {
         program.deletedAt = now
         given(programRepository.findById(1L)).willReturn(Optional.of(program))
 
-        assertThatThrownBy { service.getDetail(1L, 1L) }.isInstanceOf(ProgramDeletedException::class.java)
+        assertThatThrownBy {
+            service.getDetail(1L, 1L)
+        }.isInstanceOf(ProgramDeletedException::class.java)
+    }
+
+    @Test
+    fun `PUBLISHED 프로그램 상세는 등록자가 아니어도 첨부파일 목록을 반환한다`() {
+        val program = programOf(status = ProgramStatus.PUBLISHED, createdByMemberId = 7L)
+        given(programRepository.findById(1L)).willReturn(Optional.of(program))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.PROGRAM, 1L)).willReturn(listOf(fileSnapshotOf(5L)))
+
+        val response = service.getDetail(1L, requesterMemberId = 99L)
+
+        assertThat(response.files).extracting("fileId").containsExactly(5L)
+    }
+
+    @Test
+    fun `CLOSED 프로그램 상세는 등록자가 아니어도 첨부파일 목록을 반환한다`() {
+        val program = programOf(status = ProgramStatus.CLOSED, createdByMemberId = 7L)
+        given(programRepository.findById(1L)).willReturn(Optional.of(program))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.PROGRAM, 1L)).willReturn(listOf(fileSnapshotOf(5L)))
+
+        val response = service.getDetail(1L, requesterMemberId = 99L)
+
+        assertThat(response.files).extracting("fileId").containsExactly(5L)
+    }
+
+    @Test
+    fun `PUBLISHED 프로그램 상세 조회는 조기 반환으로 findRoles를 호출하지 않는다`() {
+        val program = programOf(status = ProgramStatus.PUBLISHED, createdByMemberId = 7L)
+        given(programRepository.findById(1L)).willReturn(Optional.of(program))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.PROGRAM, 1L)).willReturn(listOf(fileSnapshotOf(5L)))
+
+        service.getDetail(1L, requesterMemberId = 99L)
+
+        verify(memberRoleQueryPort, never()).findRoles(99L)
+    }
+
+    @Test
+    fun `DRAFT 프로그램 상세는 등록자·담당교사·개발자가 아니면 빈 첨부파일 목록을 반환한다`() {
+        val program = programOf(status = ProgramStatus.DRAFT, createdByMemberId = 7L)
+        given(programRepository.findById(1L)).willReturn(Optional.of(program))
+        given(memberRoleQueryPort.findRoles(99L)).willReturn(setOf(RoleType.STUDENT))
+
+        val response = service.getDetail(1L, requesterMemberId = 99L)
+
+        assertThat(response.files).isEmpty()
+        verify(fileLinkPort, never()).linkedFilesOf(FileOwnerType.PROGRAM, 1L)
+    }
+
+    @Test
+    fun `DRAFT 프로그램 상세는 등록자에게 첨부파일 목록을 반환한다`() {
+        val program = programOf(status = ProgramStatus.DRAFT, createdByMemberId = 7L)
+        given(programRepository.findById(1L)).willReturn(Optional.of(program))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.PROGRAM, 1L)).willReturn(listOf(fileSnapshotOf(5L)))
+
+        val response = service.getDetail(1L, requesterMemberId = 7L)
+
+        assertThat(response.files).extracting("fileId").containsExactly(5L)
+    }
+
+    @Test
+    fun `DRAFT 프로그램 상세는 MemberRoleQueryPort가 DEVELOPER를 반환하는 요청자에게 첨부파일 목록을 반환한다`() {
+        val program = programOf(status = ProgramStatus.DRAFT, createdByMemberId = 7L)
+        given(programRepository.findById(1L)).willReturn(Optional.of(program))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.PROGRAM, 1L)).willReturn(listOf(fileSnapshotOf(5L)))
+        given(memberRoleQueryPort.findRoles(99L)).willReturn(setOf(RoleType.DEVELOPER))
+
+        val response = service.getDetail(1L, requesterMemberId = 99L)
+
+        assertThat(response.files).extracting("fileId").containsExactly(5L)
     }
 
     // --- 신청·취소 ---
@@ -763,12 +997,19 @@ class ProgramServiceImplTest {
     private fun draftRequest(
         title: String = "특강",
         formId: Long? = null,
+        fileIds: List<Long> = emptyList(),
     ) = ProgramCreateRequest(
         title = title,
         programType = ProgramType.SPECIAL_LECTURE,
         status = ProgramStatus.DRAFT,
         formId = formId,
+        fileIds = fileIds,
     )
+
+    private fun anyPurpose(): FilePurpose = any(FilePurpose::class.java) ?: FilePurpose.PROGRAM_ATTACHMENT
+
+    private fun fileSnapshotOf(fileId: Long) =
+        FileSnapshot(fileId = fileId, originalName = "첨부.pdf", contentType = "application/pdf", size = 1024L)
 
     private fun publishableRequest(
         content: String? = "본문",
