@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service
 import team.inreok.getiserver.domain.ai.dto.AiReanalysisResponse
 import team.inreok.getiserver.domain.ai.event.AiAnalysisRequestedEvent
 import team.inreok.getiserver.domain.ai.exception.AiJobNotFoundException
+import team.inreok.getiserver.domain.ai.exception.AiProviderUnavailableException
 import team.inreok.getiserver.domain.ai.provider.AiAnalysisInput
 import team.inreok.getiserver.domain.ai.provider.AiAnalysisProvider
 import team.inreok.getiserver.domain.ai.provider.AiAnalysisProviderException
@@ -43,6 +44,11 @@ class AiAnalysisServiceImpl(
     override fun reanalyze(jobId: Long): AiReanalysisResponse {
         val input = jobAiAnalysisInputQueryPort.findById(jobId)
         if (input == null || input.status != JOB_STATUS_PUBLISHED) throw AiJobNotFoundException(jobId)
+        // Provider가 설정되지 않았으면 결과가 100% FAILED로 끝난다는 것이 이미 확실하다. 그런데도
+        // 접수를 진행하면 실패가 예정된 시도에 수동 재분석 횟수(최대 3회)만 소비된다 -- 이후 Key를
+        // 정상적으로 설정해도 그 공고는 이미 소진된 횟수 때문에 재분석할 수 없다(Code Review
+        // 지적 사항, Issue #132). 횟수를 건드리기 전에 즉시 거부한다.
+        if (!aiAnalysisProvider.isConfigured()) throw AiProviderUnavailableException(jobId)
 
         val preparation = transitionService.prepareReanalysis(jobId)
         eventPublisher.publishEvent(AiAnalysisRequestedEvent(jobId))
@@ -58,17 +64,22 @@ class AiAnalysisServiceImpl(
         )
     }
 
+    // claimForProcessing이 true를 반환한 뒤(PROCESSING으로 이미 Commit됨)부터는 전체를 하나의
+    // try로 감싼다. Input 조회(jobAiAnalysisInputQueryPort.findById)를 try 밖에 두면 그 호출
+    // 자체가 예외를 던졌을 때(DB 오류 등) FAILED로 되돌릴 방법이 없어 Row가 PROCESSING에
+    // 영구 고착된다 -- 되돌릴 Scheduler가 없고 prepareReanalysis는 PROCESSING을 409로 거부하므로
+    // 사용자도 운영자도 API로 복구할 수 없다(Code Review 지적 사항, Issue #132).
     @Suppress("TooGenericExceptionCaught")
     override fun processAnalysis(jobId: Long) {
         if (!transitionService.claimForProcessing(jobId)) return
 
-        val input = jobAiAnalysisInputQueryPort.findById(jobId)
-        if (input == null || input.status != JOB_STATUS_PUBLISHED) {
-            transitionService.markFailed(jobId, "분석 대상 공고를 찾을 수 없거나 더 이상 게시 상태가 아닙니다.")
-            return
-        }
-
         try {
+            val input = jobAiAnalysisInputQueryPort.findById(jobId)
+            if (input == null || input.status != JOB_STATUS_PUBLISHED) {
+                transitionService.markFailed(jobId, "분석 대상 공고를 찾을 수 없거나 더 이상 게시 상태가 아닙니다.")
+                return
+            }
+
             val output = aiAnalysisProvider.analyze(toProviderInput(input))
             val requiredSkills = matchSkills(output.requiredSkillNames)
             val preferredSkills = matchSkills(output.preferredSkillNames)

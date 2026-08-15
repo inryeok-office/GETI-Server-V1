@@ -5,7 +5,7 @@ import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.ai.entity.type.AiStatus
 import team.inreok.getiserver.domain.ai.repository.JobAiAnalysisRepository
 import team.inreok.getiserver.domain.ai.service.AiSkill
-import team.inreok.getiserver.domain.ai.service.MAX_REANALYSIS_COUNT
+import team.inreok.getiserver.domain.ai.service.canReanalyze
 import team.inreok.getiserver.domain.ai.service.remainingReanalysisCount
 import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessSnapshot
 import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
@@ -33,7 +33,7 @@ class JobAiAnalysisAccessorImpl(
             highSchoolGraduateFit = analysis.highSchoolGraduateFit?.name,
             entryLevelFit = analysis.entryLevelFit?.name,
             difficulty = analysis.difficulty?.name,
-            canReanalyze = analysis.status != AiStatus.PROCESSING && analysis.reanalysisCount < MAX_REANALYSIS_COUNT,
+            canReanalyze = canReanalyze(analysis.status, analysis.reanalysisCount),
             remainingReanalysisCount = remainingReanalysisCount(analysis.reanalysisCount),
             analyzedAt = if (analysis.status == AiStatus.COMPLETED) analysis.completedAt else null,
         )

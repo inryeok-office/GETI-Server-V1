@@ -106,13 +106,17 @@ class OpenAiAnalysisProvider(
                 ?: throw AiAnalysisProviderException.ResponseInvalid("OpenAI 응답 본문이 비어 있습니다.")
         } catch (ex: AiAnalysisProviderException) {
             throw ex
-        } catch (ex: java.net.SocketTimeoutException) {
-            throw AiAnalysisProviderException.Timeout(cause = ex)
         } catch (ex: org.springframework.web.client.ResourceAccessException) {
-            throw AiAnalysisProviderException.NetworkError(
-                ex.message ?: "OpenAI 호출 중 네트워크 오류가 발생했습니다.",
-                cause = ex,
-            )
+            // RestClient(DefaultRestClient)는 전송 중 발생한 모든 IOException(SocketTimeoutException
+            // 포함)을 ResourceAccessException으로 감싸서 던진다 -- 별도의
+            // catch (ex: SocketTimeoutException) 분기는 절대 도달하지 않는 Dead Code라 두지
+            // 않는다(Code Review 지적 사항, Issue #132). 원인 Exception으로 실제 Timeout 여부를
+            // 구분하고, 메시지는 URL 등 원문을 담을 수 있는 ex.message 대신 다른 분기와 같은
+            // 고정 문구만 쓴다.
+            if (ex.cause is java.net.SocketTimeoutException) {
+                throw AiAnalysisProviderException.Timeout(cause = ex)
+            }
+            throw AiAnalysisProviderException.NetworkError(cause = ex)
         }
     }
 

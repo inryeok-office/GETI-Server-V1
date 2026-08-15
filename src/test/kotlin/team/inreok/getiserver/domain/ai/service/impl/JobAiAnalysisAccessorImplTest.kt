@@ -81,6 +81,20 @@ class JobAiAnalysisAccessorImplTest {
     }
 
     @Test
+    fun `PENDING이면 이미 대기열에 있는 상태라 재분석할 수 없다`() {
+        // AiAnalysisTransitionServiceImpl.prepareReanalysis는 PENDING도 PROCESSING과 함께
+        // 409로 거부한다 -- 조회 응답의 canReanalyze도 같은 기준이어야 한다(Code Review
+        // 지적 사항, Issue #132).
+        val analysis =
+            JobAiAnalysis(jobId = 1L, status = AiStatus.PENDING, reanalysisCount = 0, requestedAt = LocalDateTime.now())
+        given(repository.findById(1L)).willReturn(Optional.of(analysis))
+
+        val snapshot = accessor.findSnapshot(1L)!!
+
+        assertThat(snapshot.canReanalyze).isFalse()
+    }
+
+    @Test
     fun `3회를 모두 사용했으면 재분석할 수 없다`() {
         val analysis =
             JobAiAnalysis(jobId = 1L, status = AiStatus.FAILED, reanalysisCount = 3, requestedAt = LocalDateTime.now())

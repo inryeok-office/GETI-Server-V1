@@ -38,8 +38,9 @@ class JobAiReanalysisController(
 
             대상 공고가 없거나 삭제됐거나 아직 게시(PUBLISHED)되지 않았으면 404, 이미 분석이
             진행 중이면 409, 수동 재분석 가능 횟수(최대 3회)를 모두 사용했으면 429를 반환한다.
-            `canReanalyze`/`remainingReanalysisCount`는 서버가 계산해 응답에 포함하므로 클라이언트가
-            직접 횟수를 계산하지 않아도 된다.
+            OpenAI 연동이 설정되지 않아 분석을 수행할 수 없으면 재분석 횟수를 소비하지 않고
+            503을 반환한다. `canReanalyze`/`remainingReanalysisCount`는 서버가 계산해 응답에
+            포함하므로 클라이언트가 직접 횟수를 계산하지 않아도 된다.
         """,
     )
     @ApiResponses(
@@ -48,6 +49,7 @@ class JobAiReanalysisController(
         SwaggerApiResponse(responseCode = "404", description = "게시된 공고를 찾을 수 없음 (JOB_NOT_FOUND)"),
         SwaggerApiResponse(responseCode = "409", description = "이미 AI 분석이 진행 중 (AI_ALREADY_PROCESSING)"),
         SwaggerApiResponse(responseCode = "429", description = "수동 재분석 가능 횟수 초과 (AI_REANALYSIS_LIMIT)"),
+        SwaggerApiResponse(responseCode = "503", description = "AI 분석 기능을 사용할 수 없음 (AI_PROVIDER_UNAVAILABLE)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @PostMapping("/{jobId}/ai-reanalysis")

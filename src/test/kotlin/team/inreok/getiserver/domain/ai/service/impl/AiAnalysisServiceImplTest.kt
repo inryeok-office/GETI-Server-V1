@@ -21,6 +21,7 @@ import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
 import team.inreok.getiserver.domain.ai.entity.type.AiStatus
 import team.inreok.getiserver.domain.ai.event.AiAnalysisRequestedEvent
 import team.inreok.getiserver.domain.ai.exception.AiJobNotFoundException
+import team.inreok.getiserver.domain.ai.exception.AiProviderUnavailableException
 import team.inreok.getiserver.domain.ai.provider.AiAnalysisInput
 import team.inreok.getiserver.domain.ai.provider.AiAnalysisOutput
 import team.inreok.getiserver.domain.ai.provider.AiAnalysisProvider
@@ -106,13 +107,15 @@ class AiAnalysisServiceImplTest {
     @Test
     fun `게시된 공고를 재분석하면 접수하고 Event를 발행한다`() {
         given(jobAiAnalysisInputQueryPort.findById(1L)).willReturn(inputSnapshot())
+        given(aiAnalysisProvider.isConfigured()).willReturn(true)
         given(transitionService.prepareReanalysis(1L)).willReturn(
             AiReanalysisPreparation(
                 status = AiStatus.PENDING,
                 isReanalysis = true,
                 reanalysisCount = 1,
                 remainingReanalysisCount = 2,
-                canReanalyze = true,
+                // 방금 PENDING으로 접수했으므로 지금 다시 요청하면 409다.
+                canReanalyze = false,
                 requestedAt = LocalDateTime.now(),
             ),
         )
@@ -121,7 +124,18 @@ class AiAnalysisServiceImplTest {
 
         assertThat(response.jobId).isEqualTo(1L)
         assertThat(response.reanalysisCount).isEqualTo(1)
+        assertThat(response.canReanalyze).isFalse()
         verifyEventPublished()
+    }
+
+    @Test
+    fun `Provider가 설정되지 않았으면 재분석 횟수를 소비하지 않고 즉시 거부한다`() {
+        given(jobAiAnalysisInputQueryPort.findById(1L)).willReturn(inputSnapshot())
+        given(aiAnalysisProvider.isConfigured()).willReturn(false)
+
+        assertThatThrownBy { service.reanalyze(1L) }.isInstanceOf(AiProviderUnavailableException::class.java)
+
+        verify(transitionService, never()).prepareReanalysis(anyLong())
     }
 
     // --- processAnalysis ---

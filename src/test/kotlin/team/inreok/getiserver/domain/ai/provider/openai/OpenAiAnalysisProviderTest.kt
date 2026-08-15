@@ -11,6 +11,7 @@ import org.springframework.test.web.client.match.MockRestRequestMatchers.header
 import org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath
 import org.springframework.test.web.client.match.MockRestRequestMatchers.method
 import org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo
+import org.springframework.test.web.client.response.MockRestResponseCreators.withException
 import org.springframework.test.web.client.response.MockRestResponseCreators.withStatus
 import org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess
 import org.springframework.web.client.RestClient
@@ -18,6 +19,8 @@ import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
 import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
 import team.inreok.getiserver.domain.ai.provider.AiAnalysisInput
 import team.inreok.getiserver.domain.ai.provider.AiAnalysisProviderException
+import java.io.IOException
+import java.net.SocketTimeoutException
 
 /**
  * 실제 OPENAI_API_KEY를 쓰지 않는다 -- [MockRestServiceServer]로 OpenAI Responses API 계약을
@@ -113,6 +116,29 @@ class OpenAiAnalysisProviderTest {
 
         assertThatThrownBy { provider.analyze(sampleInput()) }
             .isInstanceOf(AiAnalysisProviderException.ResponseInvalid::class.java)
+    }
+
+    @Test
+    fun `Read Timeout(SocketTimeoutException)은 Timeout으로 분류한다`() {
+        // RestClient(DefaultRestClient)는 전송 중 IOException을 모두 ResourceAccessException으로
+        // 감싸므로, 원인 예외가 SocketTimeoutException인 경우만 Timeout으로 분류되는지 확인한다
+        // (Code Review 지적 사항 -- 과거에는 이 경로가 항상 NetworkError로만 분류됐다).
+        server.expect(requestTo(requestUrl)).andRespond(withException(SocketTimeoutException("Read timed out")))
+
+        assertThatThrownBy { provider.analyze(sampleInput()) }
+            .isInstanceOf(AiAnalysisProviderException.Timeout::class.java)
+    }
+
+    @Test
+    fun `그 외 네트워크 오류는 NetworkError로 분류하고 고정 문구만 노출한다`() {
+        server.expect(requestTo(requestUrl)).andRespond(withException(IOException("connection reset")))
+
+        val ex =
+            org.assertj.core.api.Assertions
+                .catchThrowable { provider.analyze(sampleInput()) }
+
+        assertThat(ex).isInstanceOf(AiAnalysisProviderException.NetworkError::class.java)
+        assertThat(ex?.message).doesNotContain("connection reset").doesNotContain(requestUrl)
     }
 
     @Test

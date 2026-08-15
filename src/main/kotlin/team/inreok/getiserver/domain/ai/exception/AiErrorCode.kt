@@ -17,6 +17,7 @@ enum class AiErrorCode(
     JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "AI 분석 대상 공고를 찾을 수 없습니다."),
     AI_ALREADY_PROCESSING(HttpStatus.CONFLICT, "이미 AI 분석이 진행 중입니다."),
     AI_REANALYSIS_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "수동 재분석 가능 횟수를 모두 사용했습니다."),
+    AI_PROVIDER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 분석 기능을 현재 사용할 수 없습니다."),
     ;
 
     override val code: String get() = name

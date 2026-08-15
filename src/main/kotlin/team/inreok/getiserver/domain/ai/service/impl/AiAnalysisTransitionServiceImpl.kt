@@ -12,6 +12,7 @@ import team.inreok.getiserver.domain.ai.repository.JobAiAnalysisRepository
 import team.inreok.getiserver.domain.ai.service.AiAnalysisTransitionService
 import team.inreok.getiserver.domain.ai.service.AiReanalysisPreparation
 import team.inreok.getiserver.domain.ai.service.MAX_REANALYSIS_COUNT
+import team.inreok.getiserver.domain.ai.service.canReanalyze
 import team.inreok.getiserver.domain.ai.service.remainingReanalysisCount
 import java.time.LocalDateTime
 
@@ -51,7 +52,9 @@ class AiAnalysisTransitionServiceImpl(
                 isReanalysis = false,
                 reanalysisCount = 0,
                 remainingReanalysisCount = remainingReanalysisCount(0),
-                canReanalyze = true,
+                // 방금 PENDING으로 접수했으므로 지금 바로 다시 요청하면 409다(canReanalyze
+                // 함수와 같은 기준, Code Review 지적 사항).
+                canReanalyze = canReanalyze(AiStatus.PENDING, 0),
                 requestedAt = now,
             )
         }
@@ -77,7 +80,7 @@ class AiAnalysisTransitionServiceImpl(
             isReanalysis = true,
             reanalysisCount = existing.reanalysisCount,
             remainingReanalysisCount = remainingReanalysisCount(existing.reanalysisCount),
-            canReanalyze = existing.reanalysisCount < MAX_REANALYSIS_COUNT,
+            canReanalyze = canReanalyze(AiStatus.PENDING, existing.reanalysisCount),
             requestedAt = now,
         )
     }

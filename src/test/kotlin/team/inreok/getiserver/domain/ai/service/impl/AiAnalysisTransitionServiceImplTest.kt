@@ -75,7 +75,9 @@ class AiAnalysisTransitionServiceImplTest {
         assertThat(result.isReanalysis).isFalse()
         assertThat(result.reanalysisCount).isEqualTo(0)
         assertThat(result.remainingReanalysisCount).isEqualTo(3)
-        assertThat(result.canReanalyze).isTrue()
+        // 방금 PENDING으로 접수했으므로 지금 바로 다시 요청하면 409다(prepareReanalysis의
+        // PENDING 거부 조건과 canReanalyze가 같은 기준을 공유해야 한다, Code Review 지적 사항).
+        assertThat(result.canReanalyze).isFalse()
         assertThat(result.status).isEqualTo(AiStatus.PENDING)
     }
 
@@ -116,7 +118,7 @@ class AiAnalysisTransitionServiceImplTest {
         assertThat(result.isReanalysis).isTrue()
         assertThat(result.reanalysisCount).isEqualTo(2)
         assertThat(result.remainingReanalysisCount).isEqualTo(1)
-        assertThat(result.canReanalyze).isTrue()
+        assertThat(result.canReanalyze).isFalse()
         verify(repository).save(analysisCaptor.capture() ?: newAnalysis())
         assertThat(analysisCaptor.value.status).isEqualTo(AiStatus.PENDING)
         assertThat(analysisCaptor.value.errorMessage).isNull()

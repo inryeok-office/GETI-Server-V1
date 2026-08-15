@@ -55,3 +55,15 @@ const val MAX_REANALYSIS_COUNT = 3
 
 /** 남은 수동 재분석 가능 횟수. 음수가 되지 않도록 하한을 둔다. */
 fun remainingReanalysisCount(reanalysisCount: Int): Int = (MAX_REANALYSIS_COUNT - reanalysisCount).coerceAtLeast(0)
+
+/**
+ * 지금 재분석을 요청할 수 있는지 계산한다. `prepareReanalysis`의 거부 조건(PROCESSING과
+ * PENDING 모두 "처리 중"으로 취급)과 반드시 같은 기준을 써야 한다 -- 두 조건이 서로 다른
+ * 곳에 따로 있으면 한쪽만 바뀔 때 다시 어긋난다(Code Review 지적 사항, Issue #132).
+ * `JobAiAnalysisAccessorImpl.findSnapshot`(조회 응답)과 `AiAnalysisTransitionServiceImpl
+ * .prepareReanalysis`(접수 응답) 양쪽이 이 함수를 공유한다.
+ */
+fun canReanalyze(
+    status: AiStatus,
+    reanalysisCount: Int,
+): Boolean = status != AiStatus.PENDING && status != AiStatus.PROCESSING && reanalysisCount < MAX_REANALYSIS_COUNT

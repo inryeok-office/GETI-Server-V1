@@ -20,6 +20,7 @@ import team.inreok.getiserver.domain.ai.dto.AiReanalysisResponse
 import team.inreok.getiserver.domain.ai.entity.type.AiStatus
 import team.inreok.getiserver.domain.ai.exception.AiAlreadyProcessingException
 import team.inreok.getiserver.domain.ai.exception.AiJobNotFoundException
+import team.inreok.getiserver.domain.ai.exception.AiProviderUnavailableException
 import team.inreok.getiserver.domain.ai.exception.AiReanalysisLimitExceededException
 import team.inreok.getiserver.domain.ai.service.AiAnalysisService
 import team.inreok.getiserver.global.security.JwtTokenProvider
@@ -97,6 +98,16 @@ class JobAiReanalysisControllerTest
                 .perform(post("/api/v1/jobs/1/ai-reanalysis").with(authOf(1L, "STUDENT")))
                 .andExpect(status().isTooManyRequests)
                 .andExpect(jsonPath("$.error.code").value("AI_REANALYSIS_LIMIT"))
+        }
+
+        @Test
+        fun `Provider가 설정되지 않았으면 503을 반환한다`() {
+            willThrow(AiProviderUnavailableException(1L)).given(aiAnalysisService).reanalyze(anyLong())
+
+            mockMvc
+                .perform(post("/api/v1/jobs/1/ai-reanalysis").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.error.code").value("AI_PROVIDER_UNAVAILABLE"))
         }
 
         @Test
