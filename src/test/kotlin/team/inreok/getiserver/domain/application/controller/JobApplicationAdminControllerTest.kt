@@ -24,6 +24,7 @@ import team.inreok.getiserver.domain.application.dto.JobApplicationAdminAction
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.exception.ApplicationActionNotAvailableException
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
@@ -195,5 +196,45 @@ class JobApplicationAdminControllerTest
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{ "action": "APPROVE" }"""),
                 ).andExpect(status().isUnauthorized)
+        }
+
+        @Test
+        fun `교사가 이력을 조회하면 200과 함께 이력 목록을 반환한다`() {
+            given(jobApplicationAdminService.getHistory(1L))
+                .willReturn(
+                    listOf(
+                        JobApplicationStatusHistoryResponse(
+                            historyId = 1L,
+                            fromStatus = JobApplicationStatus.SUBMITTED,
+                            toStatus = JobApplicationStatus.APPROVED,
+                            action = "APPROVE",
+                            actorMemberId = 100L,
+                            reason = null,
+                            createdAt = fixedTime,
+                        ),
+                    ),
+                )
+
+            mockMvc
+                .perform(get("/api/v1/admin/job-applications/1/history").with(authOf(100L, "TEACHER")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data[0].action").value("APPROVE"))
+        }
+
+        @Test
+        fun `DRAFT 지원서의 이력을 조회하면 404 APPLICATION_NOT_FOUND를 반환한다`() {
+            given(jobApplicationAdminService.getHistory(1L)).willThrow(ApplicationNotFoundException(1L))
+
+            mockMvc
+                .perform(get("/api/v1/admin/job-applications/1/history").with(authOf(100L, "TEACHER")))
+                .andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.error.code").value("APPLICATION_NOT_FOUND"))
+        }
+
+        @Test
+        fun `학생은 이력을 조회할 수 없고 403을 반환한다`() {
+            mockMvc
+                .perform(get("/api/v1/admin/job-applications/1/history").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isForbidden)
         }
     }

@@ -4,6 +4,7 @@ import org.springframework.data.domain.Pageable
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 
 /** 교사·개발자용 지원서 조회·검토 Service다(Issue #125). 학생 본인 Action(SUBMIT 등)은
@@ -30,4 +31,9 @@ interface JobApplicationAdminService {
         isDeveloper: Boolean,
         request: JobApplicationAdminActionRequest,
     ): JobApplicationDraftResponse
+
+    /** 지원서의 상태 변경 이력을 오래된 순으로 반환한다(Issue #133). 담당 공고 여부와 무관하게
+     * 모든 교사·개발자가 조회할 수 있다(조회 권한은 list/getDetail과 동일). DRAFT 지원서는
+     * getDetail과 동일하게 존재하지 않는 것으로 취급되어 ApplicationNotFoundException. */
+    fun getHistory(applicationId: Long): List<JobApplicationStatusHistoryResponse>
 }
