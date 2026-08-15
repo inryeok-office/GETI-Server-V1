@@ -19,6 +19,7 @@ import org.mockito.quality.Strictness
 import org.springframework.context.ApplicationEventPublisher
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
 import team.inreok.getiserver.domain.job.dto.JobUpdateRequest
@@ -61,11 +62,14 @@ class JobServiceTest {
     @Mock
     private lateinit var discordChannelResolver: DiscordChannelResolver
 
+    @Mock
+    private lateinit var jobAiAnalysisAccessor: JobAiAnalysisAccessor
+
     @Captor
     private lateinit var jobCaptor: ArgumentCaptor<Job>
 
     private val service: JobService by lazy {
-        JobServiceImpl(jobRepository, companyQuery, eventPublisher, discordChannelResolver)
+        JobServiceImpl(jobRepository, companyQuery, eventPublisher, discordChannelResolver, jobAiAnalysisAccessor)
     }
 
     private val companySummary = CompanySummary(companyId = 1L, name = "인력개발원")

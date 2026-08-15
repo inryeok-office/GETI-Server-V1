@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
@@ -34,6 +35,7 @@ class JobServiceImpl(
     private val companyQuery: CompanyQuery,
     private val eventPublisher: ApplicationEventPublisher,
     private val discordChannelResolver: DiscordChannelResolver,
+    private val jobAiAnalysisAccessor: JobAiAnalysisAccessor,
 ) : JobService {
     @Transactional
     override fun create(
@@ -82,7 +84,11 @@ class JobServiceImpl(
         if (saved.status == JobStatus.PUBLISHED) {
             eventPublisher.publishEvent(JobDiscordEvent(requireNotNull(saved.id), JobDiscordAction.PUBLISHED))
         }
-        return JobDetailResponse.from(saved, company)
+        return JobDetailResponse.from(
+            saved,
+            company,
+            aiAnalysis = jobAiAnalysisAccessor.findSnapshot(requireNotNull(saved.id)),
+        )
     }
 
     @Transactional
@@ -122,7 +128,11 @@ class JobServiceImpl(
         if (job.status in PUBLIC_VISIBLE_STATUSES) {
             eventPublisher.publishEvent(JobDiscordEvent(jobId, JobDiscordAction.UPDATED))
         }
-        return JobDetailResponse.from(job, findCompanySummary(job.companyId, requesterId))
+        return JobDetailResponse.from(
+            job,
+            findCompanySummary(job.companyId, requesterId),
+            aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
+        )
     }
 
     @Transactional
@@ -164,7 +174,11 @@ class JobServiceImpl(
         jobRepository.flush()
         eventPublisher.publishEvent(JobChangedEvent(jobId))
         publishJobDiscordEventFor(jobId, target, previousStatus)
-        return JobDetailResponse.from(job, findCompanySummary(job.companyId, requesterId))
+        return JobDetailResponse.from(
+            job,
+            findCompanySummary(job.companyId, requesterId),
+            aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
+        )
     }
 
     /**
@@ -194,7 +208,11 @@ class JobServiceImpl(
     ): JobDetailResponse {
         // 관리자는 삭제 이력까지 확인해야 하므로 deletedAt 조건 없이 조회한다.
         val job = jobRepository.findById(jobId).orElseThrow { JobNotFoundException(jobId) }
-        return JobDetailResponse.from(job, findCompanySummary(job.companyId, requesterId))
+        return JobDetailResponse.from(
+            job,
+            findCompanySummary(job.companyId, requesterId),
+            aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
+        )
     }
 
     // 조회수를 증가시키므로 readOnly Transaction을 쓸 수 없다.
@@ -213,6 +231,7 @@ class JobServiceImpl(
                 job = job,
                 company = findCompanySummary(job.companyId, requesterId),
                 viewCount = job.viewCount + 1,
+                aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
             )
         jobRepository.incrementViewCount(jobId)
         return response

@@ -2,6 +2,7 @@ package team.inreok.getiserver.domain.job.dto
 
 import io.swagger.v3.oas.annotations.media.Schema
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessSnapshot
 import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
@@ -12,9 +13,12 @@ import java.time.LocalDateTime
  * 공고 상세 응답이다. 공개 상세와 관리자 상세가 같은 구조를 사용하고, 관리자만 볼 수 있는
  * `DRAFT`/`DELETED` 여부는 [status]로 구분한다. `deletedAt`은 노출하지 않는다.
  *
- * `files`, `formId`, `aiAnalysis`, `aiRequestAccepted`, `canApply`, `bookmarked`,
- * `bookmarkCount`는 각각 File/Form/AI/Recommendation Domain이 준비된 뒤 추가한다. 가짜 값이나
- * 빈 목록을 지금 내보내면 Client가 없는 기능을 있는 것으로 오해하므로 Field 자체를 넣지 않았다.
+ * `files`, `formId`, `aiRequestAccepted`, `canApply`, `bookmarked`, `bookmarkCount`는 각각
+ * File/Form/Recommendation Domain이 준비된 뒤 추가한다. 가짜 값이나 빈 목록을 지금 내보내면
+ * Client가 없는 기능을 있는 것으로 오해하므로 Field 자체를 넣지 않았다.
+ *
+ * [aiAnalysis]는 AI Analysis Phase 1(Issue #132)에서 추가했다. 아직 분석이 시작되지 않은(예:
+ * PUBLISHED 이후 비동기 Trigger가 아직 처리되지 않은) 공고는 null이다.
  */
 @Schema(description = "공고 상세 정보")
 data class JobDetailResponse(
@@ -57,6 +61,11 @@ data class JobDetailResponse(
     val createdAt: LocalDateTime?,
     @param:Schema(description = "최종 수정 시각", example = "2026-07-25T09:00:00", nullable = true)
     val updatedAt: LocalDateTime?,
+    @param:Schema(
+        description = "AI 공고 분석 결과. AI 분석 결과는 참고용이다. 아직 분석이 시작되지 않았으면 null.",
+        nullable = true,
+    )
+    val aiAnalysis: JobAiAnalysisAccessSnapshot?,
 ) {
     companion object {
         /**
@@ -68,6 +77,7 @@ data class JobDetailResponse(
             job: Job,
             company: CompanySummary?,
             viewCount: Long = job.viewCount,
+            aiAnalysis: JobAiAnalysisAccessSnapshot? = null,
         ): JobDetailResponse =
             JobDetailResponse(
                 jobId = requireNotNull(job.id) { "저장된 Job은 id를 가져야 합니다." },
@@ -88,6 +98,7 @@ data class JobDetailResponse(
                 closedAt = job.closedAt,
                 createdAt = job.createdAt,
                 updatedAt = job.updatedAt,
+                aiAnalysis = aiAnalysis,
             )
     }
 }
