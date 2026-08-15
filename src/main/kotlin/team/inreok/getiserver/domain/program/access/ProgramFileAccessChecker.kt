@@ -30,7 +30,8 @@ class ProgramFileAccessChecker(
         // 삭제됐거나 존재하지 않는 Program은 접근을 거부한다 -- 없는 것과 같이 다룬다
         // (InquiryFileAccessChecker와 동일한 원칙).
         val program = programRepository.findByIdAndDeletedAtIsNull(ownerId) ?: return false
-        val isDeveloper = RoleType.DEVELOPER in memberRoleQueryPort.findRoles(requesterId)
-        return canViewProgramFiles(program, requesterId, isDeveloper)
+        return canViewProgramFiles(program, requesterId) {
+            RoleType.DEVELOPER in memberRoleQueryPort.findRoles(requesterId)
+        }
     }
 }

@@ -667,6 +667,17 @@ class ProgramServiceImplTest {
     }
 
     @Test
+    fun `PUBLISHED 프로그램 상세 조회는 조기 반환으로 findRoles를 호출하지 않는다`() {
+        val program = programOf(status = ProgramStatus.PUBLISHED, createdByMemberId = 7L)
+        given(programRepository.findById(1L)).willReturn(Optional.of(program))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.PROGRAM, 1L)).willReturn(listOf(fileSnapshotOf(5L)))
+
+        service.getDetail(1L, requesterMemberId = 99L)
+
+        verify(memberRoleQueryPort, never()).findRoles(99L)
+    }
+
+    @Test
     fun `DRAFT 프로그램 상세는 등록자·담당교사·개발자가 아니면 빈 첨부파일 목록을 반환한다`() {
         val program = programOf(status = ProgramStatus.DRAFT, createdByMemberId = 7L)
         given(programRepository.findById(1L)).willReturn(Optional.of(program))

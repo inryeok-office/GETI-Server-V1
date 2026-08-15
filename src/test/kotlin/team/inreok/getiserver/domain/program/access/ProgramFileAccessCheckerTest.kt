@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
@@ -56,6 +58,16 @@ class ProgramFileAccessCheckerTest {
             .willReturn(programOf(status = ProgramStatus.CLOSED))
 
         assertThat(checker.canDownload(requesterId = 99L, ownerId = 1L)).isTrue()
+    }
+
+    @Test
+    fun `PUBLISHED 프로그램은 조기 반환으로 findRoles를 호출하지 않는다`() {
+        given(programRepository.findByIdAndDeletedAtIsNull(1L))
+            .willReturn(programOf(status = ProgramStatus.PUBLISHED))
+
+        checker.canDownload(requesterId = 99L, ownerId = 1L)
+
+        verify(memberRoleQueryPort, never()).findRoles(99L)
     }
 
     @Test

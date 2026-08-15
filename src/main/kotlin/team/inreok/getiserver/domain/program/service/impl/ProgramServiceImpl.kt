@@ -712,7 +712,7 @@ class ProgramServiceImpl(
         programId: Long,
         requesterMemberId: Long,
     ): List<ProgramFileResponse> {
-        val isDeveloper = RoleType.DEVELOPER in memberRoleQueryPort.findRoles(requesterMemberId)
+        val isDeveloper = { RoleType.DEVELOPER in memberRoleQueryPort.findRoles(requesterMemberId) }
         return if (canViewProgramFiles(program, requesterMemberId, isDeveloper)) {
             fileLinkPort.linkedFilesOf(FileOwnerType.PROGRAM, programId).map { it.toResponse() }
         } else {
