@@ -2,9 +2,11 @@ package team.inreok.getiserver.domain.application.service.impl
 
 import team.inreok.getiserver.domain.application.dto.ApplicationAnswer
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationFileResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.JobApplicationStatusHistory
+import team.inreok.getiserver.domain.file.link.FileSnapshot
 import tools.jackson.databind.ObjectMapper
 
 /**
@@ -13,10 +15,16 @@ import tools.jackson.databind.ObjectMapper
  * Issue #125)가 모두 같은 모양의 응답을 반환해 이 변환 로직을 공유한다. detekt
  * TooManyFunctions 한도 안에서 각 Service 클래스를 유지하기 위해 순수 함수로 분리했다
  * (JobApplicationEligibility.kt의 computeEligibilityReason과 같은 이유).
+ *
+ * [files]는 호출부가 `FileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, applicationId)`로
+ * 미리 조회해 전달한다(Issue #134) -- 이 함수를 순수 함수로 유지하기 위해 Port 호출 자체는
+ * 여기서 하지 않는다. 방금 생성된 초안처럼 애초에 연결된 파일이 있을 수 없는 호출부는 빈 목록을
+ * 그대로 넘긴다(불필요한 조회를 피함, `InquiryServiceImpl.create`와 동일한 판단).
  */
 fun toJobApplicationDraftResponse(
     objectMapper: ObjectMapper,
     application: JobApplication,
+    files: List<FileSnapshot>,
 ): JobApplicationDraftResponse =
     JobApplicationDraftResponse(
         applicationId = requireNotNull(application.id),
@@ -35,10 +43,20 @@ fun toJobApplicationDraftResponse(
         applicantDesiredJob = application.applicantDesiredJob,
         applicantTechStacks = readJsonStringList(objectMapper, application.applicantTechStacks),
         answers = readJsonAnswers(objectMapper, application.answers),
+        files = files.map(FileSnapshot::toJobApplicationFileResponse),
         submittedAt = application.submittedAt,
         withdrawnAt = application.withdrawnAt,
         createdAt = requireNotNull(application.createdAt),
         updatedAt = requireNotNull(application.updatedAt),
+    )
+
+private fun FileSnapshot.toJobApplicationFileResponse(): JobApplicationFileResponse =
+    JobApplicationFileResponse(
+        fileId = fileId,
+        originalName = originalName,
+        contentType = contentType,
+        size = size,
+        downloadUrl = "/api/v1/files/$fileId/download",
     )
 
 // 학생용(JobApplicationServiceImpl)·교사용(JobApplicationAdminServiceImpl) 이력 조회가 모두
