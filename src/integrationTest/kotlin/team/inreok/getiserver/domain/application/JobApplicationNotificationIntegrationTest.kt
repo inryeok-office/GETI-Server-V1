@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.data.domain.PageRequest
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
@@ -89,10 +91,13 @@ class JobApplicationNotificationIntegrationTest {
     @Autowired
     private lateinit var notificationRepository: NotificationRepository
 
+    @Autowired
+    private lateinit var transactionManager: PlatformTransactionManager
+
     @Test
     fun `APPROVE 처리 후 지원자에게 JOB_APPLICATION_STATUS_CHANGED 알림이 생성된다`() {
         val studentId = createStudent("approve")
-        val applicationId = createSubmittedApplication(studentId)
+        val applicationId = createApplication(studentId)
 
         jobApplicationAdminService.executeAction(
             applicationId,
@@ -112,7 +117,7 @@ class JobApplicationNotificationIntegrationTest {
     @Test
     fun `REQUEST_REVISION 처리 후 지원자에게 사유를 담은 알림이 생성된다`() {
         val studentId = createStudent("revision")
-        val applicationId = createSubmittedApplication(studentId)
+        val applicationId = createApplication(studentId)
 
         jobApplicationAdminService.executeAction(
             applicationId,
@@ -131,12 +136,38 @@ class JobApplicationNotificationIntegrationTest {
     }
 
     @Test
-    fun `허용되지 않은 상태에서 검토 Action이 거부돼 Rollback되면 알림이 생성되지 않는다`() {
+    fun `검토 Action이 성공해도 원본 Transaction이 Rollback되면 알림이 생성되지 않는다`() {
+        val studentId = createStudent("rollback")
+        val applicationId = createApplication(studentId)
+
+        // executeAction의 @Transactional(REQUIRED)이 이 바깥 Transaction에 참여하므로,
+        // publishEvent까지 정상 실행된 뒤 바깥에서 Rollback된다. AFTER_COMMIT Listener는
+        // Commit이 없었으니 실행되지 않아야 한다 -- 이것이 Issue #135가 요구한 검증이다.
+        val template = TransactionTemplate(transactionManager)
+        assertThatThrownBy {
+            template.executeWithoutResult {
+                jobApplicationAdminService.executeAction(
+                    applicationId,
+                    requesterMemberId = DEVELOPER_ID,
+                    isDeveloper = true,
+                    request = JobApplicationAdminActionRequest(JobApplicationAdminAction.APPROVE),
+                )
+                throw IllegalStateException("Rollback 유도")
+            }
+        }.isInstanceOf(IllegalStateException::class.java)
+
+        assertNoNotificationAppears(studentId)
+        assertThat(jobApplicationRepository.findById(applicationId).get().status)
+            .isEqualTo(JobApplicationStatus.SUBMITTED)
+    }
+
+    @Test
+    fun `허용되지 않은 상태의 검토 Action은 거부되고 알림도 생성되지 않는다`() {
         // JOB_APPLICATION_ADMIN_ACTION_ALLOWED_FROM은 APPROVE를 SUBMITTED에서만 허용한다
         // (JobApplicationAdminTransition.kt). DRAFT 상태에 APPROVE를 시도하면 검증 단계에서
         // 거부되어 상태 전이·이력 기록·Event 발행 중 어느 것도 일어나지 않는다.
-        val studentId = createStudent("rollback")
-        val applicationId = createSubmittedApplication(studentId, status = JobApplicationStatus.DRAFT)
+        val studentId = createStudent("rejected")
+        val applicationId = createApplication(studentId, status = JobApplicationStatus.DRAFT)
 
         assertThatThrownBy {
             jobApplicationAdminService.executeAction(
@@ -147,8 +178,6 @@ class JobApplicationNotificationIntegrationTest {
             )
         }.isInstanceOf(ApplicationActionNotAvailableException::class.java)
 
-        // AFTER_COMMIT Listener는 Commit되지 않은(애초에 시작되지도 않은) 상태 전이에서는
-        // 실행되지 않으므로 알림이 하나도 생기지 않아야 한다.
         assertNoNotificationAppears(studentId)
     }
 
@@ -164,7 +193,9 @@ class JobApplicationNotificationIntegrationTest {
             Thread.sleep(POLL_INTERVAL_MILLIS)
             notifications = notificationsOf(memberId)
         }
-        assertThat(notifications).hasSize(1)
+        assertThat(notifications)
+            .`as`("%dms 안에 memberId=%d 알림이 생성되지 않았다", AWAIT_TIMEOUT_MILLIS, memberId)
+            .hasSize(1)
         return notifications.single()
     }
 
@@ -197,7 +228,7 @@ class JobApplicationNotificationIntegrationTest {
         return requireNotNull(member.id)
     }
 
-    private fun createSubmittedApplication(
+    private fun createApplication(
         studentMemberId: Long,
         status: JobApplicationStatus = JobApplicationStatus.SUBMITTED,
     ): Long {

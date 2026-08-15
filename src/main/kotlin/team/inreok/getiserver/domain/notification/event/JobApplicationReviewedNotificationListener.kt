@@ -66,11 +66,28 @@ class JobApplicationReviewedNotificationListener(
 
     private fun titleOf(action: String): String =
         when (action) {
-            "ALLOW_EDIT" -> "지원서 수정이 허용되었습니다"
-            "REQUEST_REVISION" -> "지원서 보완이 필요합니다"
-            "APPROVE" -> "지원이 승인되었습니다"
-            "REJECT" -> "지원이 거절되었습니다"
-            else -> "지원서 상태가 변경되었습니다"
+            "ALLOW_EDIT" -> {
+                "지원서 수정이 허용되었습니다"
+            }
+
+            "REQUEST_REVISION" -> {
+                "지원서 보완이 필요합니다"
+            }
+
+            "APPROVE" -> {
+                "지원이 승인되었습니다"
+            }
+
+            "REJECT" -> {
+                "지원이 거절되었습니다"
+            }
+
+            else -> {
+                // action이 String이라 Compiler가 누락을 잡아주지 않는다. JobApplicationAdminAction에
+                // 새 Action이 추가되면 조용히 기본 문구로 나가므로 최소한 흔적을 남긴다.
+                log.warn("알 수 없는 검토 Action이라 기본 제목을 사용한다(action={})", action)
+                "지원서 상태가 변경되었습니다"
+            }
         }
 
     /**

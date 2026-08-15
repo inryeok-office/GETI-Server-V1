@@ -5,8 +5,10 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.any
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.context.ApplicationEventPublisher
@@ -221,6 +223,59 @@ class JobApplicationAdminServiceImplTest {
             JobApplicationReviewedEvent(applicationId = 1L, studentMemberId = 7L, action = "APPROVE", reason = null),
         )
     }
+
+    // 코드리뷰 반영(PR #143) -- APPROVE 하나만으로는 reason이 실리는 경로를 검증하지 못해
+    // 사유 전달이 핵심인 REQUEST_REVISION도 함께 단정한다.
+    @Test
+    fun `REQUEST_REVISION이 성공하면 사유를 담은 JobApplicationReviewedEvent를 발행한다`() {
+        given(
+            jobApplicationRepository.findByIdForUpdate(1L),
+        ).willReturn(applicationOf(status = JobApplicationStatus.SUBMITTED, applicantMemberId = 7L))
+        given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf(createdByMemberId = 100L))
+
+        service.executeAction(
+            1L,
+            100L,
+            isDeveloper = false,
+            JobApplicationAdminActionRequest(
+                JobApplicationAdminAction.REQUEST_REVISION,
+                reason = "포트폴리오 링크를 추가해주세요.",
+            ),
+        )
+
+        verify(eventPublisher).publishEvent(
+            JobApplicationReviewedEvent(
+                applicationId = 1L,
+                studentMemberId = 7L,
+                action = "REQUEST_REVISION",
+                reason = "포트폴리오 링크를 추가해주세요.",
+            ),
+        )
+    }
+
+    @Test
+    fun `Action이 거부되면 Event를 발행하지 않는다`() {
+        given(
+            jobApplicationRepository.findByIdForUpdate(1L),
+        ).willReturn(applicationOf(status = JobApplicationStatus.DRAFT, applicantMemberId = 7L))
+        given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf(createdByMemberId = 100L))
+
+        assertThatThrownBy {
+            service.executeAction(
+                1L,
+                100L,
+                isDeveloper = false,
+                JobApplicationAdminActionRequest(JobApplicationAdminAction.APPROVE),
+            )
+        }.isInstanceOf(ApplicationActionNotAvailableException::class.java)
+
+        verify(eventPublisher, never()).publishEvent(any(JobApplicationReviewedEvent::class.java) ?: dummyEvent())
+    }
+
+    // Kotlin non-null 파라미터에 bare any()를 쓰면 null 반환으로 NPE가 나므로 non-null Fallback을 둔다
+    // (OAuthMemberPortImplTest.anyMember와 동일한 판단).
+    private fun dummyEvent() =
+        JobApplicationReviewedEvent(applicationId = 0L, studentMemberId = 0L, action = "", reason = null)
 
     @Test
     fun `담당 교사가 APPROVE하면 APPROVED로 전이한다`() {
