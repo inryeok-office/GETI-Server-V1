@@ -20,7 +20,7 @@ Spring Modulith 도입은 즉시 MSA로 분리한다는 뜻이 아니다. 현재
 - Root Package: `team.inreok.getiserver`
 - `domain` 아래에 16개 Domain Package가 있다. 최신 19개 Table 최소 ERD([`erd.md`](./erd.md) 참고)를 구현한 15개 Domain(`member`, `auth`, `file`, `company`, `job`, `ai`, `recommendation`, `application`, `program`, `portfolio`, `notification`, `inquiry`, `collector`, `operation`, `audit`)에, 이후 Elasticsearch 기반 채용 공고 검색을 담당하는 `search`(Issue #69)가 추가됐다. `search`는 색인 상태 관리를 위한 자체 Table(`SearchIndexFailure`/`SearchReindexRun`)도 갖지만, `erd.md` 갱신은 이 문서의 범위가 아니다.
 - `global`은 공통 기반 Package로 `error`, `web`, `openapi`, `health`, `security`를 담는다. `config`/`response`/`persistence`는 아직 실제 Class가 없어 만들지 않았다(아래 "global Package 책임" 참고).
-- 각 Domain Package는 담당 책임만큼만 Sub-package를 갖는다. `ai`/`recommendation`/`portfolio`/`operation`/`audit`는 아직 `entity`(+ 필요하면 `entity/type`)와 `repository`만 갖고, 나머지 11개 Domain은 실제 기능이 구현되어 `service`/`controller`/`dto`/`exception` 등을 추가로 갖는다(아래 "Domain Package 내부 구조" 참고).
+- 각 Domain Package는 담당 책임만큼만 Sub-package를 갖는다. `recommendation`/`portfolio`/`operation`/`audit`는 아직 `entity`(+ 필요하면 `entity/type`)와 `repository`만 갖고, `ai`를 포함한 나머지 12개 Domain은 실제 기능이 구현되어 `service`/`controller`/`dto`/`exception` 등을 추가로 갖는다(아래 "Domain Package 내부 구조" 참고). `ai`는 AI Analysis Phase 1(Issue #132)에서 OpenAI 연동 Use Case/Controller가 추가됐다.
 - Module 간 FK는 JPA 연관관계가 아니라 `Long`/`UUID` ID Column으로만 참조한다(Entity 사이에 직접적인 Java/Kotlin 타입 의존성은 없음). 다만 여러 Domain이 실제 기능(다른 Domain 정보 조회, Event 구독, 파일 접근 권한 판단 등)을 구현하면서 서로가 공개한 `query`/`event`/`upsert`/`external`/`link`/`access`/`entity.type` 같은 Named Interface Package를 통해 컴파일 시점 의존성을 갖는다(아래 "Domain 간 허용 의존" 참고). 다른 Domain의 비공개 구현(`entity`/`repository`/`service`/`controller` 등 Named Interface로 공개되지 않은 Package)을 직접 참조하는 경우는 없다.
 - `./gradlew test --tests "*ModularityTest"`(`modules.verify()`)가 16개 Domain Module + `global`(총 17개 Application Module) 구성에서 순환 의존성이나 비공개 접근 없이 통과한다.
 
@@ -95,7 +95,7 @@ team.inreok.getiserver.domain
 ├── auth         entity, repository, service(+impl), controller, dto, exception (Refresh Token 발급/재발급)
 ├── file         entity(+type), repository, service(+impl), controller, dto, exception, link, access, policy, storage
 ├── company      entity(+type), repository, service(+impl), controller, dto, exception, query, external(+impl), access
-├── ai           entity(+type), repository (JobAiAnalysis — 아직 Service/Controller 없음)
+├── ai           entity(+type), repository, service(+impl), controller, dto, exception, query, event, config, provider(OpenAI Adapter) (AI Analysis Phase 1, Issue #132)
 ├── recommendation entity(+type), repository (MemberJobPreference, Recommendation — 아직 Service/Controller 없음)
 ├── application  entity(+type), repository, service(+impl), controller, dto, exception, query, access
 ├── program      entity(+type), repository, service(+impl), controller, dto, exception, query, event, scheduler
@@ -241,6 +241,8 @@ Module 간 순환 의존성을 만들지 않고, 다른 Module의 내부 구현(
 위 세 사례 이후로는 같은 방식이 여러 Domain에 반복해서 쓰이고 있어 사례마다 개별 서술하지 않는다. 대표적으로 `query`(다른 Domain에 공개하는 읽기 전용 조회 Port + Snapshot/DTO — 예: `CompanyQuery`, `JobIndexQueryPort`, `JobDiscordPayloadQueryPort`, `JobNotificationTargetQueryPort`, `JobApplicationSnapshotQueryPort`, `InquiryDiscordPayloadQueryPort`, `ProgramNotificationTargetQueryPort`, `ProgramDiscordPayloadQueryPort`, `MemberApplicantSnapshotQueryPort`, `InquiryMemberSnapshotQueryPort`, `ProgramFormLinkQueryPort`), `event`(다른 Domain의 Listener가 구독하는 Domain Event — 예: `JobChangedEvent`, `InquiryCreatedEvent`, `InquiryAnsweredEvent`), `link`/`access`(File 업로드·접근권한 계약 — 예: `FileLinkPort`, `FileUrlPort`, `FileAccessChecker`) Package 이름으로 Company/Job/Member/Program/Inquiry/File/Application Domain이 각자 필요한 계약을 공개한다. `search`가 `job.query`/`company.query`를, `notification`이 `job.query`/`program.query`/`inquiry.query`를 참조하는 것이 그 예다. 이 저장소의 실제 Domain 간 소비 관계 전체는 코드 자체가 최종 근거이며, 이 문서에 모든 조합을 나열하지 않는다.
 
 `operation.entity.type`처럼 Enum만 공개할 때는 Kotlin이 Package-level Annotation을 지원하지 않아 `package-info.java`(`src/main/java`)로 선언하고, 위 사례들처럼 특정 Interface/데이터 Class/Enum만 선택적으로 공개할 때는 그 Kotlin 파일에서 `org.springframework.modulith.NamedInterface`를 타입에 직접 붙인다. 두 방식 모두 이 Package(또는 그 안에서 Annotation이 붙은 타입)만 다른 Module에 공개하고, 같은 Domain의 나머지 비공개 구현(`entity`, `repository`, `service`, `controller` 등)은 여전히 접근할 수 없다. `FileAccessChecker`처럼 소유 Domain이 공개한 SPI Interface를 소비 Domain이 구현해 Bean으로 등록하는 경우(`company`/`member`/`inquiry`/`application`의 `access` Package)도 있는데, 이때 구현체 자체는 다시 공개할 필요가 없다.
+
+AI Analysis Phase 1(Issue #132)이 `FileAccessChecker`식 역방향 SPI의 두 번째 사례다. `ai`는 분석 Trigger(`job.event.JobChangedEvent` 구독)와 Prompt 입력(`job.query.JobAiAnalysisInputQueryPort`) 때문에 이미 `job`에 의존한다. Job 상세 응답(`aiAnalysis`)에 분석 결과를 실으려면 반대로 `job`이 `ai`를 읽어야 하는데, 그러면 `ai -> job -> ai` 순환 의존이 생긴다. 그래서 `job`이 `job.access.JobAiAnalysisAccessor`(SPI)를 정의하고 `ai`(`JobAiAnalysisAccessorImpl`)가 구현해 Bean으로 등록한다 -- `job`은 이 Interface(자신이 소유한 타입)에만 의존하고 `ai`의 어떤 Package도 참조하지 않는다. `AiFitLevel`/`AiDifficulty`/`AiStatus`처럼 `ai`가 소유한 Enum도 `job`이 직접 참조하면 다시 순환이 생기므로, `JobAiAnalysisAccessSnapshot`은 그 값을 Enum이 아닌 String(`AiStatus.name` 등)으로 담는다(`JobIndexSnapshot.status`가 `JobStatus`를 String으로 노출하는 것과 같은 이유). 같은 목적으로 `ai`는 Tech Stack 정규화 매칭을 위해 `member.query.TechStackMatchQueryPort`(일반적인 `query` 방향, `member`가 공개하고 `ai`가 참조)도 소비한다.
 
 새로운 Domain 간 의존이 필요해지면 이 방식(Named Interface로 필요한 Package/타입만 명시적으로 공개)을 그대로 따른다.
 

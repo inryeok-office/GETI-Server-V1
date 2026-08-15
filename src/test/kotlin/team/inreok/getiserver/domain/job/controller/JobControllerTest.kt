@@ -136,6 +136,7 @@ class JobControllerTest
             closedAt = null,
             createdAt = LocalDateTime.of(2026, 7, 20, 10, 0),
             updatedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
+            aiAnalysis = null,
         )
 
         private companion object {
