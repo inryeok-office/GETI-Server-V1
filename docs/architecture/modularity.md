@@ -97,7 +97,7 @@ team.inreok.getiserver.domain
 ├── company      entity(+type), repository, service(+impl), controller, dto, exception, query, external(+impl), access
 ├── ai           entity(+type), repository (JobAiAnalysis — 아직 Service/Controller 없음)
 ├── recommendation entity(+type), repository (MemberJobPreference, Recommendation — 아직 Service/Controller 없음)
-├── application  entity(+type), repository, service(+impl), controller, dto, exception, query
+├── application  entity(+type), repository, service(+impl), controller, dto, exception, query, access
 ├── program      entity(+type), repository, service(+impl), controller, dto, exception, query, event, scheduler
 ├── portfolio    entity(+type), repository (PortfolioRequest, PortfolioSubmission — 아직 Service/Controller 없음)
 ├── notification entity(+type), repository, service(+impl), controller, dto, exception, event, scheduler, config (인앱 알림 + Discord Delivery)
@@ -240,7 +240,7 @@ Module 간 순환 의존성을 만들지 않고, 다른 Module의 내부 구현(
 
 위 세 사례 이후로는 같은 방식이 여러 Domain에 반복해서 쓰이고 있어 사례마다 개별 서술하지 않는다. 대표적으로 `query`(다른 Domain에 공개하는 읽기 전용 조회 Port + Snapshot/DTO — 예: `CompanyQuery`, `JobIndexQueryPort`, `JobDiscordPayloadQueryPort`, `JobNotificationTargetQueryPort`, `JobApplicationSnapshotQueryPort`, `InquiryDiscordPayloadQueryPort`, `ProgramNotificationTargetQueryPort`, `ProgramDiscordPayloadQueryPort`, `MemberApplicantSnapshotQueryPort`, `InquiryMemberSnapshotQueryPort`, `ProgramFormLinkQueryPort`), `event`(다른 Domain의 Listener가 구독하는 Domain Event — 예: `JobChangedEvent`, `InquiryCreatedEvent`, `InquiryAnsweredEvent`), `link`/`access`(File 업로드·접근권한 계약 — 예: `FileLinkPort`, `FileUrlPort`, `FileAccessChecker`) Package 이름으로 Company/Job/Member/Program/Inquiry/File/Application Domain이 각자 필요한 계약을 공개한다. `search`가 `job.query`/`company.query`를, `notification`이 `job.query`/`program.query`/`inquiry.query`를 참조하는 것이 그 예다. 이 저장소의 실제 Domain 간 소비 관계 전체는 코드 자체가 최종 근거이며, 이 문서에 모든 조합을 나열하지 않는다.
 
-`operation.entity.type`처럼 Enum만 공개할 때는 Kotlin이 Package-level Annotation을 지원하지 않아 `package-info.java`(`src/main/java`)로 선언하고, 위 사례들처럼 특정 Interface/데이터 Class/Enum만 선택적으로 공개할 때는 그 Kotlin 파일에서 `org.springframework.modulith.NamedInterface`를 타입에 직접 붙인다. 두 방식 모두 이 Package(또는 그 안에서 Annotation이 붙은 타입)만 다른 Module에 공개하고, 같은 Domain의 나머지 비공개 구현(`entity`, `repository`, `service`, `controller` 등)은 여전히 접근할 수 없다. `FileAccessChecker`처럼 소유 Domain이 공개한 SPI Interface를 소비 Domain이 구현해 Bean으로 등록하는 경우(`company`/`member`/`inquiry`의 `access` Package)도 있는데, 이때 구현체 자체는 다시 공개할 필요가 없다.
+`operation.entity.type`처럼 Enum만 공개할 때는 Kotlin이 Package-level Annotation을 지원하지 않아 `package-info.java`(`src/main/java`)로 선언하고, 위 사례들처럼 특정 Interface/데이터 Class/Enum만 선택적으로 공개할 때는 그 Kotlin 파일에서 `org.springframework.modulith.NamedInterface`를 타입에 직접 붙인다. 두 방식 모두 이 Package(또는 그 안에서 Annotation이 붙은 타입)만 다른 Module에 공개하고, 같은 Domain의 나머지 비공개 구현(`entity`, `repository`, `service`, `controller` 등)은 여전히 접근할 수 없다. `FileAccessChecker`처럼 소유 Domain이 공개한 SPI Interface를 소비 Domain이 구현해 Bean으로 등록하는 경우(`company`/`member`/`inquiry`/`application`의 `access` Package)도 있는데, 이때 구현체 자체는 다시 공개할 필요가 없다.
 
 새로운 Domain 간 의존이 필요해지면 이 방식(Named Interface로 필요한 Package/타입만 명시적으로 공개)을 그대로 따른다.
 

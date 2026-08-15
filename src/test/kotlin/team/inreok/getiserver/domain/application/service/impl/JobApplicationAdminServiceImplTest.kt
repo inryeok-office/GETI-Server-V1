@@ -22,6 +22,9 @@ import team.inreok.getiserver.domain.application.exception.ApplicationReviewForb
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.file.link.FileSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
 import tools.jackson.databind.json.JsonMapper
@@ -39,11 +42,15 @@ class JobApplicationAdminServiceImplTest {
     @Mock
     private lateinit var jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository
 
+    @Mock
+    private lateinit var fileLinkPort: FileLinkPort
+
     private val service: JobApplicationAdminService by lazy {
         JobApplicationAdminServiceImpl(
             jobApplicationRepository,
             jobApplicationSnapshotQueryPort,
             jobApplicationStatusHistoryRepository,
+            fileLinkPort,
             JsonMapper(),
         )
     }
@@ -123,6 +130,24 @@ class JobApplicationAdminServiceImplTest {
         ).willReturn(Optional.of(applicationOf(status = JobApplicationStatus.DRAFT)))
 
         assertThatThrownBy { service.getDetail(1L) }.isInstanceOf(ApplicationNotFoundException::class.java)
+    }
+
+    // PR #142 Review 반영 -- FileLinkPort Mock만 추가됐을 뿐 응답의 files 매핑을 단정하지 않았다.
+    @Test
+    fun `상세 조회 응답에는 File 도메인에 연결된 첨부파일 목록이 담긴다`() {
+        given(jobApplicationRepository.findById(1L)).willReturn(Optional.of(applicationOf()))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, 1L))
+            .willReturn(
+                listOf(
+                    FileSnapshot(fileId = 9L, originalName = "resume.pdf", contentType = "application/pdf", size = 200),
+                ),
+            )
+
+        val result = service.getDetail(1L)
+
+        assertThat(result.files).hasSize(1)
+        assertThat(result.files[0].fileId).isEqualTo(9L)
+        assertThat(result.files[0].downloadUrl).isEqualTo("/api/v1/files/9/download")
     }
 
     // ---------- executeAction ----------

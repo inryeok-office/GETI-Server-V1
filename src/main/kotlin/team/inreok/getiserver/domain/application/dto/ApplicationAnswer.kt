@@ -16,8 +16,9 @@ data class ApplicationAnswer(
     val value: JsonNode? = null,
     @param:Schema(
         description =
-            "FILE 유형 답변의 첨부파일 ID 목록. File 도메인 연동 전이라 이번 Phase에서는 " +
-                "값을 검증하지 않고 그대로 왕복만 시킨다(Phase 6에서 실제 연동).",
+            "FILE 유형 답변의 첨부파일 ID 목록(File 도메인 File ID, Issue #134). 임시저장 " +
+                "시점에는 값을 검증하지 않고 그대로 왕복만 시키며, SUBMIT/RESUBMIT 시점에 " +
+                "소유권·목적(JOB_APPLICATION)·상태를 검증해 실제로 연결한다.",
         nullable = true,
     )
     val fileIds: List<Long>? = null,

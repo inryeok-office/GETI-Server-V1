@@ -83,6 +83,7 @@ class JobApplicationAdminControllerTest
                 applicantDesiredJob = null,
                 applicantTechStacks = emptyList(),
                 answers = emptyList(),
+                files = emptyList(),
                 submittedAt = fixedTime,
                 withdrawnAt = null,
                 createdAt = fixedTime,

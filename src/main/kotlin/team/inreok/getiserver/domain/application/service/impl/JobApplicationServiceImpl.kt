@@ -27,6 +27,8 @@ import team.inreok.getiserver.domain.application.repository.JobApplicationReposi
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationSubmissionRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationService
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.link.FileLinkPort
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
 import tools.jackson.databind.ObjectMapper
@@ -108,6 +110,7 @@ class JobApplicationServiceImpl(
     private val memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort,
     private val jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository,
     private val jobApplicationSubmissionRepository: JobApplicationSubmissionRepository,
+    private val fileLinkPort: FileLinkPort,
     private val objectMapper: ObjectMapper,
 ) : JobApplicationService {
     private val log = LoggerFactory.getLogger(JobApplicationServiceImpl::class.java)
@@ -199,7 +202,10 @@ class JobApplicationServiceImpl(
                 }
             }
 
-        return toJobApplicationDraftResponse(objectMapper, saveNewApplication(application))
+        // 방금 생성한 초안이라 애초에 연결된 파일이 있을 수 없다(id가 이 저장 이전에는 없었다).
+        // 불필요한 File 도메인 조회를 피하기 위해 빈 목록을 그대로 넘긴다(InquiryServiceImpl.create와
+        // 동일한 판단, toJobApplicationDraftResponse KDoc 참고).
+        return toJobApplicationDraftResponse(objectMapper, saveNewApplication(application), files = emptyList())
     }
 
     @Transactional
@@ -221,7 +227,7 @@ class JobApplicationServiceImpl(
         request.answers?.let { application.answers = writeAnswers(it) }
 
         jobApplicationRepository.flush()
-        return toJobApplicationDraftResponse(objectMapper, application)
+        return toJobApplicationDraftResponse(objectMapper, application, currentFiles(application))
     }
 
     @Transactional
@@ -242,6 +248,12 @@ class JobApplicationServiceImpl(
         val fromStatus = application.status
         requireAllowedTransition(fromStatus, request.action)
         applyJobApplicationAction(formVersionRepository, objectMapper, application, request.action)
+        // 답변(FILE 유형)이 참조하는 fileId를 실제로 지원서에 연결한다(Issue #134). 상태 전이가
+        // 이미 성공한 뒤에만 호출해야 하고, 이 연결도 같은 Transaction 안에서 원자적으로 처리되어야
+        // 한다(연결만 성공하고 상태 전이가 Rollback되는 상황을 만들지 않는다).
+        if (request.action == JobApplicationAction.SUBMIT || request.action == JobApplicationAction.RESUBMIT) {
+            syncApplicationFiles(fileLinkPort, objectMapper, application, studentMemberId)
+        }
 
         jobApplicationRepository.flush()
         // 상태 변경(flush)과 이력·Snapshot 저장이 같은 Transaction(@Transactional) 안에서
@@ -257,7 +269,7 @@ class JobApplicationServiceImpl(
         if (request.action == JobApplicationAction.SUBMIT || request.action == JobApplicationAction.RESUBMIT) {
             recordSubmissionSnapshot(jobApplicationSubmissionRepository, application)
         }
-        return toJobApplicationDraftResponse(objectMapper, application)
+        return toJobApplicationDraftResponse(objectMapper, application, currentFiles(application))
     }
 
     @Transactional(readOnly = true)
@@ -304,4 +316,10 @@ class JobApplicationServiceImpl(
         if (values.isEmpty()) null else objectMapper.writeValueAsString(values)
 
     private fun writeAnswers(answers: List<ApplicationAnswer>): String = objectMapper.writeValueAsString(answers)
+
+    // saveDraft/executeAction 응답에 실을 "현재 연결된 첨부파일" 목록을 조회한다(Issue #134,
+    // toJobApplicationDraftResponse KDoc 참고). createDraft는 애초에 연결된 파일이 있을 수 없어 이
+    // Method를 쓰지 않는다.
+    private fun currentFiles(application: JobApplication) =
+        fileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, requireNotNull(application.id))
 }
