@@ -2,7 +2,9 @@ package team.inreok.getiserver.domain.application.service.impl
 
 import team.inreok.getiserver.domain.application.dto.ApplicationAnswer
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.JobApplication
+import team.inreok.getiserver.domain.application.entity.JobApplicationStatusHistory
 import tools.jackson.databind.ObjectMapper
 
 /**
@@ -37,6 +39,19 @@ fun toJobApplicationDraftResponse(
         withdrawnAt = application.withdrawnAt,
         createdAt = requireNotNull(application.createdAt),
         updatedAt = requireNotNull(application.updatedAt),
+    )
+
+// 학생용(JobApplicationServiceImpl)·교사용(JobApplicationAdminServiceImpl) 이력 조회가 모두
+// 같은 모양의 응답을 반환해 이 변환도 함께 공유한다(Issue #133).
+fun toJobApplicationStatusHistoryResponse(history: JobApplicationStatusHistory): JobApplicationStatusHistoryResponse =
+    JobApplicationStatusHistoryResponse(
+        historyId = requireNotNull(history.id),
+        fromStatus = history.fromStatus,
+        toStatus = history.toStatus,
+        action = history.action,
+        actorMemberId = history.actorMemberId,
+        reason = history.reason,
+        createdAt = requireNotNull(history.createdAt),
     )
 
 private fun readJsonStringList(

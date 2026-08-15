@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
@@ -122,4 +123,23 @@ class JobApplicationAdminController(
             jobApplicationAdminService.executeAction(applicationId, requesterMemberId, isDeveloper, request),
         )
     }
+
+    @Operation(
+        summary = "지원서 상태 변경 이력 조회",
+        description =
+            "지원서의 상태 변경 이력(from/to 상태, Action, 수행자, 사유, 시각)을 오래된 순으로 반환한다(Issue #133). " +
+                "담당 공고 여부와 무관하게 모든 교사·개발자가 조회할 수 있다. DRAFT 지원서는 상세 조회와 동일하게 404를 반환한다.",
+    )
+    @ApiResponses(
+        SwaggerApiResponse(responseCode = "200", description = "조회 성공(이력이 없으면 빈 목록)"),
+        SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
+        SwaggerApiResponse(responseCode = "403", description = "교사 또는 개발자 권한이 없음 (FORBIDDEN)"),
+        SwaggerApiResponse(responseCode = "404", description = "지원서가 없음(DRAFT 상태 포함) (APPLICATION_NOT_FOUND)"),
+        SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
+    )
+    @GetMapping("/{applicationId}/history")
+    fun getHistory(
+        @Parameter(description = "이력을 조회할 지원서 ID", example = "1") @PathVariable applicationId: Long,
+    ): ApiResponse<List<JobApplicationStatusHistoryResponse>> =
+        ApiResponse.of(jobApplicationAdminService.getHistory(applicationId))
 }

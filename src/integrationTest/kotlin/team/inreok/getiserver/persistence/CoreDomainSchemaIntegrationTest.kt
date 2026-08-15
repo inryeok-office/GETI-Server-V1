@@ -113,7 +113,7 @@ class CoreDomainSchemaIntegrationTest
         private val auditLogRepository: AuditLogRepository,
     ) {
         @Test
-        fun `Flyway로 생성한 Schema에는 정확히 36개의 비즈니스 Table이 있다`() {
+        fun `Flyway로 생성한 Schema에는 정확히 38개의 비즈니스 Table이 있다`() {
             // persistence_probe는 integrationTest 전용 기술 검증 Table(V1__create_persistence_probe.sql)이며
             // GETI 비즈니스 Domain을 나타내지 않으므로 집계에서 제외한다. 최소 19개 Table ERD 기준
             // (docs/architecture/erd.md) 이후 Member 도메인 전공/기술 스택 정규화를 위해
@@ -131,7 +131,9 @@ class CoreDomainSchemaIntegrationTest
             // inquiry_answers 1개 Table을 추가해 34개가 되었다(V18 Migration). Notification 도메인이
             // Discord 전달 상태의 Source of Truth가 되면서 discord_deliveries,
             // discord_delivery_attempts 2개 Table을 추가해 36개가 되었다(V19 Migration,
-            // docs/notification/discord-delivery-plan.md).
+            // docs/notification/discord-delivery-plan.md). Application Phase 5(Epic #75,
+            // Issue #133) 상태 이력·제출 Snapshot을 위해 job_application_status_histories,
+            // job_application_submissions 2개 Table을 추가해 38개가 되었다(V20 Migration).
             @Suppress("UNCHECKED_CAST")
             val tableCount =
                 entityManager
@@ -144,7 +146,7 @@ class CoreDomainSchemaIntegrationTest
                         """.trimIndent(),
                     ).singleResult as Number
 
-            assertThat(tableCount.toInt()).isEqualTo(36)
+            assertThat(tableCount.toInt()).isEqualTo(38)
         }
 
         @Test

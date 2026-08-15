@@ -9,6 +9,7 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.BDDMockito.given
 import org.mockito.Captor
 import org.mockito.Mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.dao.DataIntegrityViolationException
@@ -22,6 +23,8 @@ import team.inreok.getiserver.domain.application.entity.Form
 import team.inreok.getiserver.domain.application.entity.FormVersion
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.JobApplicationForm
+import team.inreok.getiserver.domain.application.entity.JobApplicationStatusHistory
+import team.inreok.getiserver.domain.application.entity.JobApplicationSubmission
 import team.inreok.getiserver.domain.application.entity.type.FormFieldType
 import team.inreok.getiserver.domain.application.entity.type.FormStatus
 import team.inreok.getiserver.domain.application.entity.type.FormType
@@ -36,6 +39,8 @@ import team.inreok.getiserver.domain.application.repository.FormRepository
 import team.inreok.getiserver.domain.application.repository.FormVersionRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationFormRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
+import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
+import team.inreok.getiserver.domain.application.repository.JobApplicationSubmissionRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationService
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
@@ -65,6 +70,12 @@ class JobApplicationServiceImplTest {
     @Mock
     private lateinit var memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort
 
+    @Mock
+    private lateinit var jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository
+
+    @Mock
+    private lateinit var jobApplicationSubmissionRepository: JobApplicationSubmissionRepository
+
     @Captor
     private lateinit var jobApplicationCaptor: ArgumentCaptor<JobApplication>
 
@@ -78,6 +89,8 @@ class JobApplicationServiceImplTest {
             formVersionRepository,
             jobApplicationSnapshotQueryPort,
             memberApplicantSnapshotQueryPort,
+            jobApplicationStatusHistoryRepository,
+            jobApplicationSubmissionRepository,
             jsonMapper,
         )
     }
@@ -430,6 +443,63 @@ class JobApplicationServiceImplTest {
     }
 
     @Test
+    fun `SUBMIT하면 상태 이력과 제출 Snapshot을 같은 Transaction에서 함께 기록한다`() {
+        val application =
+            draftOf(formId = 10L, formVersion = 1, answers = answersJsonOf("motivation"))
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(application)
+        given(formVersionRepository.findByFormIdAndVersion(10L, 1)).willReturn(formVersionOf())
+        given(jobApplicationSubmissionRepository.findTopByApplicationIdOrderBySubmissionNumberDesc(1L))
+            .willReturn(null)
+
+        service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.SUBMIT))
+
+        val historyCaptor = ArgumentCaptor.forClass(JobApplicationStatusHistory::class.java)
+        verify(jobApplicationStatusHistoryRepository).save(historyCaptor.capture())
+        assertThat(historyCaptor.value.fromStatus).isEqualTo(JobApplicationStatus.DRAFT)
+        assertThat(historyCaptor.value.toStatus).isEqualTo(JobApplicationStatus.SUBMITTED)
+        assertThat(historyCaptor.value.action).isEqualTo("SUBMIT")
+        assertThat(historyCaptor.value.actorMemberId).isEqualTo(1L)
+        assertThat(historyCaptor.value.reason).isNull()
+
+        val submissionCaptor = ArgumentCaptor.forClass(JobApplicationSubmission::class.java)
+        verify(jobApplicationSubmissionRepository).save(submissionCaptor.capture())
+        assertThat(submissionCaptor.value.submissionNumber).isEqualTo(1)
+        assertThat(submissionCaptor.value.formId).isEqualTo(10L)
+        assertThat(submissionCaptor.value.formVersion).isEqualTo(1)
+        assertThat(submissionCaptor.value.answers).isEqualTo(application.answers)
+    }
+
+    @Test
+    fun `재제출이면 이전 제출 Snapshot 다음 submissionNumber로 기록한다`() {
+        val application =
+            draftOf(
+                status = JobApplicationStatus.REVISION_REQUESTED,
+                formId = 10L,
+                formVersion = 1,
+                answers = answersJsonOf("motivation"),
+            )
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(application)
+        given(formVersionRepository.findByFormIdAndVersion(10L, 1)).willReturn(formVersionOf())
+        given(jobApplicationSubmissionRepository.findTopByApplicationIdOrderBySubmissionNumberDesc(1L))
+            .willReturn(
+                JobApplicationSubmission(
+                    applicationId = 1L,
+                    submissionNumber = 1,
+                    formId = 10L,
+                    formVersion = 1,
+                    answers = "[]",
+                    submittedAt = fixedTime,
+                ),
+            )
+
+        service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.RESUBMIT))
+
+        val submissionCaptor = ArgumentCaptor.forClass(JobApplicationSubmission::class.java)
+        verify(jobApplicationSubmissionRepository).save(submissionCaptor.capture())
+        assertThat(submissionCaptor.value.submissionNumber).isEqualTo(2)
+    }
+
+    @Test
     fun `필수 답변이 비어 있으면 SUBMIT하면 ApplicationRequiredAnswerMissingException을 던진다`() {
         val application = draftOf(formId = 10L, formVersion = 1, answers = "[]")
         given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(application)
@@ -537,6 +607,20 @@ class JobApplicationServiceImplTest {
     }
 
     @Test
+    fun `WITHDRAW하면 상태 이력만 기록하고 제출 Snapshot은 남기지 않는다`() {
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(draftOf())
+
+        service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.WITHDRAW))
+
+        val historyCaptor = ArgumentCaptor.forClass(JobApplicationStatusHistory::class.java)
+        verify(jobApplicationStatusHistoryRepository).save(historyCaptor.capture())
+        assertThat(historyCaptor.value.fromStatus).isEqualTo(JobApplicationStatus.DRAFT)
+        assertThat(historyCaptor.value.toStatus).isEqualTo(JobApplicationStatus.WITHDRAWN)
+        assertThat(historyCaptor.value.action).isEqualTo("WITHDRAW")
+        verify(jobApplicationSubmissionRepository, never()).save(any())
+    }
+
+    @Test
     fun `최종 상태의 지원서를 WITHDRAW하면 ApplicationActionNotAvailableException을 던진다`() {
         given(jobApplicationRepository.findByIdForUpdate(1L))
             .willReturn(draftOf(status = JobApplicationStatus.APPROVED))
@@ -561,5 +645,47 @@ class JobApplicationServiceImplTest {
         assertThatThrownBy {
             service.executeAction(1L, 2L, JobApplicationActionRequest(JobApplicationAction.WITHDRAW))
         }.isInstanceOf(ApplicationAccessForbiddenException::class.java)
+    }
+
+    // ---------- getHistory ----------
+
+    @Test
+    fun `본인 지원서의 상태 이력을 오래된 순으로 반환한다`() {
+        given(jobApplicationRepository.findById(1L)).willReturn(Optional.of(draftOf(applicantMemberId = 1L)))
+        val history =
+            JobApplicationStatusHistory(
+                applicationId = 1L,
+                fromStatus = JobApplicationStatus.DRAFT,
+                toStatus = JobApplicationStatus.SUBMITTED,
+                action = "SUBMIT",
+                actorMemberId = 1L,
+                reason = null,
+            ).apply {
+                id = 1L
+                createdAt = fixedTime
+            }
+        given(jobApplicationStatusHistoryRepository.findByApplicationIdOrderByCreatedAtAsc(1L))
+            .willReturn(listOf(history))
+
+        val result = service.getHistory(1L, 1L)
+
+        assertThat(result).hasSize(1)
+        assertThat(result[0].fromStatus).isEqualTo(JobApplicationStatus.DRAFT)
+        assertThat(result[0].toStatus).isEqualTo(JobApplicationStatus.SUBMITTED)
+        assertThat(result[0].action).isEqualTo("SUBMIT")
+    }
+
+    @Test
+    fun `다른 학생의 지원서 이력을 조회하면 ApplicationAccessForbiddenException을 던진다`() {
+        given(jobApplicationRepository.findById(1L)).willReturn(Optional.of(draftOf(applicantMemberId = 1L)))
+
+        assertThatThrownBy { service.getHistory(1L, 2L) }.isInstanceOf(ApplicationAccessForbiddenException::class.java)
+    }
+
+    @Test
+    fun `존재하지 않는 지원서 이력을 조회하면 ApplicationNotFoundException을 던진다`() {
+        given(jobApplicationRepository.findById(999L)).willReturn(Optional.empty())
+
+        assertThatThrownBy { service.getHistory(999L, 1L) }.isInstanceOf(ApplicationNotFoundException::class.java)
     }
 }

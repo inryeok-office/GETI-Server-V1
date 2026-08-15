@@ -14,12 +14,14 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.inreok.getiserver.domain.application.dto.JobApplicationAction
 import team.inreok.getiserver.domain.application.dto.JobApplicationActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.exception.ApplicationAccessForbiddenException
 import team.inreok.getiserver.domain.application.exception.ApplicationActionNotAvailableException
@@ -164,5 +166,47 @@ class JobApplicationActionControllerTest
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{ "action": "SUBMIT" }"""),
                 ).andExpect(status().isUnauthorized)
+        }
+
+        @Test
+        fun `본인 지원서의 상태 이력을 조회하면 200과 함께 이력 목록을 반환한다`() {
+            given(jobApplicationService.getHistory(anyLong(), anyLong()))
+                .willReturn(
+                    listOf(
+                        JobApplicationStatusHistoryResponse(
+                            historyId = 1L,
+                            fromStatus = JobApplicationStatus.DRAFT,
+                            toStatus = JobApplicationStatus.SUBMITTED,
+                            action = "SUBMIT",
+                            actorMemberId = 1L,
+                            reason = null,
+                            createdAt = fixedTime,
+                        ),
+                    ),
+                )
+
+            mockMvc
+                .perform(get("/api/v1/job-applications/1/history").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data[0].toStatus").value("SUBMITTED"))
+                .andExpect(jsonPath("$.data[0].action").value("SUBMIT"))
+        }
+
+        @Test
+        fun `다른 학생의 지원서 이력을 조회하면 403 APPLICATION_ACCESS_FORBIDDEN을 반환한다`() {
+            given(jobApplicationService.getHistory(anyLong(), anyLong()))
+                .willThrow(ApplicationAccessForbiddenException())
+
+            mockMvc
+                .perform(get("/api/v1/job-applications/1/history").with(authOf(2L, "STUDENT")))
+                .andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.error.code").value("APPLICATION_ACCESS_FORBIDDEN"))
+        }
+
+        @Test
+        fun `인증 없이 이력을 요청하면 401을 반환한다`() {
+            mockMvc
+                .perform(get("/api/v1/job-applications/1/history"))
+                .andExpect(status().isUnauthorized)
         }
     }

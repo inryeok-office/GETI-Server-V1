@@ -7,11 +7,13 @@ import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRe
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListItemResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
 import team.inreok.getiserver.domain.application.exception.ApplicationReviewForbiddenException
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
+import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
 import tools.jackson.databind.ObjectMapper
@@ -20,6 +22,7 @@ import tools.jackson.databind.ObjectMapper
 class JobApplicationAdminServiceImpl(
     private val jobApplicationRepository: JobApplicationRepository,
     private val jobApplicationSnapshotQueryPort: JobApplicationSnapshotQueryPort,
+    private val jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository,
     private val objectMapper: ObjectMapper,
 ) : JobApplicationAdminService {
     @Transactional(readOnly = true)
@@ -59,11 +62,30 @@ class JobApplicationAdminServiceImpl(
                 ?: throw ApplicationNotFoundException(applicationId)
         requireManagerOrDeveloper(application, requesterMemberId, isDeveloper)
 
-        requireAllowedAdminTransition(application.status, request.action)
+        val fromStatus = application.status
+        requireAllowedAdminTransition(fromStatus, request.action)
         applyJobApplicationAdminAction(application, request.action, request.reason)
 
         jobApplicationRepository.flush()
+        // 상태 변경(flush)과 이력 저장이 같은 Transaction(@Transactional) 안에서 원자적으로
+        // 처리된다(요구사항 "Transaction 일관성" 절, Issue #133).
+        recordStatusHistory(
+            jobApplicationStatusHistoryRepository,
+            application,
+            fromStatus,
+            request.action.name,
+            requesterMemberId,
+            request.reason,
+        )
         return toJobApplicationDraftResponse(objectMapper, application)
+    }
+
+    @Transactional(readOnly = true)
+    override fun getHistory(applicationId: Long): List<JobApplicationStatusHistoryResponse> {
+        val application = findApplication(applicationId)
+        return jobApplicationStatusHistoryRepository
+            .findByApplicationIdOrderByCreatedAtAsc(requireNotNull(application.id))
+            .map(::toJobApplicationStatusHistoryResponse)
     }
 
     // Issue #125는 "제출된 지원서"만 교사·개발자 조회 대상으로 한다. status 조건이 없는 단건 조회는
