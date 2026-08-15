@@ -73,6 +73,7 @@ class JobApplicationDraftControllerTest
                 applicantTechStacks = emptyList(),
                 answers = emptyList(),
                 submittedAt = null,
+                withdrawnAt = null,
                 createdAt = fixedTime,
                 updatedAt = fixedTime,
             )
