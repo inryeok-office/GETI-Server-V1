@@ -97,6 +97,15 @@ app:
   oauth:
     google:
       scope: openid,email,profile
+  ai:
+    # OpenAI Responses API 연동 설정이다(AI Analysis Phase 1, Issue #132). api-key가 비어 있으면
+    # OpenAiAnalysisProvider.isConfigured()가 false를 반환해 분석 요청이 즉시 FAILED로 기록되고,
+    # 애플리케이션 기동과 공고 게시 API는 그대로 정상 동작한다(Fail-Fast 아님, Collector/Discord
+    # Bot과 동일한 방식). model 기본값은 값이 없을 때도 기동이 깨지지 않도록 하는 최소 Fallback일
+    # 뿐 실제 운영 값을 의미하지 않는다 -- 실제 운영 값은 OPENAI_MODEL로 주입한다.
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      model: ${OPENAI_MODEL:gpt-4o-mini}
   program:
     close-scheduler:
       # 신청 종료 시각이 지난 PUBLISHED Program을 CLOSED로 전이하는 주기(ms, 원본 요구사항

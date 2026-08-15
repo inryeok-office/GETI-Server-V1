@@ -46,7 +46,11 @@ interface ProgramService {
     ): ProgramListResponse
 
     /** 조회수를 1 증가시킨다. 삭제된 프로그램이면
-     * [team.inreok.getiserver.domain.program.exception.ProgramDeletedException](410). */
+     * [team.inreok.getiserver.domain.program.exception.ProgramDeletedException](410). 응답의
+     * `files` 목록은 DRAFT 상태에서 등록자·담당 교사·개발자에게만 실제 목록을 반환한다(Issue
+     * #127) — DEVELOPER 여부는 Controller의 JWT Role이 아니라 Service가
+     * `MemberRoleQueryPort`로 직접 조회해 판정한다(`ProgramFileAccessChecker`와 같은 출처를
+     * 쓰기 위함, `ProgramServiceImpl.programFilesFor` 참고). */
     fun getDetail(
         programId: Long,
         requesterMemberId: Long,

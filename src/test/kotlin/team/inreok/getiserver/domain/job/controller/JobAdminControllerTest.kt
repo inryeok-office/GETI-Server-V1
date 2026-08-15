@@ -338,5 +338,6 @@ class JobAdminControllerTest
             closedAt = null,
             createdAt = LocalDateTime.of(2026, 7, 20, 10, 0),
             updatedAt = LocalDateTime.of(2026, 7, 20, 10, 0),
+            aiAnalysis = null,
         )
     }

@@ -15,6 +15,11 @@ import java.time.LocalDateTime
  *
  * `canSubscribeVacancy`/`vacancySubscribed`/`vacancySubscriptionStatus`는 빈자리 구독 기능이
  * 아직 없어(Phase 6) 이번 Phase는 항상 false/false/null을 반환한다.
+ *
+ * [files]는 DRAFT 상태에서는 등록자·담당 교사·개발자에게만 실제 목록을 반환하고, 그 외 요청자에게는
+ * 빈 목록을 반환한다(`team.inreok.getiserver.domain.program.access.canViewProgramFiles`와 동일한
+ * 규칙, `ProgramFileAccessChecker`의 다운로드 권한 판정과 일관성을 맞추기 위함, Issue #127). 이
+ * 응답의 다른 Field(`title`/`content` 등)는 아직 이 규칙을 적용하지 않는다 — 별도 개선 대상이다.
  */
 @Schema(description = "프로그램 상세 정보")
 data class ProgramDetailResponse(
@@ -60,4 +65,6 @@ data class ProgramDetailResponse(
     val vacancySubscriptionStatus: String?,
     @param:Schema(description = "프로그램 상태", example = "PUBLISHED")
     val status: ProgramStatus,
+    @param:Schema(description = "첨부파일 목록. DRAFT 상태에서 조회 권한이 없으면 빈 목록")
+    val files: List<ProgramFileResponse>,
 )
