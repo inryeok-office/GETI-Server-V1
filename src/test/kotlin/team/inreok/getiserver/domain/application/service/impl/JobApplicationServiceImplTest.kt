@@ -190,6 +190,10 @@ class JobApplicationServiceImplTest {
         assertThat(result.applicantName).isEqualTo("홍길동")
         assertThat(result.applicantMajors).containsExactly("소프트웨어")
         assertThat(result.applicantTechStacks).containsExactly("Kotlin")
+        // 방금 생성한 초안은 애초에 연결된 파일이 있을 수 없어 File 도메인을 조회하지 않는다
+        // (Issue #134, toJobApplicationDraftResponse KDoc 참고).
+        assertThat(result.files).isEmpty()
+        verify(fileLinkPort, never()).linkedFilesOf(anyFileOwnerType(), anyLong())
     }
 
     @Test
@@ -674,10 +678,33 @@ class JobApplicationServiceImplTest {
     private fun anyFileIdCollection(): Collection<Long> =
         any(Collection::class.java) as Collection<Long>? ?: emptyList()
 
-    // SUBMIT/RESUBMIT의 실제 연결·해제·Diff 로직은 syncApplicationFiles 자체를 직접 호출하는
-    // JobApplicationFileSyncTest가 담당한다(detekt LargeClass 회피 목적도 있음, 순수 함수라
-    // Service 전체를 세팅하지 않고도 검증할 수 있다). 이 Class는 executeAction이 Action별로
-    // 그 함수를 호출/생략하는지, 응답에 파일 목록을 올바르게 싣는지만 확인한다.
+    // 유지·추가·제거 Diff 로직 자체는 syncApplicationFiles를 직접 호출하는 JobApplicationFileSyncTest가
+    // 담당한다(detekt LargeClass 회피 목적도 있음, 순수 함수라 Service 전체를 세팅하지 않고도
+    // 검증할 수 있다). 이 Class는 executeAction이 Action별로 그 함수를 실제로 호출/생략하는지(PR
+    // #142 Review 반영 -- 기존에는 "생략" Case만 있고 "호출" Case가 없어 syncApplicationFiles 호출
+    // 자체를 지워도 Test가 통과했다), 응답에 파일 목록을 올바르게 싣는지만 확인한다.
+
+    @Test
+    fun `SUBMIT하면 답변의 fileIds를 실제로 File 도메인에 연결한다`() {
+        val answers =
+            jsonMapper.writeValueAsString(
+                listOf(ApplicationAnswer(fieldId = "resume", value = null, fileIds = listOf(1L, 2L))),
+            )
+        val application = draftOf(formId = 10L, formVersion = 1, answers = answers)
+        given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(application)
+        given(formVersionRepository.findByFormIdAndVersion(10L, 1))
+            .willReturn(formVersionOf(requiredKeys = listOf("resume")))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, 1L)).willReturn(emptyList())
+
+        service.executeAction(1L, 1L, JobApplicationActionRequest(JobApplicationAction.SUBMIT))
+
+        verify(fileLinkPort).validateAndLink(
+            requesterId = 1L,
+            fileIds = listOf(1L, 2L),
+            purpose = FilePurpose.JOB_APPLICATION,
+            ownerId = 1L,
+        )
+    }
 
     @Test
     fun `WITHDRAW하면 첨부파일을 연결·해제하지 않는다`() {
@@ -690,33 +717,8 @@ class JobApplicationServiceImplTest {
         verify(fileLinkPort, never()).validateAndLink(anyLong(), anyFileIdCollection(), anyFilePurpose(), anyLong())
     }
 
-    @Test
-    fun `새 초안 생성 응답은 첨부파일 목록이 비어 있고 File 도메인을 조회하지 않는다`() {
-        given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf())
-        given(memberApplicantSnapshotQueryPort.findById(1L)).willReturn(memberOf())
-        stubActiveLink()
-        given(
-            jobApplicationRepository.findByJobIdAndApplicantMemberIdAndStatusIn(
-                1L,
-                1L,
-                ACTIVE_JOB_APPLICATION_STATUSES,
-            ),
-        ).willReturn(emptyList())
-        given(jobApplicationRepository.findTopByJobIdAndApplicantMemberIdOrderByAttemptNumberDesc(1L, 1L))
-            .willReturn(null)
-        given(jobApplicationRepository.saveAndFlush(anyJobApplication())).willAnswer { invocation ->
-            (invocation.arguments[0] as JobApplication).apply {
-                id = 1L
-                createdAt = fixedTime
-                updatedAt = fixedTime
-            }
-        }
-
-        val result = service.createDraft(1L, 1L, CreateJobApplicationRequest())
-
-        assertThat(result.files).isEmpty()
-        verify(fileLinkPort, never()).linkedFilesOf(anyFileOwnerType(), anyLong())
-    }
+    // 새 초안 생성 응답이 첨부파일 목록이 비어 있고 File 도메인을 조회하지 않는지는 createDraft
+    // 절의 `지원 가능하면 초안을 생성하고 ...` Test가 함께 검증한다(중복 Service 세팅 회피).
 
     @Test
     fun `임시저장 응답에는 현재 연결된 첨부파일 목록이 담긴다`() {
