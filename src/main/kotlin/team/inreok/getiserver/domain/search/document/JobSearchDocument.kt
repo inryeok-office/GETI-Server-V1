@@ -71,4 +71,18 @@ data class JobSearchDocument(
     val startDate: LocalDateTime?,
     @Field(type = FieldType.Date, format = [DateFormat.date_hour_minute_second_millis])
     val endDate: LocalDateTime?,
+    // AI Analysis(Issue #132) 결과 중 검색에 안전하게 노출할 수 있는 값만 additive로 더한다
+    // (Issue #144). `AiAnalysisSearchQueryPort`가 COMPLETED 상태일 때만 값을 채워 주므로,
+    // 분석이 아직 없거나 진행 중이거나 마지막 시도가 실패했으면 아래 필드는 모두 빈 값/null이다.
+    // provider/model/promptVersion/errorMessage 같은 내부 세부값은 색인하지 않는다.
+    @Field(type = FieldType.Long)
+    val requiredTechStackIds: List<Long> = emptyList(),
+    @Field(type = FieldType.Long)
+    val preferredTechStackIds: List<Long> = emptyList(),
+    @Field(type = FieldType.Keyword)
+    val highSchoolGraduateFit: String? = null,
+    @Field(type = FieldType.Keyword)
+    val entryLevelFit: String? = null,
+    @Field(type = FieldType.Keyword)
+    val difficulty: String? = null,
 )
