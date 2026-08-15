@@ -1,7 +1,9 @@
 package team.inreok.getiserver.domain.application.service
 
 import team.inreok.getiserver.domain.application.dto.CreateJobApplicationRequest
+import team.inreok.getiserver.domain.application.dto.JobApplicationActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.dto.JobEligibilityResponse
 import team.inreok.getiserver.domain.application.dto.SaveJobApplicationDraftRequest
 
@@ -28,4 +30,22 @@ interface JobApplicationService {
         studentMemberId: Long,
         request: SaveJobApplicationDraftRequest,
     ): JobApplicationDraftResponse
+
+    /** 학생 지원서 Action(SUBMIT/REQUEST_EDIT/RESUBMIT/WITHDRAW)을 수행한다(Issue #124).
+     * 지원서가 없으면 ApplicationNotFoundException, 본인 소유가 아니면
+     * ApplicationAccessForbiddenException, 현재 상태에서 허용되지 않는 Action이면
+     * ApplicationActionNotAvailableException, SUBMIT/RESUBMIT 시 필수 답변이 비어 있으면
+     * ApplicationRequiredAnswerMissingException. */
+    fun executeAction(
+        applicationId: Long,
+        studentMemberId: Long,
+        request: JobApplicationActionRequest,
+    ): JobApplicationDraftResponse
+
+    /** 본인 지원서의 상태 변경 이력을 오래된 순으로 반환한다(Issue #133). 지원서가 없으면
+     * ApplicationNotFoundException, 본인 소유가 아니면 ApplicationAccessForbiddenException. */
+    fun getHistory(
+        applicationId: Long,
+        studentMemberId: Long,
+    ): List<JobApplicationStatusHistoryResponse>
 }
