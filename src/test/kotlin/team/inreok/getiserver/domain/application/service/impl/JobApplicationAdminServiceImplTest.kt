@@ -5,10 +5,13 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.any
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminAction
@@ -16,6 +19,7 @@ import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRe
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.JobApplicationStatusHistory
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
+import team.inreok.getiserver.domain.application.event.JobApplicationReviewedEvent
 import team.inreok.getiserver.domain.application.exception.ApplicationActionNotAvailableException
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
 import team.inreok.getiserver.domain.application.exception.ApplicationReviewForbiddenException
@@ -45,12 +49,16 @@ class JobApplicationAdminServiceImplTest {
     @Mock
     private lateinit var fileLinkPort: FileLinkPort
 
+    @Mock
+    private lateinit var eventPublisher: ApplicationEventPublisher
+
     private val service: JobApplicationAdminService by lazy {
         JobApplicationAdminServiceImpl(
             jobApplicationRepository,
             jobApplicationSnapshotQueryPort,
             jobApplicationStatusHistoryRepository,
             fileLinkPort,
+            eventPublisher,
             JsonMapper(),
         )
     }
@@ -60,9 +68,10 @@ class JobApplicationAdminServiceImplTest {
     private fun applicationOf(
         id: Long = 1L,
         status: JobApplicationStatus = JobApplicationStatus.SUBMITTED,
+        applicantMemberId: Long = 1L,
     ) = JobApplication(
         jobId = 1L,
-        applicantMemberId = 1L,
+        applicantMemberId = applicantMemberId,
         attemptNumber = 1,
         contactEmail = "student@example.com",
         answers = "[]",
@@ -193,6 +202,80 @@ class JobApplicationAdminServiceImplTest {
         assertThat(historyCaptor.value.actorMemberId).isEqualTo(100L)
         assertThat(historyCaptor.value.reason).isEqualTo("보완 필요")
     }
+
+    // PR #142 Review(SUBMIT 파일 연결 회귀 Test 부재)와 동일한 이유로, 이 Action이 실제로
+    // JobApplicationReviewedEvent를 발행하는지 단정한다(Issue #135).
+    @Test
+    fun `교사 Action이 성공하면 지원자에게 JobApplicationReviewedEvent를 발행한다`() {
+        given(
+            jobApplicationRepository.findByIdForUpdate(1L),
+        ).willReturn(applicationOf(status = JobApplicationStatus.SUBMITTED, applicantMemberId = 7L))
+        given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf(createdByMemberId = 100L))
+
+        service.executeAction(
+            1L,
+            100L,
+            isDeveloper = false,
+            JobApplicationAdminActionRequest(JobApplicationAdminAction.APPROVE),
+        )
+
+        verify(eventPublisher).publishEvent(
+            JobApplicationReviewedEvent(applicationId = 1L, studentMemberId = 7L, action = "APPROVE", reason = null),
+        )
+    }
+
+    // 코드리뷰 반영(PR #143) -- APPROVE 하나만으로는 reason이 실리는 경로를 검증하지 못해
+    // 사유 전달이 핵심인 REQUEST_REVISION도 함께 단정한다.
+    @Test
+    fun `REQUEST_REVISION이 성공하면 사유를 담은 JobApplicationReviewedEvent를 발행한다`() {
+        given(
+            jobApplicationRepository.findByIdForUpdate(1L),
+        ).willReturn(applicationOf(status = JobApplicationStatus.SUBMITTED, applicantMemberId = 7L))
+        given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf(createdByMemberId = 100L))
+
+        service.executeAction(
+            1L,
+            100L,
+            isDeveloper = false,
+            JobApplicationAdminActionRequest(
+                JobApplicationAdminAction.REQUEST_REVISION,
+                reason = "포트폴리오 링크를 추가해주세요.",
+            ),
+        )
+
+        verify(eventPublisher).publishEvent(
+            JobApplicationReviewedEvent(
+                applicationId = 1L,
+                studentMemberId = 7L,
+                action = "REQUEST_REVISION",
+                reason = "포트폴리오 링크를 추가해주세요.",
+            ),
+        )
+    }
+
+    @Test
+    fun `Action이 거부되면 Event를 발행하지 않는다`() {
+        given(
+            jobApplicationRepository.findByIdForUpdate(1L),
+        ).willReturn(applicationOf(status = JobApplicationStatus.DRAFT, applicantMemberId = 7L))
+        given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf(createdByMemberId = 100L))
+
+        assertThatThrownBy {
+            service.executeAction(
+                1L,
+                100L,
+                isDeveloper = false,
+                JobApplicationAdminActionRequest(JobApplicationAdminAction.APPROVE),
+            )
+        }.isInstanceOf(ApplicationActionNotAvailableException::class.java)
+
+        verify(eventPublisher, never()).publishEvent(any(JobApplicationReviewedEvent::class.java) ?: dummyEvent())
+    }
+
+    // Kotlin non-null 파라미터에 bare any()를 쓰면 null 반환으로 NPE가 나므로 non-null Fallback을 둔다
+    // (OAuthMemberPortImplTest.anyMember와 동일한 판단).
+    private fun dummyEvent() =
+        JobApplicationReviewedEvent(applicationId = 0L, studentMemberId = 0L, action = "", reason = null)
 
     @Test
     fun `담당 교사가 APPROVE하면 APPROVED로 전이한다`() {
