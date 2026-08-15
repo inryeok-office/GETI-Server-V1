@@ -97,6 +97,21 @@ app:
   oauth:
     google:
       scope: openid,email,profile
+  ai:
+    # OpenAI Responses API 연동 설정이다(AI Analysis Phase 1, Issue #132). api-key가 비어 있으면
+    # OpenAiAnalysisProvider.isConfigured()가 false를 반환해 분석 요청이 즉시 FAILED로 기록되고,
+    # 애플리케이션 기동과 공고 게시 API는 그대로 정상 동작한다(Fail-Fast 아님, Collector/Discord
+    # Bot과 동일한 방식). model 기본값은 값이 없을 때도 기동이 깨지지 않도록 하는 최소 Fallback일
+    # 뿐 실제 운영 값을 의미하지 않는다 -- 실제 운영 값은 OPENAI_MODEL로 주입한다.
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      model: ${OPENAI_MODEL:gpt-4o-mini}
+  program:
+    close-scheduler:
+      # 신청 종료 시각이 지난 PUBLISHED Program을 CLOSED로 전이하는 주기(ms, 원본 요구사항
+      # 문서 8절, Phase 7). DiscordDeliveryWorker(sweep-interval-ms)와 동일한 60초 기본값 --
+      # 최소 자동 재시도 백오프(1분)보다 촘촘하게 돌 이유가 없다.
+      interval-ms: 60000
   collector:
     scheduler:
       # 일일 수집 실행 시각(초 분 시 일 월 요일). 매일 03:00에 실행한다(Issue #62).
@@ -156,6 +171,39 @@ app:
       max-automatic-retry-count: 3
       max-manual-retry-count: 3
       batch-size: 50
+    # 학교 Discord 서버의 허용 채널과 학년별 Mention Role이다
+    # (docs/notification/discord-event-wiring-plan.md §5.1). 위 bot(Bot Internal API 접속 설정)과
+    # 달리 "어디에 보낼지"만 정하며, domain.job/domain.program(등록 요청이 지정한 채널 검증)과
+    # domain.notification(Delivery 생성 시 최종 채널·Role 결정)이 함께 읽는다.
+    #
+    # 허용 채널의 실제 Snowflake는 아직 확정되지 않아 값을 비워 둔다(요구사항 §10 "코드 상수로
+    # 임의 지정하지 않는다"). 값이 비어 있으면 Delivery를 만들지 않고 경고 로그만 남긴다 —
+    # 기동과 공고·프로그램·문의 등록 API는 그대로 정상 동작한다(Fail-Fast 아님). 채널 Key 자체는
+    # Secret이 아니라 이 파일에서 확정하고, Snowflake만 환경변수로 주입한다. 값이 정해지면
+    # 환경변수만 채우면 되고 코드 수정·재배포가 필요 없다.
+    channel-policy:
+      channels:
+        job-notice:
+          channel-id: ${DISCORD_CHANNEL_JOB_NOTICE:}
+          display-name: 공고 공지
+        program-notice:
+          channel-id: ${DISCORD_CHANNEL_PROGRAM_NOTICE:}
+          display-name: 프로그램 공지
+        inquiry-alert:
+          channel-id: ${DISCORD_CHANNEL_INQUIRY_ALERT:}
+          display-name: 문의 접수 알림
+      # 학년 → Mention Role. 최초 성공 CREATE 한 번만 사용된다(요구사항 §24).
+      grade-roles:
+        "1": ${DISCORD_ROLE_GRADE_1:}
+        "2": ${DISCORD_ROLE_GRADE_2:}
+        "3": ${DISCORD_ROLE_GRADE_3:}
+      # 등록 요청이 discordChannelKey를 생략한 공고가 쓰는 채널이다.
+      default-job-channel-key: job-notice
+      # 프로그램은 등록 요청이 원시 Snowflake(discordChannelId)를 직접 지정하므로 현재 이 기본값을
+      # 읽는 경로가 없다. 채널 미지정 등록을 허용하게 되면 그때 사용한다.
+      default-program-channel-key: program-notice
+      # 문의 접수 알림은 사용자가 채널을 선택하지 않고 이 Key로 고정된다(요구사항 §9).
+      inquiry-channel-key: inquiry-alert
   # /actuator/info의 "deployment" 필드(DeploymentInfoContributor)가 사용하는 배포 메타데이터다.
   # CD가 Docker Build/Runtime 시점에 APP_VERSION/APP_GIT_SHA/APP_BUILD_TIME/APP_ENVIRONMENT를
   # 주입한다(docs/development/cd.md 참고). version의 "0.0.1-SNAPSHOT" 기본값은 build.gradle.kts의

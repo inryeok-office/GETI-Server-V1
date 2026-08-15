@@ -78,11 +78,15 @@ class Program(
     @Column(name = "form_id")
     var formId: Long? = null
 
+    // 클라이언트가 등록 시 지정하는 채널(원시 Snowflake)이라 유지한다. 허용 목록 검증은
+    // ProgramServiceImpl이 값을 받는 시점에 DiscordChannelResolver로 수행한다.
     @Column(name = "discord_channel_id", length = 255)
     var discordChannelId: String? = null
 
-    @Column(name = "discord_message_id", length = 255)
-    var discordMessageId: String? = null
+    // discord_message_id Column의 Mapping은 제거했다(discord-event-wiring-plan.md §6.2).
+    // Discord 메시지 ID는 discord_deliveries가 소유하며(DiscordDelivery.discordMessageId),
+    // 이 Column을 읽고 쓰는 코드는 없다. Column 물리 DROP은 되돌리기 어려워 다음 Migration으로
+    // 미룬다(§9 DECISION_REQUIRED 4).
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

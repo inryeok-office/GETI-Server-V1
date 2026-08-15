@@ -103,7 +103,9 @@ class JobAdminController(
     fun updateJob(
         @Parameter(description = "수정할 공고 ID", example = "1") @PathVariable jobId: Long,
         @Valid @RequestBody request: JobUpdateRequest,
-    ): ApiResponse<JobDetailResponse> = ApiResponse.of(jobService.update(jobId, request))
+        authentication: Authentication,
+    ): ApiResponse<JobDetailResponse> =
+        ApiResponse.of(jobService.update(jobId, request, authentication.principal as Long))
 
     @Operation(
         summary = "공고 상태 변경",
@@ -137,7 +139,9 @@ class JobAdminController(
     fun changeJobStatus(
         @Parameter(description = "상태를 변경할 공고 ID", example = "1") @PathVariable jobId: Long,
         @Valid @RequestBody request: JobStatusUpdateRequest,
-    ): ApiResponse<JobDetailResponse> = ApiResponse.of(jobService.changeStatus(jobId, request))
+        authentication: Authentication,
+    ): ApiResponse<JobDetailResponse> =
+        ApiResponse.of(jobService.changeStatus(jobId, request, authentication.principal as Long))
 
     @Operation(
         summary = "관리자용 공고 상세 조회",
@@ -158,5 +162,6 @@ class JobAdminController(
     @GetMapping("/{jobId}")
     fun getJobForAdmin(
         @Parameter(description = "조회할 공고 ID", example = "1") @PathVariable jobId: Long,
-    ): ApiResponse<JobDetailResponse> = ApiResponse.of(jobService.getForAdmin(jobId))
+        authentication: Authentication,
+    ): ApiResponse<JobDetailResponse> = ApiResponse.of(jobService.getForAdmin(jobId, authentication.principal as Long))
 }

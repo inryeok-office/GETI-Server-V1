@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import java.time.LocalDateTime
 
-@Schema(description = "지원서 초안·임시저장 결과")
+@Schema(description = "지원서 초안·임시저장·Action(제출·수정요청·재제출·철회) 결과")
 data class JobApplicationDraftResponse(
     @param:Schema(description = "지원서 ID", example = "1")
     val applicationId: Long,
@@ -41,8 +41,12 @@ data class JobApplicationDraftResponse(
     val applicantTechStacks: List<String>,
     @param:Schema(description = "답변 목록")
     val answers: List<ApplicationAnswer>,
+    @param:Schema(description = "현재 연결된 첨부파일 목록(Issue #134). 아직 제출한 적이 없으면 빈 목록.")
+    val files: List<JobApplicationFileResponse>,
     @param:Schema(description = "제출 일시. 아직 제출 전(DRAFT)이면 null.", nullable = true)
     val submittedAt: LocalDateTime?,
+    @param:Schema(description = "철회 일시. 철회 전이면 null.", nullable = true)
+    val withdrawnAt: LocalDateTime?,
     @param:Schema(description = "생성 일시")
     val createdAt: LocalDateTime,
     @param:Schema(description = "마지막 수정 일시")

@@ -46,6 +46,12 @@ data class JobSearchDocument(
     val companyName: String?,
     @Field(type = FieldType.Keyword)
     val companyType: String?,
+    // Presigned URL은 저장하지 않는다 -- 만료되는 값이라 색인에 두면 검색 결과가 곧 깨진 링크를
+    // 반환하게 된다(Issue #92). 안정적인 File ID만 저장하고, 응답 조립 시점에 FileUrlPort로
+    // 매번 새로 URL을 발급한다(JobSummaryResponse.from, JobSearchServiceImpl 참고). 기업이
+    // 삭제되었거나 로고가 없으면 companyName과 같은 정책으로 null이다.
+    @Field(type = FieldType.Long)
+    val companyLogoFileId: Long?,
     @Field(type = FieldType.Keyword)
     val sourceName: String?,
     @Field(type = FieldType.Integer)
@@ -65,4 +71,18 @@ data class JobSearchDocument(
     val startDate: LocalDateTime?,
     @Field(type = FieldType.Date, format = [DateFormat.date_hour_minute_second_millis])
     val endDate: LocalDateTime?,
+    // AI Analysis(Issue #132) 결과 중 검색에 안전하게 노출할 수 있는 값만 additive로 더한다
+    // (Issue #144). `AiAnalysisSearchQueryPort`가 COMPLETED 상태일 때만 값을 채워 주므로,
+    // 분석이 아직 없거나 진행 중이거나 마지막 시도가 실패했으면 아래 필드는 모두 빈 값/null이다.
+    // provider/model/promptVersion/errorMessage 같은 내부 세부값은 색인하지 않는다.
+    @Field(type = FieldType.Long)
+    val requiredTechStackIds: List<Long> = emptyList(),
+    @Field(type = FieldType.Long)
+    val preferredTechStackIds: List<Long> = emptyList(),
+    @Field(type = FieldType.Keyword)
+    val highSchoolGraduateFit: String? = null,
+    @Field(type = FieldType.Keyword)
+    val entryLevelFit: String? = null,
+    @Field(type = FieldType.Keyword)
+    val difficulty: String? = null,
 )

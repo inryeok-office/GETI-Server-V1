@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.member.entity.Member
@@ -24,8 +25,12 @@ class MemberProfileImageAccessCheckerTest {
     @Mock
     private lateinit var memberRepository: MemberRepository
 
+    // 기본값 false(권한 없는 요청자)라 기존 Test는 그대로 통과한다.
+    @Mock
+    private lateinit var privilegedProfileViewer: PrivilegedProfileViewer
+
     private val checker: MemberProfileImageAccessChecker by lazy {
-        MemberProfileImageAccessChecker(memberRepository)
+        MemberProfileImageAccessChecker(memberRepository, privilegedProfileViewer)
     }
 
     @Test
@@ -50,6 +55,16 @@ class MemberProfileImageAccessCheckerTest {
         given(memberRepository.findById(OWNER_ID)).willReturn(Optional.of(memberOf(profilePublic = false)))
 
         assertThat(checker.canDownload(requesterId = OTHER_ID, ownerId = OWNER_ID)).isFalse()
+    }
+
+    @Test
+    fun `교사와 개발자는 비공개 프로필의 이미지를 볼 수 있다`() {
+        // 학생 관리·상담 목적의 예외다(Issue #114, #89 결정).
+        given(privilegedProfileViewer.canViewPrivateProfile()).willReturn(true)
+
+        assertThat(checker.canDownload(requesterId = OTHER_ID, ownerId = OWNER_ID)).isTrue()
+        // 이 판정이 Member 조회보다 앞에 있어야 목록 조회에서 Statement가 늘지 않는다.
+        verifyNoInteractions(memberRepository)
     }
 
     @Test

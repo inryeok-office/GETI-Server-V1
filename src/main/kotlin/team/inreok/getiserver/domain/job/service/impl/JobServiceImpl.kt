@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
@@ -12,7 +13,10 @@ import team.inreok.getiserver.domain.job.dto.JobUpdateRequest
 import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.event.JobChangedEvent
+import team.inreok.getiserver.domain.job.event.JobDiscordAction
+import team.inreok.getiserver.domain.job.event.JobDiscordEvent
 import team.inreok.getiserver.domain.job.exception.JobCompanyNotFoundException
+import team.inreok.getiserver.domain.job.exception.JobDiscordChannelNotAllowedException
 import team.inreok.getiserver.domain.job.exception.JobNotFoundException
 import team.inreok.getiserver.domain.job.exception.JobNotVisibleException
 import team.inreok.getiserver.domain.job.exception.JobStatusTransitionInvalidException
@@ -22,6 +26,7 @@ import team.inreok.getiserver.domain.job.service.JobService
 import team.inreok.getiserver.domain.job.service.PUBLIC_VISIBLE_STATUSES
 import team.inreok.getiserver.domain.job.service.validateCommon
 import team.inreok.getiserver.domain.job.service.validateForPublish
+import team.inreok.getiserver.global.discord.DiscordChannelResolver
 import java.time.LocalDateTime
 
 @Service
@@ -29,6 +34,8 @@ class JobServiceImpl(
     private val jobRepository: JobRepository,
     private val companyQuery: CompanyQuery,
     private val eventPublisher: ApplicationEventPublisher,
+    private val discordChannelResolver: DiscordChannelResolver,
+    private val jobAiAnalysisAccessor: JobAiAnalysisAccessor,
 ) : JobService {
     @Transactional
     override fun create(
@@ -40,7 +47,8 @@ class JobServiceImpl(
         }
 
         val title = request.title.trim()
-        val company = requireActiveCompany(request.companyId)
+        val company = requireActiveCompany(request.companyId, createdByMemberId)
+        val discordChannelKey = requireAllowedDiscordChannelKey(request.discordChannelKey)
 
         val job =
             Job(
@@ -58,6 +66,7 @@ class JobServiceImpl(
                 recruitmentEndedAt = request.endDate
                 targetGrade = request.targetGrade
                 capacity = request.capacity
+                this.discordChannelKey = discordChannelKey
             }
 
         validateCommon(job)
@@ -72,13 +81,21 @@ class JobServiceImpl(
         // Transaction Commit 이후에만 실제로 전달된다(@TransactionalEventListener). 색인 동기화가
         // 실패해도 이 등록 자체를 Rollback하지 않는다(Issue #69, PostgreSQL이 원본 유지).
         eventPublisher.publishEvent(JobChangedEvent(requireNotNull(saved.id)))
-        return JobDetailResponse.from(saved, company)
+        if (saved.status == JobStatus.PUBLISHED) {
+            eventPublisher.publishEvent(JobDiscordEvent(requireNotNull(saved.id), JobDiscordAction.PUBLISHED))
+        }
+        return JobDetailResponse.from(
+            saved,
+            company,
+            aiAnalysis = jobAiAnalysisAccessor.findSnapshot(requireNotNull(saved.id)),
+        )
     }
 
     @Transactional
     override fun update(
         jobId: Long,
         request: JobUpdateRequest,
+        requesterId: Long,
     ): JobDetailResponse {
         val job = findNotDeleted(jobId)
 
@@ -95,6 +112,7 @@ class JobServiceImpl(
             request.targetGrade?.let { targetGrade = it }
             request.capacity?.let { capacity = it }
             request.firstComeServed?.let { firstComeServed = it }
+            request.discordChannelKey?.let { discordChannelKey = requireAllowedDiscordChannelKey(it) }
         }
 
         validateCommon(job)
@@ -105,19 +123,30 @@ class JobServiceImpl(
         // @UpdateTimestamp가 Flush 시점에 갱신되므로 응답에 낡은 updatedAt이 담기지 않도록 먼저 Flush한다.
         jobRepository.flush()
         eventPublisher.publishEvent(JobChangedEvent(jobId))
-        return JobDetailResponse.from(job, findCompanySummary(job.companyId))
+        // DRAFT는 Discord에 아직 메시지가 없어(§4.2) 발행하지 않는다 -- 발행하면 Worker가
+        // MISSING_DISCORD_MESSAGE_ID로 실패 처리할 Row만 쌓인다.
+        if (job.status in PUBLIC_VISIBLE_STATUSES) {
+            eventPublisher.publishEvent(JobDiscordEvent(jobId, JobDiscordAction.UPDATED))
+        }
+        return JobDetailResponse.from(
+            job,
+            findCompanySummary(job.companyId, requesterId),
+            aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
+        )
     }
 
     @Transactional
     override fun changeStatus(
         jobId: Long,
         request: JobStatusUpdateRequest,
+        requesterId: Long,
     ): JobDetailResponse {
         val job = findNotDeleted(jobId)
         val target = request.status
         if (target !in allowedTransitions(job.status)) {
             throw JobStatusTransitionInvalidException(job.status, target)
         }
+        val previousStatus = job.status
 
         val now = LocalDateTime.now()
         when (target) {
@@ -144,19 +173,54 @@ class JobServiceImpl(
 
         jobRepository.flush()
         eventPublisher.publishEvent(JobChangedEvent(jobId))
-        return JobDetailResponse.from(job, findCompanySummary(job.companyId))
+        publishJobDiscordEventFor(jobId, target, previousStatus)
+        return JobDetailResponse.from(
+            job,
+            findCompanySummary(job.companyId, requesterId),
+            aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
+        )
+    }
+
+    /**
+     * 상태 전이에 대응하는 Discord Event를 발행한다(§4.2). `DRAFT`였던 공고가 삭제되면
+     * Discord에 지울 메시지가 없으므로 `DELETED`는 발행하지 않는다 -- Worker가
+     * `MISSING_DISCORD_MESSAGE_ID`로 실패 처리할 Row만 쌓이는 것을 막는다.
+     */
+    private fun publishJobDiscordEventFor(
+        jobId: Long,
+        target: JobStatus,
+        previousStatus: JobStatus,
+    ) {
+        val action =
+            when (target) {
+                JobStatus.PUBLISHED -> JobDiscordAction.PUBLISHED
+                JobStatus.CLOSED -> JobDiscordAction.CLOSED
+                JobStatus.DELETED -> if (previousStatus != JobStatus.DRAFT) JobDiscordAction.DELETED else null
+                JobStatus.DRAFT -> null
+            } ?: return
+        eventPublisher.publishEvent(JobDiscordEvent(jobId, action))
     }
 
     @Transactional(readOnly = true)
-    override fun getForAdmin(jobId: Long): JobDetailResponse {
+    override fun getForAdmin(
+        jobId: Long,
+        requesterId: Long,
+    ): JobDetailResponse {
         // 관리자는 삭제 이력까지 확인해야 하므로 deletedAt 조건 없이 조회한다.
         val job = jobRepository.findById(jobId).orElseThrow { JobNotFoundException(jobId) }
-        return JobDetailResponse.from(job, findCompanySummary(job.companyId))
+        return JobDetailResponse.from(
+            job,
+            findCompanySummary(job.companyId, requesterId),
+            aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
+        )
     }
 
     // 조회수를 증가시키므로 readOnly Transaction을 쓸 수 없다.
     @Transactional
-    override fun getPublicDetail(jobId: Long): JobDetailResponse {
+    override fun getPublicDetail(
+        jobId: Long,
+        requesterId: Long,
+    ): JobDetailResponse {
         val job = findNotDeleted(jobId)
         if (job.status !in PUBLIC_VISIBLE_STATUSES) throw JobNotVisibleException(jobId)
 
@@ -165,8 +229,9 @@ class JobServiceImpl(
         val response =
             JobDetailResponse.from(
                 job = job,
-                company = findCompanySummary(job.companyId),
+                company = findCompanySummary(job.companyId, requesterId),
                 viewCount = job.viewCount + 1,
+                aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
             )
         jobRepository.incrementViewCount(jobId)
         return response
@@ -175,11 +240,28 @@ class JobServiceImpl(
     private fun findNotDeleted(jobId: Long): Job =
         jobRepository.findByIdAndDeletedAtIsNull(jobId) ?: throw JobNotFoundException(jobId)
 
-    private fun requireActiveCompany(companyId: Long): CompanySummary =
-        companyQuery.findActiveSummary(companyId) ?: throw JobCompanyNotFoundException(companyId)
+    /**
+     * `null`이면 검증 없이 그대로 돌려준다 -- 채널을 지정하지 않으면 게시 시 기본 채널을 쓴다
+     * (`DiscordChannelResolver.resolveJobChannelId`). 값이 있는데 허용 목록에 없으면 사용자가
+     * 임의 채널을 지정하지 못하도록 즉시 거부한다(Notification 요구사항 §10).
+     */
+    private fun requireAllowedDiscordChannelKey(key: String?): String? {
+        if (key == null) return null
+        if (!discordChannelResolver.isAllowedJobChannelKey(key)) throw JobDiscordChannelNotAllowedException(key)
+        return key
+    }
+
+    private fun requireActiveCompany(
+        companyId: Long,
+        requesterId: Long,
+    ): CompanySummary =
+        companyQuery.findActiveSummary(companyId, requesterId) ?: throw JobCompanyNotFoundException(companyId)
 
     // 공고 등록 후 기업이 삭제될 수 있으므로 응답에서는 없어도 오류로 다루지 않고 null로 둔다.
-    private fun findCompanySummary(companyId: Long): CompanySummary? = companyQuery.findActiveSummary(companyId)
+    private fun findCompanySummary(
+        companyId: Long,
+        requesterId: Long,
+    ): CompanySummary? = companyQuery.findActiveSummary(companyId, requesterId)
 
     private fun allowedTransitions(current: JobStatus): Set<JobStatus> =
         when (current) {

@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.core.task.TaskExecutor
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
 import team.inreok.getiserver.domain.job.query.JobIndexQueryPort
 import team.inreok.getiserver.domain.search.config.SearchProperties
 import team.inreok.getiserver.domain.search.entity.SearchReindexRun
@@ -27,6 +28,7 @@ class SearchReindexServiceImpl(
     private val reindexRunRepository: SearchReindexRunRepository,
     private val jobIndexQueryPort: JobIndexQueryPort,
     private val documentBuilder: JobIndexDocumentBuilder,
+    private val aiAnalysisSearchQueryPort: AiAnalysisSearchQueryPort,
     private val indexManager: JobSearchIndexManager,
     private val searchTaskExecutor: TaskExecutor,
     private val properties: SearchProperties,
@@ -76,9 +78,12 @@ class SearchReindexServiceImpl(
                 val snapshots = jobIndexQueryPort.findForReindex(afterId, properties.reindexBatchSize)
                 if (snapshots.isEmpty()) break
 
+                // 이번 Page에 담긴 공고들의 AI 분석 결과를 한 번에 조회한다 -- 공고 건수만큼
+                // 반복 조회하면 N+1이 된다(Issue #144 요구사항).
+                val aiSnapshots = aiAnalysisSearchQueryPort.findCompletedByJobIds(snapshots.map { it.jobId })
                 val documents =
                     snapshots.mapNotNull { snapshot ->
-                        runCatching { documentBuilder.build(snapshot) }
+                        runCatching { documentBuilder.build(snapshot, aiSnapshots[snapshot.jobId]) }
                             .onFailure { ex -> log.warn("재색인 중 공고 1건 Document 생성 실패(jobId={})", snapshot.jobId, ex) }
                             .getOrNull()
                     }

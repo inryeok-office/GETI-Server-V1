@@ -101,6 +101,12 @@ class SecurityConfig(
                 // 추가하지 않는다.
                 authorize("/api/v1/me/inquiries", authenticated)
                 authorize("/api/v1/me/**", authenticated)
+                // 교직원 가입 승인·거절(승인 대기 교직원 승인/거절)은 개발자만 접근한다(Issue #99).
+                // 더 구체적인 admin 경로를 먼저 선언해야 아래 회원 조회 규칙에 가려지지 않는다. (경로
+                // Prefix가 /api/v1/admin/으로 /api/v1/members와 겹치지 않지만, admin 규칙을 먼저
+                // 선언하는 순서 관례를 유지한다.)
+                authorize("/api/v1/admin/members", hasRole("DEVELOPER"))
+                authorize("/api/v1/admin/members/**", hasRole("DEVELOPER"))
                 authorize("/api/v1/members", authenticated)
                 authorize("/api/v1/members/**", authenticated)
                 // 기업 관리(등록·수정·삭제)는 개발자만 접근한다. 더 구체적인 admin 경로를 먼저
@@ -132,6 +138,12 @@ class SecurityConfig(
                 // 없어 JobApplicationService가 별도로 수행한다, Application Epic #75 Issue #78).
                 authorize("/api/v1/job-applications", authenticated)
                 authorize("/api/v1/job-applications/**", authenticated)
+                // 교사·개발자용 지원서 조회·검토(ALLOW_EDIT/REQUEST_REVISION/APPROVE/REJECT)는
+                // 역할까지만 검증한다(Application Epic #75 Issue #125). 조회는 담당 공고 여부와
+                // 무관히 모든 교사·개발자가 가능하고, 상태 변경(담당자만)은 JobApplicationAdminService가
+                // 별도로 판단한다.
+                authorize("/api/v1/admin/job-applications", hasAnyRole("TEACHER", "DEVELOPER"))
+                authorize("/api/v1/admin/job-applications/**", hasAnyRole("TEACHER", "DEVELOPER"))
                 // 프로그램 관리(등록·수정·상태 변경)는 교사와 개발자가 사용한다(Program 도메인
                 // 전체 개발 요구사항 3절). 등록자·담당 교사 본인만 수정할 수 있는지는 Role만으로
                 // 알 수 없어 ProgramService가 별도로 수행한다. 더 구체적인 admin 경로를 먼저
