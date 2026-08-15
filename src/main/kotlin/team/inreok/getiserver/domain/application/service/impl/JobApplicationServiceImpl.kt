@@ -6,12 +6,12 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.application.dto.ApplicationAnswer
 import team.inreok.getiserver.domain.application.dto.CreateJobApplicationRequest
+import team.inreok.getiserver.domain.application.dto.JobApplicationAction
+import team.inreok.getiserver.domain.application.dto.JobApplicationActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
 import team.inreok.getiserver.domain.application.dto.JobEligibilityResponse
 import team.inreok.getiserver.domain.application.dto.SaveJobApplicationDraftRequest
-import team.inreok.getiserver.domain.application.entity.Form
 import team.inreok.getiserver.domain.application.entity.JobApplication
-import team.inreok.getiserver.domain.application.entity.type.FormStatus
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationEligibilityReason
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.exception.ActiveApplicationExistsException
@@ -20,6 +20,7 @@ import team.inreok.getiserver.domain.application.exception.ApplicationActionNotA
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
 import team.inreok.getiserver.domain.application.exception.JobNotApplicableException
 import team.inreok.getiserver.domain.application.repository.FormRepository
+import team.inreok.getiserver.domain.application.repository.FormVersionRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationFormRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationService
@@ -28,11 +29,78 @@ import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPo
 import tools.jackson.databind.ObjectMapper
 import java.time.LocalDateTime
 
+// 학생 Action별 시작 가능 상태 집합이다(요구사항 "상태 전이 / Flow" 절). RESUBMIT은
+// EDIT_ALLOWED/REVISION_REQUESTED 모두에서 SUBMITTED로 전이한다. EDIT_REQUESTED/EDIT_ALLOWED가
+// 만드는 상태(EDIT_ALLOWED 등)는 교사 Action(Phase 4) 완료 전까지는 실제로 도달할 수 없지만,
+// Service 레벨 상태 검증은 먼저 구현해 둔다.
+private val JOB_APPLICATION_ACTION_ALLOWED_FROM: Map<JobApplicationAction, Set<JobApplicationStatus>> =
+    mapOf(
+        JobApplicationAction.SUBMIT to setOf(JobApplicationStatus.DRAFT),
+        JobApplicationAction.REQUEST_EDIT to setOf(JobApplicationStatus.SUBMITTED),
+        JobApplicationAction.RESUBMIT to
+            setOf(JobApplicationStatus.EDIT_ALLOWED, JobApplicationStatus.REVISION_REQUESTED),
+        JobApplicationAction.WITHDRAW to
+            setOf(
+                JobApplicationStatus.DRAFT,
+                JobApplicationStatus.SUBMITTED,
+                JobApplicationStatus.EDIT_REQUESTED,
+                JobApplicationStatus.EDIT_ALLOWED,
+                JobApplicationStatus.REVISION_REQUESTED,
+            ),
+    )
+
+// saveDraft(임시저장)를 허용하는 상태다. Phase 2는 DRAFT만 허용했고, Phase 3는 교사가 재작성을
+// 허용/요청한 상태(EDIT_ALLOWED/REVISION_REQUESTED)에서도 재작성 후 RESUBMIT할 수 있어야 한다.
+private val SAVE_DRAFT_ALLOWED_STATUSES: Set<JobApplicationStatus> =
+    setOf(JobApplicationStatus.DRAFT, JobApplicationStatus.EDIT_ALLOWED, JobApplicationStatus.REVISION_REQUESTED)
+
+// executeAction()의 상태 전이 검증과 실제 전이를 순수 함수로 분리했다. JobApplicationServiceImpl의
+// Method 개수를 detekt TooManyFunctions 한도 안에서 유지하기 위함이다(computeEligibilityReason과
+// 같은 이유). JOB_APPLICATION_ACTION_ALLOWED_FROM이 이 파일 Top-level private val이라 같은 파일의
+// Top-level 함수로 둬야 접근할 수 있다.
+private fun requireAllowedTransition(
+    status: JobApplicationStatus,
+    action: JobApplicationAction,
+) {
+    val allowedFrom = JOB_APPLICATION_ACTION_ALLOWED_FROM.getValue(action)
+    if (status !in allowedFrom) {
+        throw ApplicationActionNotAvailableException("현재 상태($status)에서는 $action Action을 수행할 수 없습니다.")
+    }
+}
+
+private fun applyJobApplicationAction(
+    formVersionRepository: FormVersionRepository,
+    objectMapper: ObjectMapper,
+    application: JobApplication,
+    action: JobApplicationAction,
+) {
+    when (action) {
+        JobApplicationAction.SUBMIT, JobApplicationAction.RESUBMIT -> {
+            validateRequiredAnswersFilled(formVersionRepository, objectMapper, application)
+            application.submittedAt = LocalDateTime.now()
+            application.status = JobApplicationStatus.SUBMITTED
+            // RESUBMIT 직전 REVISION_REQUESTED/EDIT_REQUESTED 단계에서 교사가 남긴 statusReason이
+            // 재제출 후에도 남아있으면 이미 반영된 과거 사유가 그대로 노출된다(PR #130 Review 반영).
+            application.statusReason = null
+        }
+
+        JobApplicationAction.REQUEST_EDIT -> {
+            application.status = JobApplicationStatus.EDIT_REQUESTED
+        }
+
+        JobApplicationAction.WITHDRAW -> {
+            application.withdrawnAt = LocalDateTime.now()
+            application.status = JobApplicationStatus.WITHDRAWN
+        }
+    }
+}
+
 @Service
 class JobApplicationServiceImpl(
     private val jobApplicationRepository: JobApplicationRepository,
     private val jobApplicationFormRepository: JobApplicationFormRepository,
     private val formRepository: FormRepository,
+    private val formVersionRepository: FormVersionRepository,
     private val jobApplicationSnapshotQueryPort: JobApplicationSnapshotQueryPort,
     private val memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort,
     private val objectMapper: ObjectMapper,
@@ -50,7 +118,7 @@ class JobApplicationServiceImpl(
             computeEligibilityReason(
                 job = job,
                 member = member,
-                hasActiveLinkedForm = activeLinkedForm(jobId) != null,
+                hasActiveLinkedForm = activeLinkedForm(jobApplicationFormRepository, formRepository, jobId) != null,
                 hasActiveApplication = hasActiveApplication(jobId, studentMemberId),
                 now = LocalDateTime.now(),
             )
@@ -78,7 +146,7 @@ class JobApplicationServiceImpl(
     ): JobApplicationDraftResponse {
         val job = jobApplicationSnapshotQueryPort.findById(jobId)
         val member = memberApplicantSnapshotQueryPort.findById(studentMemberId)
-        val linkedForm = activeLinkedForm(jobId)
+        val linkedForm = activeLinkedForm(jobApplicationFormRepository, formRepository, jobId)
         val reason =
             computeEligibilityReason(
                 job = job,
@@ -126,7 +194,7 @@ class JobApplicationServiceImpl(
                 }
             }
 
-        return toDraftResponse(saveNewApplication(application))
+        return toJobApplicationDraftResponse(objectMapper, saveNewApplication(application))
     }
 
     @Transactional
@@ -138,9 +206,9 @@ class JobApplicationServiceImpl(
         val application =
             jobApplicationRepository.findById(applicationId).orElseThrow { ApplicationNotFoundException(applicationId) }
         if (application.applicantMemberId != studentMemberId) throw ApplicationAccessForbiddenException()
-        // Phase 2는 DRAFT 임시저장만 다룬다. EDIT_ALLOWED/REVISION_REQUESTED 재제출 흐름은 Phase 3.
-        if (application.status != JobApplicationStatus.DRAFT) {
-            throw ApplicationActionNotAvailableException("DRAFT 상태의 지원서만 임시저장할 수 있습니다.")
+        // Phase 3부터 EDIT_ALLOWED/REVISION_REQUESTED 상태에서도 재작성 후 RESUBMIT할 수 있다.
+        if (application.status !in SAVE_DRAFT_ALLOWED_STATUSES) {
+            throw ApplicationActionNotAvailableException("현재 상태(${application.status})의 지원서는 임시저장할 수 없습니다.")
         }
 
         request.contactPhone?.let { application.contactPhone = it }
@@ -148,7 +216,29 @@ class JobApplicationServiceImpl(
         request.answers?.let { application.answers = writeAnswers(it) }
 
         jobApplicationRepository.flush()
-        return toDraftResponse(application)
+        return toJobApplicationDraftResponse(objectMapper, application)
+    }
+
+    @Transactional
+    override fun executeAction(
+        applicationId: Long,
+        studentMemberId: Long,
+        request: JobApplicationActionRequest,
+    ): JobApplicationDraftResponse {
+        // 같은 지원서에 대한 동시 Action(학생 WITHDRAW와 교사 APPROVE 등)이 상태를 모순되게
+        // 만들지 않도록 Pessimistic Write Lock으로 조회한 뒤 재확인한다(요구사항 "동시성/데이터
+        // 무결성" 절, ProgramRepository.findByIdForUpdate와 동일한 관례). 존재 여부를 알 수 없도록
+        // 404가 아닌 403을 사용한다(요구사항 "권한" 절, saveDraft와 동일한 관례).
+        val application =
+            jobApplicationRepository.findByIdForUpdate(applicationId)
+                ?: throw ApplicationNotFoundException(applicationId)
+        if (application.applicantMemberId != studentMemberId) throw ApplicationAccessForbiddenException()
+
+        requireAllowedTransition(application.status, request.action)
+        applyJobApplicationAction(formVersionRepository, objectMapper, application, request.action)
+
+        jobApplicationRepository.flush()
+        return toJobApplicationDraftResponse(objectMapper, application)
     }
 
     // 호출부(createDraft)의 hasActiveApplication() 확인과 이 saveAndFlush 사이에는 DB 잠금이
@@ -167,13 +257,6 @@ class JobApplicationServiceImpl(
             throw ActiveApplicationExistsException()
         }
 
-    private fun activeLinkedForm(jobId: Long): Form? =
-        jobApplicationFormRepository
-            .findById(jobId)
-            .orElse(null)
-            ?.let { link -> formRepository.findById(link.formId).orElse(null) }
-            ?.takeIf { it.status == FormStatus.ACTIVE }
-
     private fun hasActiveApplication(
         jobId: Long,
         studentMemberId: Long,
@@ -185,41 +268,8 @@ class JobApplicationServiceImpl(
                 ACTIVE_JOB_APPLICATION_STATUSES,
             ).isNotEmpty()
 
-    private fun toDraftResponse(application: JobApplication): JobApplicationDraftResponse =
-        JobApplicationDraftResponse(
-            applicationId = requireNotNull(application.id),
-            jobId = application.jobId,
-            formId = application.formId,
-            formVersion = application.formVersion,
-            status = application.status,
-            statusReason = application.statusReason,
-            contactEmail = application.contactEmail,
-            contactPhone = application.contactPhone,
-            privacyConsent = application.privacyConsent,
-            applicantName = application.applicantName,
-            applicantCohort = application.applicantCohort,
-            applicantDepartment = application.applicantDepartment,
-            applicantMajors = readStringList(application.applicantMajors),
-            applicantDesiredJob = application.applicantDesiredJob,
-            applicantTechStacks = readStringList(application.applicantTechStacks),
-            answers = readAnswers(application.answers),
-            submittedAt = application.submittedAt,
-            createdAt = requireNotNull(application.createdAt),
-            updatedAt = requireNotNull(application.updatedAt),
-        )
-
     private fun writeStringList(values: List<String>): String? =
         if (values.isEmpty()) null else objectMapper.writeValueAsString(values)
 
-    private fun readStringList(json: String?): List<String> {
-        if (json.isNullOrBlank()) return emptyList()
-        return objectMapper.readValue(json, Array<String>::class.java).toList()
-    }
-
     private fun writeAnswers(answers: List<ApplicationAnswer>): String = objectMapper.writeValueAsString(answers)
-
-    private fun readAnswers(json: String): List<ApplicationAnswer> {
-        if (json.isBlank()) return emptyList()
-        return objectMapper.readValue(json, Array<ApplicationAnswer>::class.java).toList()
-    }
 }

@@ -138,6 +138,12 @@ class SecurityConfig(
                 // 없어 JobApplicationService가 별도로 수행한다, Application Epic #75 Issue #78).
                 authorize("/api/v1/job-applications", authenticated)
                 authorize("/api/v1/job-applications/**", authenticated)
+                // 교사·개발자용 지원서 조회·검토(ALLOW_EDIT/REQUEST_REVISION/APPROVE/REJECT)는
+                // 역할까지만 검증한다(Application Epic #75 Issue #125). 조회는 담당 공고 여부와
+                // 무관히 모든 교사·개발자가 가능하고, 상태 변경(담당자만)은 JobApplicationAdminService가
+                // 별도로 판단한다.
+                authorize("/api/v1/admin/job-applications", hasAnyRole("TEACHER", "DEVELOPER"))
+                authorize("/api/v1/admin/job-applications/**", hasAnyRole("TEACHER", "DEVELOPER"))
                 // 프로그램 관리(등록·수정·상태 변경)는 교사와 개발자가 사용한다(Program 도메인
                 // 전체 개발 요구사항 3절). 등록자·담당 교사 본인만 수정할 수 있는지는 Role만으로
                 // 알 수 없어 ProgramService가 별도로 수행한다. 더 구체적인 admin 경로를 먼저
