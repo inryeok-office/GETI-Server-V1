@@ -19,6 +19,7 @@ import org.springframework.context.ApplicationEventPublisher
 import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
 import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
 import team.inreok.getiserver.domain.ai.entity.type.AiStatus
+import team.inreok.getiserver.domain.ai.event.AiAnalysisCompletedEvent
 import team.inreok.getiserver.domain.ai.event.AiAnalysisRequestedEvent
 import team.inreok.getiserver.domain.ai.exception.AiJobNotFoundException
 import team.inreok.getiserver.domain.ai.exception.AiProviderUnavailableException
@@ -147,10 +148,12 @@ class AiAnalysisServiceImplTest {
         service.processAnalysis(1L)
 
         verify(aiAnalysisProvider, never()).analyze(anyInput())
+        // 실제로 상태가 바뀌지 않았으므로 Search가 다시 색인할 이유가 없다(중복 Event 방지).
+        verify(eventPublisher, never()).publishEvent(anyCompletedEvent())
     }
 
     @Test
-    fun `분석 대상 공고를 찾을 수 없으면 실패로 기록한다`() {
+    fun `분석 대상 공고를 찾을 수 없으면 실패로 기록하고 완료 Event를 발행한다`() {
         given(transitionService.claimForProcessing(1L)).willReturn(true)
         given(jobAiAnalysisInputQueryPort.findById(1L)).willReturn(null)
 
@@ -158,6 +161,7 @@ class AiAnalysisServiceImplTest {
 
         verify(transitionService).markFailed(eq(1L), anyString())
         verify(aiAnalysisProvider, never()).analyze(anyInput())
+        verify(eventPublisher).publishEvent(AiAnalysisCompletedEvent(1L))
     }
 
     @Test
@@ -199,10 +203,12 @@ class AiAnalysisServiceImplTest {
         assertThat(preferredJsonCaptor.value).contains("\"techStackId\":null").contains("Docker")
         assertThat(promptVersionCaptor.value).isEqualTo("JOB_ANALYSIS_V1")
         assertThat(analysisVersionCaptor.value).isEqualTo(1)
+        // Search가 완료된 결과를 반영할 수 있도록 완료 Event를 발행한다(Issue #144).
+        verify(eventPublisher).publishEvent(AiAnalysisCompletedEvent(1L))
     }
 
     @Test
-    fun `Provider가 실패하면 안전한 메시지로 실패 처리한다`() {
+    fun `Provider가 실패하면 안전한 메시지로 실패 처리하고 완료 Event를 발행한다`() {
         given(transitionService.claimForProcessing(1L)).willReturn(true)
         given(jobAiAnalysisInputQueryPort.findById(1L)).willReturn(inputSnapshot())
         given(aiAnalysisProvider.analyze(anyInput()))
@@ -211,6 +217,10 @@ class AiAnalysisServiceImplTest {
         service.processAnalysis(1L)
 
         verify(transitionService).markFailed(1L, "OpenAI 인증에 실패했습니다.")
+        // 실패해도 발행한다 -- 이전에 COMPLETED였던 공고가 재분석에 실패하면 Search가 다시
+        // 조회해서 더 이상 유효하지 않은 이전 AI 색인 값을 비워야 한다(AiAnalysisCompletedEvent
+        // KDoc 참고).
+        verify(eventPublisher).publishEvent(AiAnalysisCompletedEvent(1L))
     }
 
     private fun verifyEventPublished() {
@@ -219,6 +229,9 @@ class AiAnalysisServiceImplTest {
 
     private fun anyEvent(): Any =
         org.mockito.ArgumentMatchers.any(AiAnalysisRequestedEvent::class.java) ?: AiAnalysisRequestedEvent(1L)
+
+    private fun anyCompletedEvent(): Any =
+        org.mockito.ArgumentMatchers.any(AiAnalysisCompletedEvent::class.java) ?: AiAnalysisCompletedEvent(1L)
 
     private fun anyInput(): AiAnalysisInput =
         org.mockito.ArgumentMatchers.any(AiAnalysisInput::class.java) ?: sampleInput()

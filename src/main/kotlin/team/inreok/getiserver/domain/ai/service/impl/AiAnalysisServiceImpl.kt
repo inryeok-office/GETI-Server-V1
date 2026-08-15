@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import team.inreok.getiserver.domain.ai.dto.AiReanalysisResponse
+import team.inreok.getiserver.domain.ai.event.AiAnalysisCompletedEvent
 import team.inreok.getiserver.domain.ai.event.AiAnalysisRequestedEvent
 import team.inreok.getiserver.domain.ai.exception.AiJobNotFoundException
 import team.inreok.getiserver.domain.ai.exception.AiProviderUnavailableException
@@ -69,6 +70,12 @@ class AiAnalysisServiceImpl(
     // 자체가 예외를 던졌을 때(DB 오류 등) FAILED로 되돌릴 방법이 없어 Row가 PROCESSING에
     // 영구 고착된다 -- 되돌릴 Scheduler가 없고 prepareReanalysis는 PROCESSING을 409로 거부하므로
     // 사용자도 운영자도 API로 복구할 수 없다(Code Review 지적 사항, Issue #132).
+    //
+    // finally에서 AiAnalysisCompletedEvent를 발행한다 -- markCompleted/markFailed 세 호출 지점
+    // 모두(대상 없음/Provider 실패/예상 못한 오류) 분석 시도가 끝났다는 점은 같고, search가 이
+    // Event로 현재 상태를 다시 조회하면 성공/실패 여부와 무관하게 항상 최신 값에 수렴한다
+    // (AiAnalysisCompletedEvent KDoc 참고). claimForProcessing이 false를 반환해 즉시 return하는
+    // 경로(중복 처리 방지)는 실제로 상태가 바뀌지 않았으므로 Event를 발행하지 않는다.
     @Suppress("TooGenericExceptionCaught")
     override fun processAnalysis(jobId: Long) {
         if (!transitionService.claimForProcessing(jobId)) return
@@ -97,6 +104,8 @@ class AiAnalysisServiceImpl(
         } catch (ex: Exception) {
             log.error("AI 분석 처리 중 예상하지 못한 오류가 발생했습니다(jobId={}).", jobId, ex)
             transitionService.markFailed(jobId, "AI 분석 처리 중 오류가 발생했습니다.")
+        } finally {
+            eventPublisher.publishEvent(AiAnalysisCompletedEvent(jobId))
         }
     }
 
