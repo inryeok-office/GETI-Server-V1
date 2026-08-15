@@ -9,6 +9,7 @@ import org.mockito.BDDMockito.given
 import org.mockito.Mock
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminAction
@@ -16,6 +17,7 @@ import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRe
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.JobApplicationStatusHistory
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
+import team.inreok.getiserver.domain.application.event.JobApplicationReviewedEvent
 import team.inreok.getiserver.domain.application.exception.ApplicationActionNotAvailableException
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
 import team.inreok.getiserver.domain.application.exception.ApplicationReviewForbiddenException
@@ -45,12 +47,16 @@ class JobApplicationAdminServiceImplTest {
     @Mock
     private lateinit var fileLinkPort: FileLinkPort
 
+    @Mock
+    private lateinit var eventPublisher: ApplicationEventPublisher
+
     private val service: JobApplicationAdminService by lazy {
         JobApplicationAdminServiceImpl(
             jobApplicationRepository,
             jobApplicationSnapshotQueryPort,
             jobApplicationStatusHistoryRepository,
             fileLinkPort,
+            eventPublisher,
             JsonMapper(),
         )
     }
@@ -60,9 +66,10 @@ class JobApplicationAdminServiceImplTest {
     private fun applicationOf(
         id: Long = 1L,
         status: JobApplicationStatus = JobApplicationStatus.SUBMITTED,
+        applicantMemberId: Long = 1L,
     ) = JobApplication(
         jobId = 1L,
-        applicantMemberId = 1L,
+        applicantMemberId = applicantMemberId,
         attemptNumber = 1,
         contactEmail = "student@example.com",
         answers = "[]",
@@ -192,6 +199,27 @@ class JobApplicationAdminServiceImplTest {
         assertThat(historyCaptor.value.action).isEqualTo("REQUEST_REVISION")
         assertThat(historyCaptor.value.actorMemberId).isEqualTo(100L)
         assertThat(historyCaptor.value.reason).isEqualTo("보완 필요")
+    }
+
+    // PR #142 Review(SUBMIT 파일 연결 회귀 Test 부재)와 동일한 이유로, 이 Action이 실제로
+    // JobApplicationReviewedEvent를 발행하는지 단정한다(Issue #135).
+    @Test
+    fun `교사 Action이 성공하면 지원자에게 JobApplicationReviewedEvent를 발행한다`() {
+        given(
+            jobApplicationRepository.findByIdForUpdate(1L),
+        ).willReturn(applicationOf(status = JobApplicationStatus.SUBMITTED, applicantMemberId = 7L))
+        given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf(createdByMemberId = 100L))
+
+        service.executeAction(
+            1L,
+            100L,
+            isDeveloper = false,
+            JobApplicationAdminActionRequest(JobApplicationAdminAction.APPROVE),
+        )
+
+        verify(eventPublisher).publishEvent(
+            JobApplicationReviewedEvent(applicationId = 1L, studentMemberId = 7L, action = "APPROVE", reason = null),
+        )
     }
 
     @Test

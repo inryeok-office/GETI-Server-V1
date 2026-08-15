@@ -1,5 +1,6 @@
 package team.inreok.getiserver.domain.application.service.impl
 
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -10,6 +11,7 @@ import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
+import team.inreok.getiserver.domain.application.event.JobApplicationReviewedEvent
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
 import team.inreok.getiserver.domain.application.exception.ApplicationReviewForbiddenException
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
@@ -26,6 +28,7 @@ class JobApplicationAdminServiceImpl(
     private val jobApplicationSnapshotQueryPort: JobApplicationSnapshotQueryPort,
     private val jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository,
     private val fileLinkPort: FileLinkPort,
+    private val eventPublisher: ApplicationEventPublisher,
     private val objectMapper: ObjectMapper,
 ) : JobApplicationAdminService {
     @Transactional(readOnly = true)
@@ -81,6 +84,17 @@ class JobApplicationAdminServiceImpl(
             request.action.name,
             requesterMemberId,
             request.reason,
+        )
+        // 지원자에게 검토 결과를 알린다(Issue #135). 상태 전이·이력 기록과 같은 Transaction 안에서
+        // 발행해, 검토 Action이 Rollback되면 알림도 만들어지지 않도록 한다(실제 알림 생성은
+        // domain.notification의 AFTER_COMMIT Listener가 담당, JobApplicationReviewedEvent KDoc 참고).
+        eventPublisher.publishEvent(
+            JobApplicationReviewedEvent(
+                applicationId = requireNotNull(application.id),
+                studentMemberId = application.applicantMemberId,
+                action = request.action.name,
+                reason = request.reason,
+            ),
         )
         return toJobApplicationDraftResponse(objectMapper, application, currentFiles(application))
     }
