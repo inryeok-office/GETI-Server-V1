@@ -16,7 +16,7 @@ import java.time.LocalDateTime
 /**
  * 공고 AI 분석 결과다. `jobs.id`를 공유 PK로 사용한다(`docs/architecture/erd.md` 참고).
  *
- * [requiredSkills]/[preferredSkills]는 `{techStackId, name}` 목록을 담은 JSON 원문 Text다(V20
+ * [requiredSkills]/[preferredSkills]는 `{techStackId, name}` 목록을 담은 JSON 원문 Text다(V21
  * Migration). OpenAI는 기술 이름만 추출하고, GETI Tech Stack Master와의 정규화 매칭은
  * Application 계층(`AiAnalysisServiceImpl`)이 수행한다 — Entity는 이미 매칭된 결과만 보관한다.
  */

@@ -94,9 +94,9 @@ OR
 
 `contains_personal_information`과 `expires_at`은 V2 그대로 두고 아직 사용하지 않는다(판단 주체와 보존 정책 미확정).
 
-## job_ai_analyses의 AI Analysis Phase 1 확장 (V20)
+## job_ai_analyses의 AI Analysis Phase 1 확장 (V21)
 
-V2의 `job_ai_analyses`는 Persistence Skeleton 단계라 `summary`/`eligibility_summary`/`extracted_skills`처럼 비정형 Text/JSONB만 있었다. AI Analysis Phase 1(Issue #132, OpenAI Structured Outputs 연동)이 확정한 계약에 맞춰 V20이 `eligibility_summary`/`extracted_skills`를 제거하고 다음을 추가했다(실사용 Row가 없는 단계라 값 이관 없이 바로 DROP했다).
+V2의 `job_ai_analyses`는 Persistence Skeleton 단계라 `summary`/`eligibility_summary`/`extracted_skills`처럼 비정형 Text/JSONB만 있었다. AI Analysis Phase 1(Issue #132, OpenAI Structured Outputs 연동)이 확정한 계약에 맞춰 V21이 `eligibility_summary`/`extracted_skills`를 제거하고 다음을 추가했다(실사용 Row가 없는 단계라 값 이관 없이 바로 DROP했다). 원래 V20으로 작성했으나 같은 시점에 병합된 다른 PR(#140, `V20__create_job_application_status_histories_and_submissions.sql`)과 번호가 겹쳐 V21로 재번호했다.
 
 - `required_skills`/`preferred_skills`(JSONB): `{"techStackId": Long?, "name": String}` 목록. OpenAI는 기술 이름만 추출하고, `member.tech_stacks`와의 정규화 매칭(정확 매칭만, 공격적 병합 없음)은 Application 계층이 수행한다.
 - `high_school_graduate_fit`/`entry_level_fit`(VARCHAR, `AiFitLevel`: `SUITABLE`/`CONDITIONAL`/`UNSUITABLE`), `difficulty`(VARCHAR, `AiDifficulty`: `EASY`/`NORMAL`/`HARD`) — CHECK 제약으로 값 집합을 강제한다.

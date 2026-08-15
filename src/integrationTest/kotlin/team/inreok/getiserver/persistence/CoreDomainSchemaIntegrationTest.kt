@@ -376,7 +376,7 @@ class CoreDomainSchemaIntegrationTest
         }
 
         @Test
-        fun `job_ai_analyses는 V20이 추가한 구조화 결과 Column을 저장·조회한다`() {
+        fun `job_ai_analyses는 V21이 추가한 구조화 결과 Column을 저장·조회한다`() {
             val company = persistCompany()
             val job = jobRepository.saveAndFlush(newJob(company.id!!))
 
