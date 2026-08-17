@@ -96,7 +96,7 @@ team.inreok.getiserver.domain
 ├── file         entity(+type), repository, service(+impl), controller, dto, exception, link, access, policy, storage
 ├── company      entity(+type), repository, service(+impl), controller, dto, exception, query, external(+impl), access
 ├── ai           entity(+type), repository, service(+impl), controller, dto, exception, query, event, config, provider(OpenAI Adapter) (AI Analysis Phase 1, Issue #132)
-├── recommendation entity(+type), repository (MemberJobPreference, Recommendation — 아직 Service/Controller 없음)
+├── recommendation entity(+type), repository, service(+impl), controller, dto, exception (Recommendation R3, Issue #152)
 ├── application  entity(+type), repository, service(+impl), controller, dto, exception, query, access, event
 ├── program      entity(+type), repository, service(+impl), controller, dto, exception, query, event, scheduler, access
 ├── portfolio    entity(+type), repository (PortfolioRequest, PortfolioSubmission — 아직 Service/Controller 없음)
@@ -116,7 +116,7 @@ team.inreok.getiserver.domain
 
 Domain Package는 정해진 Layer 세트를 전부 갖는 것이 아니라, 그 Domain이 실제로 담당하는 책임만큼만 Sub-package를 가진다.
 
-`ai`/`recommendation`/`portfolio`/`operation`/`audit`처럼 아직 Use Case(Service/Controller)가 구현되지 않은 Domain은 다음처럼 Persistence Package만 가진다.
+`portfolio`/`operation`/`audit`처럼 아직 Use Case(Service/Controller)가 구현되지 않은 Domain은 다음처럼 Persistence Package만 가진다.
 
 ```text
 domain/{domain-name}/
