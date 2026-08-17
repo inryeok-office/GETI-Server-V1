@@ -99,6 +99,23 @@ class FileStorageIntegrationTest {
     }
 
     @Test
+    fun `업로드한 내용을 download로 그대로 읽을 수 있다`() {
+        // FileArchivePort(Issue #84 Phase 6)가 여러 File을 ZIP으로 묶을 때 이 Method로 각 File의
+        // 내용을 읽는다.
+        val key = "PROFILE_IMAGE/2026/08/${UUID.randomUUID()}"
+        adapter.upload(key, "image/png", CONTENT.size.toLong(), ByteArrayInputStream(CONTENT))
+
+        adapter.download(key).use { assertThat(it.readBytes()).isEqualTo(CONTENT) }
+    }
+
+    @Test
+    fun `존재하지 않는 Object를 download하면 FileStorageException이다`() {
+        assertThatThrownBy {
+            adapter.download("PROFILE_IMAGE/2026/08/${UUID.randomUUID()}")
+        }.isInstanceOf(FileStorageException::class.java)
+    }
+
+    @Test
     fun `Bucket이 없으면 업로드가 FileStorageException으로 변환된다`() {
         // SDK 예외 Message에는 Bucket 이름과 Request ID가 들어 있어 그대로 노출하면 안 된다(§26/§42).
         val key = "PROFILE_IMAGE/2026/08/${UUID.randomUUID()}"

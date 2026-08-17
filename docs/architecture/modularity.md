@@ -93,7 +93,7 @@ team.inreok.getiserver.domain
 │   └── upsert                                      (collector가 사용하는 CollectedJobUpsertUseCase, + impl)
 ├── member       entity(+type), repository, service(+impl), controller, dto, exception, query, event, access
 ├── auth         entity, repository, service(+impl), controller, dto, exception (Refresh Token 발급/재발급)
-├── file         entity(+type), repository, service(+impl), controller, dto, exception, link, access, policy, storage
+├── file         entity(+type), repository, service(+impl), controller, dto, exception, link, access, policy, storage, archive(일괄 다운로드 ZIP 공개 Port, Issue #154, Epic #84 Phase 6)
 ├── company      entity(+type), repository, service(+impl), controller, dto, exception, query, external(+impl), access
 ├── ai           entity(+type), repository, service(+impl), controller, dto, exception, query, event, config, provider(OpenAI Adapter) (AI Analysis Phase 1, Issue #132)
 ├── recommendation entity(+type), repository (MemberJobPreference, Recommendation — 아직 Service/Controller 없음)
