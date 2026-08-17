@@ -114,6 +114,26 @@ class FileArchivePortImplTest {
     }
 
     @Test
+    fun `구분자를 없앤 뒤 이름이 그대로 부모 경로 표기이면 대체한다(ZIP Slip 방지)`() {
+        // 구분자가 하나도 없어도 Entry 이름이 정확히 ".."면, 순진하게 File(destDir, name)으로
+        // 풀어내는 압축 해제 코드에서 destDir의 부모 경로로 해석된다.
+        val fileA = storedFileOf(id = 1L, name = "a.pdf", content = "A".toByteArray())
+        val fileB = storedFileOf(id = 2L, name = "b.pdf", content = "B".toByteArray())
+        givenFiles(fileA, fileB)
+        val output = ByteArrayOutputStream()
+
+        port.writeZip(listOf(FileArchiveEntry(1L, ".."), FileArchiveEntry(2L, ".")), output)
+
+        assertThat(readZipEntries(output).keys).containsExactlyInAnyOrder("file", "file(2)")
+    }
+
+    @Test
+    fun `빈 목록을 요청하면 Storage 조회 없이 예외를 던진다`() {
+        assertThatThrownBy { port.writeZip(emptyList(), ByteArrayOutputStream()) }
+            .isInstanceOf(FileArchiveEmptyException::class.java)
+    }
+
+    @Test
     fun `개수 상한을 넘으면 Storage 조회 없이 즉시 거부한다`() {
         val entries = (1L..4L).map { FileArchiveEntry(it, "f$it.pdf") }
 

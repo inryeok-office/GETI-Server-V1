@@ -39,7 +39,13 @@ class FileArchivePortImpl(
     ): FileArchiveResult {
         validateEntryCount(entries.size)
 
-        val filesById = storedFileRepository.findAllByIdIn(entries.map { it.fileId }.toSet()).associateBy { it.id }
+        // FileLinkPortImpl.snapshotsOf와 같은 이유로 빈 목록이면 조회 자체를 생략한다.
+        val filesById =
+            if (entries.isEmpty()) {
+                emptyMap()
+            } else {
+                storedFileRepository.findAllByIdIn(entries.map { it.fileId }.toSet()).associateBy { it.id }
+            }
         val visibleEntries = entries.filter { filesById[it.fileId]?.isVisible() == true }
         // 존재하지 않거나 보이지 않는 상태의 fileId는 FileLinkPort.snapshotsOf와 같은 방식으로
         // 조용히 건너뛴다(§23) -- List - Set은 원래 순서를 보존한다.
@@ -126,7 +132,11 @@ class FileArchivePortImpl(
         rawName: String,
         usedEntryNames: MutableSet<String>,
     ): String {
-        val flattened = rawName.replace('/', '_').replace('\\', '_').ifBlank { "file" }
+        val replaced = rawName.replace('/', '_').replace('\\', '_')
+        // 경로 구분자를 없앤 뒤에도 "."/".."는 그 자체로 위험하다 -- 순진한 압축 해제 코드가
+        // File(destDir, entryName)으로 바로 풀면 ".."는 destDir의 **부모** 경로로 해석된다(§23
+        // ZIP Slip). 구분자가 아예 없어도 이 두 값만은 별도로 막아야 한다.
+        val flattened = if (replaced.isBlank() || replaced == "." || replaced == "..") "file" else replaced
         if (usedEntryNames.add(flattened)) return flattened
 
         val extension = flattened.substringAfterLast('.', "")
