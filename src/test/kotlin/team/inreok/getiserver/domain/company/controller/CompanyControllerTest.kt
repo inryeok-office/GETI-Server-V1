@@ -29,7 +29,7 @@ import java.time.LocalDateTime
 
 // SecurityConfig를 명시적으로 Import해 /api/v1/companies가 실제로 인증을 요구하는지(401)까지 검증한다.
 @WebMvcTest(controllers = [CompanyController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class CompanyControllerTest
     @Autowired

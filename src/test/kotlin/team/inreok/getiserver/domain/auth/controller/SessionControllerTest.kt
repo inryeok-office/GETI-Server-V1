@@ -28,7 +28,7 @@ import team.inreok.getiserver.global.security.JwtTokenProvider
 import team.inreok.getiserver.global.security.SecurityConfig
 
 @WebMvcTest(controllers = [SessionController::class])
-@Import(SecurityConfig::class, RefreshTokenCookieFactory::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class, RefreshTokenCookieFactory::class)
 @EnableWebSecurity
 class SessionControllerTest
     @Autowired

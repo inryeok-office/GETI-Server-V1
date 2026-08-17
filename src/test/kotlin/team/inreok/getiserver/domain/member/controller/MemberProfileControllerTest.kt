@@ -32,7 +32,7 @@ import java.time.LocalDateTime
 // SecurityConfig를 명시적으로 Import해 /api/v1/me/**가 실제로 인증을 요구하는지(401)까지
 // 검증한다(WebPageableConfig와 동일하게 일반 @Configuration이라 @WebMvcTest가 자동 인식하지 않음).
 @WebMvcTest(controllers = [MemberProfileController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class MemberProfileControllerTest
     @Autowired

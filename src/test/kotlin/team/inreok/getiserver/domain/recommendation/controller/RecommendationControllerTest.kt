@@ -53,7 +53,7 @@ import java.time.LocalDateTime
 // SecurityConfig를 명시적으로 Import해 각 경로가 STUDENT Role을 실제로 요구하는지(403)까지
 // 검증한다(NotificationControllerTest와 동일한 방식).
 @WebMvcTest(controllers = [RecommendationController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class RecommendationControllerTest
     @Autowired

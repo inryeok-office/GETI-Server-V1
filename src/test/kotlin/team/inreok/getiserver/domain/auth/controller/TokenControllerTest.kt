@@ -28,7 +28,7 @@ import team.inreok.getiserver.global.security.SecurityConfig
 // 실제 RefreshTokenCookieFactory를 Import해 @CookieValue/@RequestHeader 바인딩과 Set-Cookie 출력까지
 // 검증한다. /refresh는 permitAll이므로 인증은 필요 없다.
 @WebMvcTest(controllers = [TokenController::class])
-@Import(SecurityConfig::class, RefreshTokenCookieFactory::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class, RefreshTokenCookieFactory::class)
 @EnableWebSecurity
 class TokenControllerTest
     @Autowired
