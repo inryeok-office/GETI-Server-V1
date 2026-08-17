@@ -16,7 +16,6 @@ import team.inreok.getiserver.domain.recommendation.dto.RecommendationStatus
 import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreference
 import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreferenceId
 import team.inreok.getiserver.domain.recommendation.entity.Recommendation
-import team.inreok.getiserver.domain.recommendation.entity.RecommendationPreference
 import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationJobNotFoundException
 import team.inreok.getiserver.domain.recommendation.repository.MemberJobPreferenceRepository
@@ -61,7 +60,7 @@ class RecommendationServiceImpl(
                 enabled = true,
                 status = RecommendationStatus.READY,
                 generatedAt = generatedAtOf(rows),
-                items = toItemResponses(rows),
+                items = toItemResponses(rows, memberId),
             )
         }
     }
@@ -77,13 +76,13 @@ class RecommendationServiceImpl(
         memberId: Long,
         enabled: Boolean,
     ): RecommendationSettingResponse {
-        val preference =
-            recommendationPreferenceRepository.findByMemberId(memberId)
-                ?: RecommendationPreference(memberId = memberId, enabled = enabled)
-        preference.enabled = enabled
-        // GenerationType.IDENTITY라 save()가 이미 즉시 Insert/Update를 Flush한다(신규 Row도
-        // 생성된 id를 알아야 하므로). updatedAt(@UpdateTimestamp)도 이 시점에 채워진다.
-        val saved = recommendationPreferenceRepository.save(preference)
+        // find-then-save 2단계 대신 Upsert 하나로 처리해 동시 최초 설정 요청에서도 멱등을
+        // 보장한다(코드리뷰 반영, RecommendationPreferenceRepository.upsert KDoc 참고).
+        recommendationPreferenceRepository.upsert(memberId, enabled)
+        val saved =
+            requireNotNull(recommendationPreferenceRepository.findByMemberId(memberId)) {
+                "Upsert 직후에는 RecommendationPreference를 찾을 수 있어야 합니다."
+            }
         return RecommendationSettingResponse(
             enabled = saved.enabled,
             updatedAt = requireNotNull(saved.updatedAt) { "저장된 RecommendationPreference는 updatedAt을 가져야 합니다." },
@@ -139,11 +138,17 @@ class RecommendationServiceImpl(
         }
     }
 
-    private fun toItemResponses(rows: List<Recommendation>): List<RecommendationItemResponse> {
+    // memberId(requesterId)를 함께 넘겨야 CompanyQuery.findActiveSummaries가 로고 URL을 실제로
+    // 발급한다(코드리뷰 반영) -- requesterId를 생략하면 색인·Discord 같은 시스템 문맥으로 간주해
+    // logoUrl이 항상 null이라, 조회 API처럼 인증된 요청자가 있는 호출부는 반드시 전달해야 한다.
+    private fun toItemResponses(
+        rows: List<Recommendation>,
+        memberId: Long,
+    ): List<RecommendationItemResponse> {
         val jobIds = rows.map { it.jobId }.toSet()
         val jobs = jobRecommendationCandidateQueryPort.findAllByIds(jobIds)
         val companyIds = jobs.values.map { it.companyId }.toSet()
-        val companies = companyQuery.findActiveSummaries(companyIds)
+        val companies = companyQuery.findActiveSummaries(companyIds, memberId)
         // 추천 생성 이후 Job이 삭제됐으면(Soft Delete) jobs Map에 없다 -- 삭제된 공고를 담아
         // 반환하지 않고 해당 항목만 건너뛴다(호출부가 판단할 표시 규칙이 없어 가장 안전한 기본값).
         return rows.mapNotNull { row -> toItemResponse(row, jobs[row.jobId] ?: return@mapNotNull null, companies) }

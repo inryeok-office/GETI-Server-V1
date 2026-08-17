@@ -246,6 +246,41 @@ class RecommendationPersistenceIntegrationTest
             assertThat(recommendationPreferenceRepository.count()).isEqualTo(1)
         }
 
+        @Test
+        fun `upsert는 설정 Row가 없으면 새로 만든다`() {
+            recommendationPreferenceRepository.upsert(memberId, true)
+
+            val found = requireNotNull(recommendationPreferenceRepository.findByMemberId(memberId))
+            assertThat(found.enabled).isTrue()
+            assertThat(found.updatedAt).isNotNull()
+        }
+
+        @Test
+        fun `upsert는 이미 설정 Row가 있으면 값을 갱신하고 새 Row를 만들지 않는다`() {
+            recommendationPreferenceRepository.saveAndFlush(
+                RecommendationPreference(memberId = memberId, enabled = true),
+            )
+
+            recommendationPreferenceRepository.upsert(memberId, false)
+
+            val found = requireNotNull(recommendationPreferenceRepository.findByMemberId(memberId))
+            assertThat(found.enabled).isFalse()
+            assertThat(recommendationPreferenceRepository.count()).isEqualTo(1)
+        }
+
+        @Test
+        fun `upsert를 같은 회원에게 여러 번 호출해도 Unique 제약 위반 없이 멱등하게 동작한다`() {
+            // find-then-save 대신 upsert 하나로 처리하는 이유가 되는 시나리오다(코드리뷰 반영,
+            // RecommendationPreferenceRepository.upsert KDoc 참고) -- 동시 요청을 Thread로
+            // 정확히 재현하지는 않지만, 반복 호출 자체가 예외 없이 계속 성공하는지 확인한다.
+            recommendationPreferenceRepository.upsert(memberId, true)
+            recommendationPreferenceRepository.upsert(memberId, true)
+            recommendationPreferenceRepository.upsert(memberId, false)
+
+            assertThat(recommendationPreferenceRepository.count()).isEqualTo(1)
+            assertThat(requireNotNull(recommendationPreferenceRepository.findByMemberId(memberId)).enabled).isFalse()
+        }
+
         // ---------- R3: 관심 없음 설정 시 Recommendation 즉시 제거 ----------
 
         @Test

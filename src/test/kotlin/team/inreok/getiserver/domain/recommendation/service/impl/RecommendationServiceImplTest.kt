@@ -154,7 +154,7 @@ class RecommendationServiceImplTest {
         given(recommendationRepository.findAllByMemberIdAndRecommendationDateOrderByRank(1L, today)).willReturn(rows)
         given(jobRecommendationCandidateQueryPort.findAllByIds(setOf(1L, 2L)))
             .willReturn(mapOf(1L to jobOf(1L), 2L to jobOf(2L)))
-        given(companyQuery.findActiveSummaries(setOf(100L)))
+        given(companyQuery.findActiveSummaries(setOf(100L), 1L))
             .willReturn(
                 mapOf(
                     100L to CompanySummary(companyId = 100L, name = "인력개발원", logoUrl = "https://example.com/logo.png"),
@@ -184,15 +184,15 @@ class RecommendationServiceImplTest {
         given(recommendationRepository.findAllByMemberIdAndRecommendationDateOrderByRank(1L, today)).willReturn(rows)
         given(jobRecommendationCandidateQueryPort.findAllByIds(setOf(1L, 2L, 3L, 4L, 5L)))
             .willReturn((1L..5L).associateWith { jobOf(it) })
-        given(companyQuery.findActiveSummaries(setOf(100L))).willReturn(emptyMap())
+        given(companyQuery.findActiveSummaries(setOf(100L), 1L)).willReturn(emptyMap())
 
         service.getMyRecommendations(1L)
 
         verify(jobRecommendationCandidateQueryPort, times(1)).findAllByIds(anySet())
-        // findActiveSummaries(companyIds, requesterId = null)는 Kotlin Default Parameter라
+        // findActiveSummaries(companyIds, requesterId)는 Kotlin Default Parameter라
         // ArgumentMatcher(anySet())와 섞으면 Mockito가 Default Parameter 분기(-$default) 호출을
         // Matcher 개수 불일치로 오인한다(InvalidUseOfMatchersException). 정확한 값으로 검증한다.
-        verify(companyQuery, times(1)).findActiveSummaries(setOf(100L))
+        verify(companyQuery, times(1)).findActiveSummaries(setOf(100L), 1L)
     }
 
     @Test
@@ -203,7 +203,7 @@ class RecommendationServiceImplTest {
         given(recommendationRepository.findAllByMemberIdAndRecommendationDateOrderByRank(1L, today)).willReturn(rows)
         // jobId=2는 삭제되어 결과 Map에서 빠진 것으로 Stub한다.
         given(jobRecommendationCandidateQueryPort.findAllByIds(setOf(1L, 2L))).willReturn(mapOf(1L to jobOf(1L)))
-        given(companyQuery.findActiveSummaries(setOf(100L))).willReturn(emptyMap())
+        given(companyQuery.findActiveSummaries(setOf(100L), 1L)).willReturn(emptyMap())
 
         val result = service.getMyRecommendations(1L)
 
@@ -218,7 +218,7 @@ class RecommendationServiceImplTest {
             .willReturn(RecommendationPreference(memberId = 1L, enabled = true))
         given(recommendationRepository.findAllByMemberIdAndRecommendationDateOrderByRank(1L, today)).willReturn(rows)
         given(jobRecommendationCandidateQueryPort.findAllByIds(setOf(1L))).willReturn(mapOf(1L to jobOf(1L)))
-        given(companyQuery.findActiveSummaries(setOf(100L))).willReturn(emptyMap())
+        given(companyQuery.findActiveSummaries(setOf(100L), 1L)).willReturn(emptyMap())
 
         val result = service.getMyRecommendations(1L)
 
@@ -228,53 +228,65 @@ class RecommendationServiceImplTest {
     }
 
     // ---------- ON/OFF ----------
+    // updateSetting은 find-then-save 대신 Repository.upsert 하나로 처리한다(코드리뷰 반영 --
+    // find-then-save 2단계는 최초 설정 동시 요청 시 uk_recommendation_preferences_member_id
+    // 위반으로 멱등 성공 계약이 깨질 수 있었다). Mock 위에서는 upsert가 실제로 값을 저장하지
+    // 않으므로, 각 Test가 upsert 이후의 findByMemberId 결과를 원하는 상태로 직접 Stub한다.
 
     @Test
-    fun `설정 Row가 없으면 새로 만들어 저장한다`() {
-        given(recommendationPreferenceRepository.findByMemberId(1L)).willReturn(null)
-        given(recommendationPreferenceRepository.save(anyRecommendationPreference())).willAnswer { invocation ->
-            (invocation.arguments[0] as RecommendationPreference).apply {
-                updatedAt = LocalDateTime.of(2026, 8, 17, 6, 0)
-            }
-        }
+    fun `설정 Row가 없으면 Upsert로 새로 만든다`() {
+        given(recommendationPreferenceRepository.findByMemberId(1L))
+            .willReturn(
+                RecommendationPreference(memberId = 1L, enabled = true).apply {
+                    updatedAt =
+                        LocalDateTime.of(2026, 8, 17, 6, 0)
+                },
+            )
 
         val result = service.updateSetting(1L, true)
 
+        verify(recommendationPreferenceRepository).upsert(1L, true)
         assertThat(result.enabled).isTrue()
         assertThat(result.updatedAt).isEqualTo(LocalDateTime.of(2026, 8, 17, 6, 0))
     }
 
     @Test
-    fun `설정 Row가 있으면 값을 갱신한다`() {
-        val existing =
-            RecommendationPreference(memberId = 1L, enabled = true).apply {
-                updatedAt = LocalDateTime.of(2026, 8, 1, 0, 0)
-            }
-        given(recommendationPreferenceRepository.findByMemberId(1L)).willReturn(existing)
-        given(recommendationPreferenceRepository.save(existing)).willAnswer { invocation ->
-            (invocation.arguments[0] as RecommendationPreference).apply {
-                updatedAt = LocalDateTime.of(2026, 8, 17, 6, 0)
-            }
-        }
+    fun `설정 Row가 있으면 Upsert로 값을 갱신한다`() {
+        given(recommendationPreferenceRepository.findByMemberId(1L))
+            .willReturn(
+                RecommendationPreference(memberId = 1L, enabled = false).apply {
+                    updatedAt =
+                        LocalDateTime.of(2026, 8, 17, 6, 0)
+                },
+            )
 
         val result = service.updateSetting(1L, false)
 
+        verify(recommendationPreferenceRepository).upsert(1L, false)
         assertThat(result.enabled).isFalse()
-        assertThat(existing.enabled).isFalse()
     }
 
     @Test
     fun `같은 값을 다시 보내도(멱등) 정상 처리된다`() {
-        val existing =
-            RecommendationPreference(memberId = 1L, enabled = true).apply {
-                updatedAt = LocalDateTime.of(2026, 8, 1, 0, 0)
-            }
-        given(recommendationPreferenceRepository.findByMemberId(1L)).willReturn(existing)
-        given(recommendationPreferenceRepository.save(existing)).willReturn(existing)
+        given(recommendationPreferenceRepository.findByMemberId(1L))
+            .willReturn(
+                RecommendationPreference(memberId = 1L, enabled = true).apply {
+                    updatedAt =
+                        LocalDateTime.of(2026, 8, 17, 6, 0)
+                },
+            )
 
         val result = service.updateSetting(1L, true)
 
         assertThat(result.enabled).isTrue()
+    }
+
+    @Test
+    fun `Upsert 직후 조회되지 않으면 예외를 던진다(불변식 위반 방어)`() {
+        given(recommendationPreferenceRepository.findByMemberId(1L)).willReturn(null)
+
+        assertThatThrownBy { service.updateSetting(1L, true) }
+            .isInstanceOf(IllegalArgumentException::class.java)
     }
 
     // ---------- 관심 없음 ----------
@@ -383,7 +395,4 @@ class RecommendationServiceImplTest {
 
     private fun anyPreference(): MemberJobPreference =
         any(MemberJobPreference::class.java) ?: MemberJobPreference(id = MemberJobPreferenceId(0L, 0L))
-
-    private fun anyRecommendationPreference(): RecommendationPreference =
-        any(RecommendationPreference::class.java) ?: RecommendationPreference(memberId = 0L, enabled = false)
 }
