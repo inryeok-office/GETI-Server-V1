@@ -90,13 +90,14 @@ team.inreok.getiserver.domain
 │   ├── exception
 │   ├── query                                       (다른 Domain에 공개하는 Named Interface — JobIndexQueryPort, JobDiscordPayloadQueryPort 등)
 │   ├── event                                       (JobChangedEvent — Named Interface)
-│   └── upsert                                      (collector가 사용하는 CollectedJobUpsertUseCase, + impl)
+│   ├── upsert                                      (collector가 사용하는 CollectedJobUpsertUseCase, + impl)
+│   └── access                                      (job이 소유하고 다른 Domain이 구현하는 SPI — JobAiAnalysisAccessor, JobApplicationEligibilityAccessor)
 ├── member       entity(+type), repository, service(+impl), controller, dto, exception, query, event, access
 ├── auth         entity, repository, service(+impl), controller, dto, exception (Refresh Token 발급/재발급)
 ├── file         entity(+type), repository, service(+impl), controller, dto, exception, link, access, policy, storage, archive(일괄 다운로드 ZIP 공개 Port, Issue #154, Epic #84 Phase 6)
 ├── company      entity(+type), repository, service(+impl), controller, dto, exception, query, external(+impl), access
 ├── ai           entity(+type), repository, service(+impl), controller, dto, exception, query, event, config, provider(OpenAI Adapter) (AI Analysis Phase 1, Issue #132)
-├── recommendation entity(+type), repository (MemberJobPreference, Recommendation — 아직 Service/Controller 없음)
+├── recommendation entity(+type), repository, service(+impl), controller, dto, exception (Recommendation R3, Issue #152)
 ├── application  entity(+type), repository, service(+impl), controller, dto, exception, query, access, event
 ├── program      entity(+type), repository, service(+impl), controller, dto, exception, query, event, scheduler, access
 ├── portfolio    entity(+type), repository (PortfolioRequest, PortfolioSubmission — 아직 Service/Controller 없음)
@@ -116,7 +117,7 @@ team.inreok.getiserver.domain
 
 Domain Package는 정해진 Layer 세트를 전부 갖는 것이 아니라, 그 Domain이 실제로 담당하는 책임만큼만 Sub-package를 가진다.
 
-`ai`/`recommendation`/`portfolio`/`operation`/`audit`처럼 아직 Use Case(Service/Controller)가 구현되지 않은 Domain은 다음처럼 Persistence Package만 가진다.
+`portfolio`/`operation`/`audit`처럼 아직 Use Case(Service/Controller)가 구현되지 않은 Domain은 다음처럼 Persistence Package만 가진다.
 
 ```text
 domain/{domain-name}/
@@ -241,6 +242,8 @@ Module 간 순환 의존성을 만들지 않고, 다른 Module의 내부 구현(
 `operation.entity.type`처럼 Enum만 공개할 때는 Kotlin이 Package-level Annotation을 지원하지 않아 `package-info.java`(`src/main/java`)로 선언하고, 위 사례들처럼 특정 Interface/데이터 Class/Enum만 선택적으로 공개할 때는 그 Kotlin 파일에서 `org.springframework.modulith.NamedInterface`를 타입에 직접 붙인다. 두 방식 모두 이 Package(또는 그 안에서 Annotation이 붙은 타입)만 다른 Module에 공개하고, 같은 Domain의 나머지 비공개 구현(`entity`, `repository`, `service`, `controller` 등)은 여전히 접근할 수 없다. `FileAccessChecker`처럼 소유 Domain이 공개한 SPI Interface를 소비 Domain이 구현해 Bean으로 등록하는 경우(`company`/`member`/`inquiry`/`application`의 `access` Package)도 있는데, 이때 구현체 자체는 다시 공개할 필요가 없다.
 
 AI Analysis Phase 1(Issue #132)이 `FileAccessChecker`식 역방향 SPI의 두 번째 사례다. `ai`는 분석 Trigger(`job.event.JobChangedEvent` 구독)와 Prompt 입력(`job.query.JobAiAnalysisInputQueryPort`) 때문에 이미 `job`에 의존한다. Job 상세 응답(`aiAnalysis`)에 분석 결과를 실으려면 반대로 `job`이 `ai`를 읽어야 하는데, 그러면 `ai -> job -> ai` 순환 의존이 생긴다. 그래서 `job`이 `job.access.JobAiAnalysisAccessor`(SPI)를 정의하고 `ai`(`JobAiAnalysisAccessorImpl`)가 구현해 Bean으로 등록한다 -- `job`은 이 Interface(자신이 소유한 타입)에만 의존하고 `ai`의 어떤 Package도 참조하지 않는다. `AiFitLevel`/`AiDifficulty`/`AiStatus`처럼 `ai`가 소유한 Enum도 `job`이 직접 참조하면 다시 순환이 생기므로, `JobAiAnalysisAccessSnapshot`은 그 값을 Enum이 아닌 String(`AiStatus.name` 등)으로 담는다(`JobIndexSnapshot.status`가 `JobStatus`를 String으로 노출하는 것과 같은 이유). 같은 목적으로 `ai`는 Tech Stack 정규화 매칭을 위해 `member.query.TechStackMatchQueryPort`(일반적인 `query` 방향, `member`가 공개하고 `ai`가 참조)도 소비한다.
+
+Application Phase 8(Issue #136)이 `job.access` 역방향 SPI의 세 번째 사례다. `application`은 이미 `job.query.JobApplicationSnapshotQueryPort`(공고 정보 조회) 때문에 `job`에 의존한다. Job 상세·검색 응답에 요청자 기준 지원 가능 여부(`application`)를 실으려면 반대로 `job`/`search`가 `application`을 읽어야 하는데, 그러면 `application -> job -> application` 순환 의존이 생긴다. 그래서 `job`이 `job.access.JobApplicationEligibilityAccessor`(SPI)를 정의하고 `application`(`JobApplicationEligibilityAccessorImpl`)이 구현해 Bean으로 등록한다. `search`(`JobSearchServiceImpl`)도 같은 Interface를 그대로 소비하는데, `search`는 이미 공고 색인·동기화(Issue #69) 때문에 `job`에 의존하므로 새 순환을 만들지 않는다 — 여러 소비자가 같은 SPI를 공유하는 첫 사례다. `eligibilityReason`/`applicationStatus`/`availableActions`도 `AiStatus` 사례와 같은 이유로 Enum이 아닌 String으로 노출한다.
 
 새로운 Domain 간 의존이 필요해지면 이 방식(Named Interface로 필요한 Package/타입만 명시적으로 공개)을 그대로 따른다.
 

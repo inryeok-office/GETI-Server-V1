@@ -30,17 +30,22 @@ import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreference
 import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreferenceId
 import team.inreok.getiserver.domain.recommendation.entity.Recommendation
+import team.inreok.getiserver.domain.recommendation.entity.RecommendationPreference
 import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
 import team.inreok.getiserver.domain.recommendation.entity.type.SuitabilityLevel
 import team.inreok.getiserver.domain.recommendation.repository.MemberJobPreferenceRepository
+import team.inreok.getiserver.domain.recommendation.repository.RecommendationPreferenceRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationRepository
 import java.math.BigDecimal
 import java.time.LocalDate
 
 /**
- * Recommendation R2 Persistence를 실제 PostgreSQL로 검증한다(Issue #148). Service Test(Mock
- * Repository)로는 V22 Migration이 추가한 Column, `uk_recommendations_member_job_date` Unique
- * 제약, JSONB `reasons` 저장/조회를 확인할 수 없다.
+ * Recommendation Persistence를 실제 PostgreSQL로 검증한다. Service Test(Mock Repository)로는
+ * Migration이 추가한 Column/Table, Unique 제약, JSONB `reasons` 저장/조회를 확인할 수 없다.
+ *
+ * R2(Issue #148, V22 Migration)의 `recommendations`/`member_job_preferences` 검증에 R3(Issue
+ * #152, V23 Migration)의 `recommendation_preferences` 검증을 이어서 추가했다 -- 두 Phase 모두
+ * 같은 Member/Job/Company Fixture를 공유해 별도 Testcontainers Container를 새로 띄우지 않는다.
  */
 @Testcontainers
 @DataJpaTest
@@ -50,6 +55,7 @@ class RecommendationPersistenceIntegrationTest
     @Autowired
     constructor(
         private val recommendationRepository: RecommendationRepository,
+        private val recommendationPreferenceRepository: RecommendationPreferenceRepository,
         private val memberJobPreferenceRepository: MemberJobPreferenceRepository,
         private val memberRepository: MemberRepository,
         private val jobRepository: JobRepository,
@@ -62,6 +68,7 @@ class RecommendationPersistenceIntegrationTest
         @BeforeEach
         fun setUp() {
             recommendationRepository.deleteAll()
+            recommendationPreferenceRepository.deleteAll()
             memberJobPreferenceRepository.deleteAll()
             jobRepository.deleteAll()
             memberRepository.deleteAll()
@@ -184,6 +191,188 @@ class RecommendationPersistenceIntegrationTest
             val excludedJobIds = memberJobPreferenceRepository.findExcludedJobIdsByMemberId(memberId)
 
             assertThat(excludedJobIds).isEmpty()
+        }
+
+        // ---------- R3: recommendation_preferences (Issue #152, V23 Migration) ----------
+
+        @Test
+        fun `회원의 추천 설정을 저장하고 memberId로 조회한다`() {
+            recommendationPreferenceRepository.saveAndFlush(
+                RecommendationPreference(memberId = memberId, enabled = true),
+            )
+
+            val found = recommendationPreferenceRepository.findByMemberId(memberId)
+
+            assertThat(found).isNotNull()
+            assertThat(found?.enabled).isTrue()
+            assertThat(found?.updatedAt).isNotNull()
+        }
+
+        @Test
+        fun `설정한 적 없는 회원은 조회 결과가 없다`() {
+            val found = recommendationPreferenceRepository.findByMemberId(memberId)
+
+            assertThat(found).isNull()
+        }
+
+        @Test
+        fun `같은 회원의 설정 Row를 두 번 만들 수 없다(memberId Unique 제약)`() {
+            recommendationPreferenceRepository.saveAndFlush(
+                RecommendationPreference(memberId = memberId, enabled = true),
+            )
+
+            assertThatThrownBy {
+                recommendationPreferenceRepository.saveAndFlush(
+                    RecommendationPreference(memberId = memberId, enabled = false),
+                )
+            }.isInstanceOf(DataIntegrityViolationException::class.java)
+        }
+
+        @Test
+        fun `enabled 값을 갱신하면 updatedAt도 함께 바뀐다`() {
+            val saved =
+                recommendationPreferenceRepository.saveAndFlush(
+                    RecommendationPreference(memberId = memberId, enabled = true),
+                )
+            val firstUpdatedAt = requireNotNull(saved.updatedAt)
+
+            saved.enabled = false
+            val updated = recommendationPreferenceRepository.saveAndFlush(saved)
+
+            assertThat(updated.enabled).isFalse()
+            assertThat(updated.updatedAt).isNotNull()
+            assertThat(updated.id).isEqualTo(saved.id)
+            // memberId Unique 제약 위반 없이(같은 Row를 갱신) 저장됐는지도 함께 확인한다.
+            assertThat(recommendationPreferenceRepository.count()).isEqualTo(1)
+        }
+
+        @Test
+        fun `upsert는 설정 Row가 없으면 새로 만든다`() {
+            recommendationPreferenceRepository.upsert(memberId, true)
+
+            val found = requireNotNull(recommendationPreferenceRepository.findByMemberId(memberId))
+            assertThat(found.enabled).isTrue()
+            assertThat(found.updatedAt).isNotNull()
+        }
+
+        @Test
+        fun `upsert는 이미 설정 Row가 있으면 값을 갱신하고 새 Row를 만들지 않는다`() {
+            recommendationPreferenceRepository.saveAndFlush(
+                RecommendationPreference(memberId = memberId, enabled = true),
+            )
+
+            recommendationPreferenceRepository.upsert(memberId, false)
+
+            val found = requireNotNull(recommendationPreferenceRepository.findByMemberId(memberId))
+            assertThat(found.enabled).isFalse()
+            assertThat(recommendationPreferenceRepository.count()).isEqualTo(1)
+        }
+
+        @Test
+        fun `upsert를 같은 회원에게 여러 번 호출해도 Unique 제약 위반 없이 멱등하게 동작한다`() {
+            // find-then-save 대신 upsert 하나로 처리하는 이유가 되는 시나리오다(코드리뷰 반영,
+            // RecommendationPreferenceRepository.upsert KDoc 참고) -- 동시 요청을 Thread로
+            // 정확히 재현하지는 않지만, 반복 호출 자체가 예외 없이 계속 성공하는지 확인한다.
+            recommendationPreferenceRepository.upsert(memberId, true)
+            recommendationPreferenceRepository.upsert(memberId, true)
+            recommendationPreferenceRepository.upsert(memberId, false)
+
+            assertThat(recommendationPreferenceRepository.count()).isEqualTo(1)
+            assertThat(requireNotNull(recommendationPreferenceRepository.findByMemberId(memberId)).enabled).isFalse()
+        }
+
+        // ---------- R3: 관심 없음 설정 시 Recommendation 즉시 제거 ----------
+
+        @Test
+        fun `deleteAllByMemberIdAndJobId는 그 회원의 그 공고 Recommendation만 지운다`() {
+            val otherJob =
+                jobRepository.saveAndFlush(
+                    Job(
+                        companyId = jobRepository.findById(jobId).get().companyId,
+                        type = PostingType.GENERAL,
+                        applicationMethod = ApplicationMethod.INTERNAL,
+                        title = "다른 공고",
+                        status = JobStatus.PUBLISHED,
+                    ),
+                )
+            recommendationRepository.saveAndFlush(recommendationOf())
+            recommendationRepository.saveAndFlush(
+                Recommendation(
+                    memberId = memberId,
+                    jobId = requireNotNull(otherJob.id),
+                    recommendationDate = today,
+                    score = BigDecimal(50),
+                    suitability = SuitabilityLevel.NORMAL,
+                    rank = 2,
+                    algorithmVersion = 1,
+                ),
+            )
+
+            recommendationRepository.deleteAllByMemberIdAndJobId(memberId, jobId)
+            recommendationRepository.flush()
+
+            val remaining = recommendationRepository.findAllByMemberIdAndRecommendationDateOrderByRank(memberId, today)
+            assertThat(remaining).hasSize(1)
+            assertThat(remaining[0].jobId).isEqualTo(otherJob.id)
+        }
+
+        @Test
+        fun `다른 회원의 같은 Job Recommendation은 영향받지 않는다`() {
+            val otherMember =
+                memberRepository.saveAndFlush(
+                    Member(
+                        oauthProvider = OAuthProvider.DG,
+                        oauthSubject = "subject-2",
+                        email = "other-student@example.com",
+                        status = MemberStatus.ACTIVE,
+                        profilePublic = true,
+                    ),
+                )
+            val otherMemberId = requireNotNull(otherMember.id)
+            recommendationRepository.saveAndFlush(recommendationOf())
+            recommendationRepository.saveAndFlush(
+                Recommendation(
+                    memberId = otherMemberId,
+                    jobId = jobId,
+                    recommendationDate = today,
+                    score = BigDecimal(50),
+                    suitability = SuitabilityLevel.NORMAL,
+                    rank = 1,
+                    algorithmVersion = 1,
+                ),
+            )
+
+            recommendationRepository.deleteAllByMemberIdAndJobId(memberId, jobId)
+            recommendationRepository.flush()
+
+            assertThat(
+                recommendationRepository.findAllByMemberIdAndRecommendationDateOrderByRank(memberId, today),
+            ).isEmpty()
+            assertThat(
+                recommendationRepository.findAllByMemberIdAndRecommendationDateOrderByRank(otherMemberId, today),
+            ).hasSize(1)
+        }
+
+        // ---------- R3: 관심 없음 설정/해제 ----------
+
+        @Test
+        fun `관심 없음을 설정한 뒤 해제하면 Preference Row가 사라진다`() {
+            val id = MemberJobPreferenceId(memberId, jobId)
+            memberJobPreferenceRepository.saveAndFlush(
+                MemberJobPreference(id).apply {
+                    exclusion =
+                        ExclusionType.THIS_JOB
+                },
+            )
+            assertThat(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(memberId)).containsExactly(jobId)
+
+            val preference = requireNotNull(memberJobPreferenceRepository.findById(id).orElse(null))
+            preference.exclusion = null
+            memberJobPreferenceRepository.delete(preference)
+            memberJobPreferenceRepository.flush()
+
+            assertThat(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(memberId)).isEmpty()
+            assertThat(memberJobPreferenceRepository.findById(id).isPresent).isFalse()
         }
 
         companion object {

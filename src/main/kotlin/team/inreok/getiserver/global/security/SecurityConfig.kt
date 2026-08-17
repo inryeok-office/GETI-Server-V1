@@ -33,7 +33,8 @@ import tools.jackson.databind.ObjectMapper
  * File 도메인 Issue #85)도 인증만 요구하고, 파일별 소유권·접근 권한은 File 도메인이 판정한다.
  * `/api/v1/inquiries`(문의 등록·상세 조회)와 `/api/v1/me/inquiries`(내 문의 목록, 기존
  * `/api/v1/me/` 이하 규칙에 포함)도 인증만 요구한다 — 상세 조회의 본인 소유권 검증(개발자는 예외)은
- * Role로 알 수 없어 InquiryService가 별도로 수행한다.
+ * Role로 알 수 없어 InquiryService가 별도로 수행한다. `/api/v1/recommendations`(맞춤 공고 추천
+ * 조회·설정·관심 없음, Recommendation R3 Issue #152)는 학생 전용 기능이라 STUDENT Role까지 요구한다.
  * 전공/기술스택 메타데이터 조회 등 다른
  * Domain은 아직 Spring Security와 연동되지 않아
  * ([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport] 참고)
@@ -190,6 +191,11 @@ class SecurityConfig(
                 // 추가하지 않는다.
                 authorize("/api/v1/inquiries", authenticated)
                 authorize("/api/v1/inquiries/**", authenticated)
+                // 맞춤 공고 추천 조회·설정·관심 없음(Recommendation R3, Issue #152)은 학생 전용
+                // 기능이라 STUDENT Role을 요구한다. 요청자 본인 범위로 한정하는 것은 Role로 알 수
+                // 없어 RecommendationService가 memberId를 인증 Principal에서만 받아 처리한다.
+                authorize("/api/v1/recommendations", hasRole("STUDENT"))
+                authorize("/api/v1/recommendations/**", hasRole("STUDENT"))
                 authorize(anyRequest, permitAll)
             }
             exceptionHandling {

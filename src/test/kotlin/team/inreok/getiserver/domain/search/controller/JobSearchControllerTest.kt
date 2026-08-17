@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
@@ -217,5 +218,14 @@ class JobSearchControllerTest
                 firstComeServed = false,
                 viewCount = 10,
                 publishedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
+                application =
+                    JobApplicationEligibilityAccessSnapshot(
+                        canApply = true,
+                        eligibilityReason = "AVAILABLE",
+                        eligibilityMessage = "지원 가능한 공고입니다.",
+                        applicationId = null,
+                        applicationStatus = null,
+                        availableActions = listOf("CREATE_DRAFT"),
+                    ),
             )
     }

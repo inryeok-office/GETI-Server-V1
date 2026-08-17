@@ -23,6 +23,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
@@ -339,5 +340,14 @@ class JobAdminControllerTest
             createdAt = LocalDateTime.of(2026, 7, 20, 10, 0),
             updatedAt = LocalDateTime.of(2026, 7, 20, 10, 0),
             aiAnalysis = null,
+            application =
+                JobApplicationEligibilityAccessSnapshot(
+                    canApply = false,
+                    eligibilityReason = "NOT_ENROLLED",
+                    eligibilityMessage = "재학 중인 학생만 지원할 수 있습니다.",
+                    applicationId = null,
+                    applicationStatus = null,
+                    availableActions = emptyList(),
+                ),
         )
     }

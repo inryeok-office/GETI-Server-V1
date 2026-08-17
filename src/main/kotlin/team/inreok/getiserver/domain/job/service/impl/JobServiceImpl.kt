@@ -6,6 +6,8 @@ import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
@@ -36,6 +38,7 @@ class JobServiceImpl(
     private val eventPublisher: ApplicationEventPublisher,
     private val discordChannelResolver: DiscordChannelResolver,
     private val jobAiAnalysisAccessor: JobAiAnalysisAccessor,
+    private val jobApplicationEligibilityAccessor: JobApplicationEligibilityAccessor,
 ) : JobService {
     @Transactional
     override fun create(
@@ -88,6 +91,12 @@ class JobServiceImpl(
             saved,
             company,
             aiAnalysis = jobAiAnalysisAccessor.findSnapshot(requireNotNull(saved.id)),
+            application =
+                applicationEligibilityOf(
+                    jobApplicationEligibilityAccessor,
+                    requireNotNull(saved.id),
+                    createdByMemberId,
+                ),
         )
     }
 
@@ -132,6 +141,7 @@ class JobServiceImpl(
             job,
             findCompanySummary(job.companyId, requesterId),
             aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
+            application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
         )
     }
 
@@ -178,6 +188,7 @@ class JobServiceImpl(
             job,
             findCompanySummary(job.companyId, requesterId),
             aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
+            application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
         )
     }
 
@@ -212,6 +223,7 @@ class JobServiceImpl(
             job,
             findCompanySummary(job.companyId, requesterId),
             aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
+            application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
         )
     }
 
@@ -232,6 +244,7 @@ class JobServiceImpl(
                 company = findCompanySummary(job.companyId, requesterId),
                 viewCount = job.viewCount + 1,
                 aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
+                application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
             )
         jobRepository.incrementViewCount(jobId)
         return response
@@ -276,3 +289,14 @@ class JobServiceImpl(
             JobStatus.DELETED -> emptySet()
         }
 }
+
+// JobServiceImpl의 Method 개수를 detekt TooManyFunctions 한도 안에서 유지하기 위해 순수 함수로
+// 분리했다(application.service.impl.computeEligibilityReason과 같은 이유). Job 상세 응답 하나에
+// 필요한 단건 조회이므로 jobIds Set은 항상 원소 1개다(Issue #136,
+// JobApplicationEligibilityAccessor의 Class 주석 -- Search 목록은 JobSearchServiceImpl이 여러
+// jobId를 한 번에 배치로 넘긴다). 입력한 jobId는 항상 결과 Map에 담긴다(Accessor 계약).
+private fun applicationEligibilityOf(
+    accessor: JobApplicationEligibilityAccessor,
+    jobId: Long,
+    requesterId: Long,
+): JobApplicationEligibilityAccessSnapshot = accessor.findAllByJobIds(setOf(jobId), requesterId).getValue(jobId)
