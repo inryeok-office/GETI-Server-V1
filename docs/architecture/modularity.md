@@ -20,7 +20,7 @@ Spring Modulith 도입은 즉시 MSA로 분리한다는 뜻이 아니다. 현재
 - Root Package: `team.inreok.getiserver`
 - `domain` 아래에 16개 Domain Package가 있다. 최신 19개 Table 최소 ERD([`erd.md`](./erd.md) 참고)를 구현한 15개 Domain(`member`, `auth`, `file`, `company`, `job`, `ai`, `recommendation`, `application`, `program`, `portfolio`, `notification`, `inquiry`, `collector`, `operation`, `audit`)에, 이후 Elasticsearch 기반 채용 공고 검색을 담당하는 `search`(Issue #69)가 추가됐다. `search`는 색인 상태 관리를 위한 자체 Table(`SearchIndexFailure`/`SearchReindexRun`)도 갖지만, `erd.md` 갱신은 이 문서의 범위가 아니다.
 - `global`은 공통 기반 Package로 `error`, `web`, `openapi`, `health`, `security`를 담는다. `config`/`response`/`persistence`는 아직 실제 Class가 없어 만들지 않았다(아래 "global Package 책임" 참고).
-- 각 Domain Package는 담당 책임만큼만 Sub-package를 갖는다. `recommendation`/`portfolio`/`operation`/`audit`는 아직 `entity`(+ 필요하면 `entity/type`)와 `repository`만 갖고, `ai`를 포함한 나머지 12개 Domain은 실제 기능이 구현되어 `service`/`controller`/`dto`/`exception` 등을 추가로 갖는다(아래 "Domain Package 내부 구조" 참고). `ai`는 AI Analysis Phase 1(Issue #132)에서 OpenAI 연동 Use Case/Controller가 추가됐다.
+- 각 Domain Package는 담당 책임만큼만 Sub-package를 갖는다. `portfolio`/`operation`/`audit`는 아직 `entity`(+ 필요하면 `entity/type`)와 `repository`만 갖고, `ai`를 포함한 나머지 13개 Domain은 실제 기능이 구현되어 `service`/`controller`/`dto`/`exception` 등을 추가로 갖는다(아래 "Domain Package 내부 구조" 참고). `ai`는 AI Analysis Phase 1(Issue #132)에서 OpenAI 연동 Use Case/Controller가 추가됐다. `recommendation`은 R2/R3(Issue #148/#152)에서 `service`/`controller`/`dto`/`exception`이, R4(Issue #160)에서 일일 추천 생성 `scheduler`가 추가됐다.
 - Module 간 FK는 JPA 연관관계가 아니라 `Long`/`UUID` ID Column으로만 참조한다(Entity 사이에 직접적인 Java/Kotlin 타입 의존성은 없음). 다만 여러 Domain이 실제 기능(다른 Domain 정보 조회, Event 구독, 파일 접근 권한 판단 등)을 구현하면서 서로가 공개한 `query`/`event`/`upsert`/`external`/`link`/`access`/`entity.type` 같은 Named Interface Package를 통해 컴파일 시점 의존성을 갖는다(아래 "Domain 간 허용 의존" 참고). 다른 Domain의 비공개 구현(`entity`/`repository`/`service`/`controller` 등 Named Interface로 공개되지 않은 Package)을 직접 참조하는 경우는 없다.
 - `./gradlew test --tests "*ModularityTest"`(`modules.verify()`)가 16개 Domain Module + `global`(총 17개 Application Module) 구성에서 순환 의존성이나 비공개 접근 없이 통과한다.
 
@@ -97,7 +97,7 @@ team.inreok.getiserver.domain
 ├── file         entity(+type), repository, service(+impl), controller, dto, exception, link, access, policy, storage, archive(일괄 다운로드 ZIP 공개 Port, Issue #154, Epic #84 Phase 6)
 ├── company      entity(+type), repository, service(+impl), controller, dto, exception, query, external(+impl), access
 ├── ai           entity(+type), repository, service(+impl), controller, dto, exception, query, event, config, provider(OpenAI Adapter) (AI Analysis Phase 1, Issue #132)
-├── recommendation entity(+type), repository, service(+impl), controller, dto, exception (Recommendation R3, Issue #152)
+├── recommendation entity(+type), repository, service(+impl), controller, dto, exception, scheduler (Recommendation R4, Issue #160)
 ├── application  entity(+type), repository, service(+impl), controller, dto, exception, query, access, event
 ├── program      entity(+type), repository, service(+impl), controller, dto, exception, query, event, scheduler, access
 ├── portfolio    entity(+type), repository (PortfolioRequest, PortfolioSubmission — 아직 Service/Controller 없음)

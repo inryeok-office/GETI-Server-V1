@@ -33,8 +33,10 @@ import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshot
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
 import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreference
 import team.inreok.getiserver.domain.recommendation.entity.Recommendation
+import team.inreok.getiserver.domain.recommendation.entity.RecommendationGenerationState
 import team.inreok.getiserver.domain.recommendation.entity.RecommendationPreference
 import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
+import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationGenerationStatus
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationReasonType
 import team.inreok.getiserver.domain.recommendation.entity.type.SuitabilityLevel
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationExclusionAlreadyExistsException
@@ -42,6 +44,7 @@ import team.inreok.getiserver.domain.recommendation.exception.RecommendationExcl
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationJobNotFoundException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationNotEnrolledException
 import team.inreok.getiserver.domain.recommendation.repository.MemberJobPreferenceRepository
+import team.inreok.getiserver.domain.recommendation.repository.RecommendationGenerationStateRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationPreferenceRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationRepository
 import tools.jackson.databind.json.JsonMapper
@@ -57,6 +60,9 @@ class RecommendationServiceImplTest {
 
     @Mock
     private lateinit var recommendationPreferenceRepository: RecommendationPreferenceRepository
+
+    @Mock
+    private lateinit var recommendationGenerationStateRepository: RecommendationGenerationStateRepository
 
     @Mock
     private lateinit var memberJobPreferenceRepository: MemberJobPreferenceRepository
@@ -77,11 +83,13 @@ class RecommendationServiceImplTest {
         RecommendationServiceImpl(
             recommendationRepository,
             recommendationPreferenceRepository,
+            recommendationGenerationStateRepository,
             memberJobPreferenceRepository,
             jobRecommendationCandidateQueryPort,
             companyQuery,
             memberApplicantSnapshotQueryPort,
             JsonMapper(),
+            "0 0 3 * * *",
         )
     }
 
@@ -228,6 +236,96 @@ class RecommendationServiceImplTest {
         assertThat(result.content[0].reasons[0].matchedCount).isEqualTo(3)
         assertThat(result.generatedAt).isEqualTo(LocalDateTime.of(2026, 8, 17, 6, 0))
         assertThat(result.totalElements).isEqualTo(2)
+    }
+
+    @Test
+    fun `Generation State가 GENERATING이면 오늘자 결과를 다시 조회하지 않고 GENERATING과 빈 목록을 반환한다`() {
+        given(recommendationPreferenceRepository.findByMemberId(1L))
+            .willReturn(RecommendationPreference(memberId = 1L, enabled = true))
+        given(recommendationGenerationStateRepository.findByMemberId(1L))
+            .willReturn(
+                RecommendationGenerationState(memberId = 1L, status = RecommendationGenerationStatus.GENERATING),
+            )
+
+        val result = service.getMyRecommendations(1L, null, firstPage)
+
+        assertThat(result.enabled).isTrue()
+        assertThat(result.status.name).isEqualTo("GENERATING")
+        assertThat(result.content).isEmpty()
+        assertThat(result.generatedAt).isNull()
+        verify(recommendationRepository, never()).findAllByMemberIdAndRecommendationDate(1L, today, null, firstPage)
+    }
+
+    @Test
+    fun `Generation State가 FAILED이면 FAILED와 빈 목록을 반환한다`() {
+        given(recommendationPreferenceRepository.findByMemberId(1L))
+            .willReturn(RecommendationPreference(memberId = 1L, enabled = true))
+        given(recommendationGenerationStateRepository.findByMemberId(1L))
+            .willReturn(RecommendationGenerationState(memberId = 1L, status = RecommendationGenerationStatus.FAILED))
+
+        val result = service.getMyRecommendations(1L, null, firstPage)
+
+        assertThat(result.status.name).isEqualTo("FAILED")
+        assertThat(result.content).isEmpty()
+        assertThat(result.generatedAt).isNull()
+        verify(recommendationRepository, never()).findAllByMemberIdAndRecommendationDate(1L, today, null, firstPage)
+    }
+
+    @Test
+    fun `Generation State가 READY이면 기존처럼 오늘자 결과를 조회한다`() {
+        given(recommendationPreferenceRepository.findByMemberId(1L))
+            .willReturn(RecommendationPreference(memberId = 1L, enabled = true))
+        given(recommendationGenerationStateRepository.findByMemberId(1L))
+            .willReturn(RecommendationGenerationState(memberId = 1L, status = RecommendationGenerationStatus.READY))
+        given(recommendationRepository.findAllByMemberIdAndRecommendationDate(1L, today, null, firstPage))
+            .willReturn(PageImpl(emptyList(), firstPage, 0))
+        given(recommendationRepository.findMaxCreatedAtByMemberIdAndRecommendationDate(1L, today))
+            .willReturn(LocalDateTime.of(2026, 8, 17, 6, 0))
+
+        val result = service.getMyRecommendations(1L, null, firstPage)
+
+        assertThat(result.status.name).isEqualTo("READY")
+        assertThat(result.generatedAt).isEqualTo(LocalDateTime.of(2026, 8, 17, 6, 0))
+    }
+
+    @Test
+    fun `nextGenerationAt은 Scheduler cron 기준 다음 실행 시각이다`() {
+        given(recommendationPreferenceRepository.findByMemberId(1L))
+            .willReturn(RecommendationPreference(memberId = 1L, enabled = true))
+        given(recommendationRepository.findAllByMemberIdAndRecommendationDate(1L, today, null, firstPage))
+            .willReturn(PageImpl(emptyList(), firstPage, 0))
+        given(recommendationRepository.findMaxCreatedAtByMemberIdAndRecommendationDate(1L, today)).willReturn(null)
+
+        val result = service.getMyRecommendations(1L, null, firstPage)
+
+        assertThat(result.nextGenerationAt).isNotNull()
+        assertThat(result.nextGenerationAt?.hour).isEqualTo(3)
+        assertThat(result.nextGenerationAt?.isAfter(LocalDateTime.now())).isTrue()
+    }
+
+    @Test
+    fun `cron이 비활성 Sentinel이면 nextGenerationAt은 null이다`() {
+        val disabledCronService =
+            RecommendationServiceImpl(
+                recommendationRepository,
+                recommendationPreferenceRepository,
+                recommendationGenerationStateRepository,
+                memberJobPreferenceRepository,
+                jobRecommendationCandidateQueryPort,
+                companyQuery,
+                memberApplicantSnapshotQueryPort,
+                JsonMapper(),
+                "-",
+            )
+        given(recommendationPreferenceRepository.findByMemberId(1L))
+            .willReturn(RecommendationPreference(memberId = 1L, enabled = true))
+        given(recommendationRepository.findAllByMemberIdAndRecommendationDate(1L, today, null, firstPage))
+            .willReturn(PageImpl(emptyList(), firstPage, 0))
+        given(recommendationRepository.findMaxCreatedAtByMemberIdAndRecommendationDate(1L, today)).willReturn(null)
+
+        val result = disabledCronService.getMyRecommendations(1L, null, firstPage)
+
+        assertThat(result.nextGenerationAt).isNull()
     }
 
     @Test
