@@ -18,6 +18,8 @@ import org.springframework.data.elasticsearch.core.SearchHit
 import org.springframework.data.elasticsearch.core.SearchHits
 import org.springframework.data.elasticsearch.core.query.Query
 import team.inreok.getiserver.domain.file.link.FileUrlPort
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
 import team.inreok.getiserver.domain.search.document.JobSearchDocument
 import team.inreok.getiserver.domain.search.dto.JobSort
 import team.inreok.getiserver.domain.search.dto.PublicJobStatus
@@ -40,7 +42,31 @@ class JobSearchServiceImplTest {
     @Mock
     private lateinit var searchHits: SearchHits<JobSearchDocument>
 
-    private val service: JobSearchServiceImpl by lazy { JobSearchServiceImpl(indexManager, fileUrlPort) }
+    @Mock
+    private lateinit var jobApplicationEligibilityAccessor: JobApplicationEligibilityAccessor
+
+    private val service: JobSearchServiceImpl by lazy {
+        // 이 Test의 관심사는 logoUrl 배치 발급(Issue #92)이지 지원 가능 여부 계산(Issue #136)이
+        // 아니므로, 요청된 jobId 전체에 기본값을 채워주는 Stub 하나를 모든 Test가 공유한다.
+        given(
+            jobApplicationEligibilityAccessor.findAllByJobIds(any() ?: emptySet(), anyLong()),
+        ).willAnswer { invocation ->
+            @Suppress("UNCHECKED_CAST")
+            val jobIds = invocation.arguments[0] as Set<Long>
+            jobIds.associateWith { defaultApplicationEligibility() }
+        }
+        JobSearchServiceImpl(indexManager, fileUrlPort, jobApplicationEligibilityAccessor)
+    }
+
+    private fun defaultApplicationEligibility() =
+        JobApplicationEligibilityAccessSnapshot(
+            canApply = true,
+            eligibilityReason = "AVAILABLE",
+            eligibilityMessage = "지원 가능한 공고입니다.",
+            applicationId = null,
+            applicationStatus = null,
+            availableActions = listOf("CREATE_DRAFT"),
+        )
 
     @Test
     fun `여러 건의 결과가 있어도 로고 URL은 한 번의 배치 호출로 발급한다`() {
@@ -65,6 +91,40 @@ class JobSearchServiceImplTest {
         assertThat(response.content[2].company?.logoUrl).isEqualTo("https://storage.example/logo-10")
         // 공고마다 단건 발급하면 목록 크기만큼 반복된다(N+1). 정확히 한 번이어야 한다.
         verify(fileUrlPort, times(1)).presignedImageUrls(REQUESTER_ID, listOf(10L, 20L))
+    }
+
+    @Test
+    fun `목록 항목마다 요청자 기준 지원 가능 여부를 한 번의 배치 호출로 채운다`() {
+        val hits =
+            listOf(
+                hitOf(documentOf(jobId = 1L, companyLogoFileId = null)),
+                hitOf(documentOf(jobId = 2L, companyLogoFileId = null)),
+            )
+        given(searchHits.searchHits).willReturn(hits)
+        given(searchHits.totalHits).willReturn(2L)
+        given(indexManager.search(anyQuery())).willReturn(searchHits)
+        val eligibility1 = defaultApplicationEligibility()
+        val eligibility2 =
+            JobApplicationEligibilityAccessSnapshot(
+                canApply = false,
+                eligibilityReason = "ALREADY_APPLIED",
+                eligibilityMessage = "이미 이 공고에 지원한 이력이 있습니다.",
+                applicationId = 42L,
+                applicationStatus = "SUBMITTED",
+                availableActions = listOf("REQUEST_EDIT", "WITHDRAW"),
+            )
+        // service를 먼저 참조해 기본 Stub을 등록시킨 뒤 이 Test만의 값으로 재정의한다
+        // (JobServiceTest의 같은 이유).
+        service
+        given(jobApplicationEligibilityAccessor.findAllByJobIds(setOf(1L, 2L), REQUESTER_ID))
+            .willReturn(mapOf(1L to eligibility1, 2L to eligibility2))
+
+        val response = search()
+
+        assertThat(response.content[0].application).isEqualTo(eligibility1)
+        assertThat(response.content[1].application).isEqualTo(eligibility2)
+        // 공고마다 단건 조회하면 목록 크기만큼 반복된다(N+1). 정확히 한 번이어야 한다.
+        verify(jobApplicationEligibilityAccessor, times(1)).findAllByJobIds(setOf(1L, 2L), REQUESTER_ID)
     }
 
     @Test

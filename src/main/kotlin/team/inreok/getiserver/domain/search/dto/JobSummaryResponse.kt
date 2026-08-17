@@ -2,6 +2,7 @@ package team.inreok.getiserver.domain.search.dto
 
 import io.swagger.v3.oas.annotations.media.Schema
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
@@ -39,21 +40,24 @@ data class JobSummaryResponse(
     val viewCount: Long,
     @param:Schema(description = "게시 시각", example = "2026-07-25T09:00:00", nullable = true)
     val publishedAt: LocalDateTime?,
+    val application: JobApplicationEligibilityAccessSnapshot,
 ) {
     companion object {
         /**
          * 검색 결과(Elasticsearch Document)를 그대로 응답으로 옮긴다. PostgreSQL을 다시 조회하지
          * 않는다(Issue #69 — Elasticsearch가 검색 전용 Read Model이라는 원칙, 완료 보고 참고).
          *
-         * [logoUrls]는 `companyLogoFileId -> Presigned URL` Map이다(Issue #92). 목록 항목마다
-         * 단건 발급하면 N+1이 되므로, 호출 측(`JobSearchServiceImpl`)이 검색 결과 전체의
-         * `companyLogoFileId`를 모아 한 번에 발급한 배치 결과를 그대로 전달한다. Elasticsearch에는
-         * 만료되는 URL을 저장하지 않으므로(`JobSearchDocument.companyLogoFileId` 참고) URL은 이
-         * 변환 시점에만 존재한다.
+         * [logoUrls]는 `companyLogoFileId -> Presigned URL` Map이다(Issue #92). [application]은
+         * 요청자 기준 학생 지원 가능 여부·지원 현황이다(Issue #136). 둘 다 목록 항목마다 단건
+         * 조회하면 N+1이 되므로, 호출 측(`JobSearchServiceImpl`)이 검색 결과 전체를 모아 한 번에
+         * 조회한 배치 결과를 그대로 전달한다. Elasticsearch에는 만료되는 URL이나 요청자별로 달라지는
+         * 값을 저장하지 않으므로(`JobSearchDocument.companyLogoFileId` 참고) 둘 다 이 변환
+         * 시점에만 존재한다.
          */
         fun from(
             document: JobSearchDocument,
             logoUrls: Map<Long, String> = emptyMap(),
+            application: JobApplicationEligibilityAccessSnapshot,
         ): JobSummaryResponse =
             JobSummaryResponse(
                 jobId = document.jobId,
@@ -76,6 +80,7 @@ data class JobSummaryResponse(
                 firstComeServed = document.firstComeServed,
                 viewCount = document.viewCount,
                 publishedAt = document.publishedAt,
+                application = application,
             )
     }
 }

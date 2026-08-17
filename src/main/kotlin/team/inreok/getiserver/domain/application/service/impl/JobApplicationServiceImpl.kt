@@ -54,6 +54,16 @@ private val JOB_APPLICATION_ACTION_ALLOWED_FROM: Map<JobApplicationAction, Set<J
             ),
     )
 
+// JOB_APPLICATION_ACTION_ALLOWED_FROM의 역방향 조회다(Issue #136, Job/Search 응답의
+// availableActions). 이 파일 Top-level private val이라 같은 파일에서만 접근할 수 있어 private으로
+// 감싼 별도 함수로 공개한다 -- 전이 규칙 자체(JOB_APPLICATION_ACTION_ALLOWED_FROM)를 다시 정의하지
+// 않고 그대로 재사용한다(요구사항 "Phase 3에 이미 구현된 상태 전이 로직 자체를 재작성하지 않는다").
+fun availableStudentActionNames(status: JobApplicationStatus): List<String> =
+    JOB_APPLICATION_ACTION_ALLOWED_FROM
+        .filterValues { allowedFrom -> status in allowedFrom }
+        .keys
+        .map { it.name }
+
 // saveDraft(임시저장)를 허용하는 상태다. Phase 2는 DRAFT만 허용했고, Phase 3는 교사가 재작성을
 // 허용/요청한 상태(EDIT_ALLOWED/REVISION_REQUESTED)에서도 재작성 후 RESUBMIT할 수 있어야 한다.
 private val SAVE_DRAFT_ALLOWED_STATUSES: Set<JobApplicationStatus> =

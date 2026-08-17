@@ -19,6 +19,8 @@ import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.file.link.FileUrlPort
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
@@ -53,10 +55,11 @@ class JobSearchElasticsearchIntegrationTest {
     @BeforeEach
     fun setUp() {
         indexManager = JobSearchIndexManager(elasticsearchOperations, properties)
-        // 이 Test는 Elasticsearch Query 자체의 정확성만 다룬다 -- 로고 URL 발급(FileUrlPort)은
-        // JobSearchServiceImplTest(Unit Test)와 CompanyQueryImplTest가 이미 검증하므로 여기서는
-        // 항상 빈 Map을 돌려주는 최소 구현으로 대체한다.
-        searchService = JobSearchServiceImpl(indexManager, NoOpFileUrlPort)
+        // 이 Test는 Elasticsearch Query 자체의 정확성만 다룬다 -- 로고 URL 발급(FileUrlPort)과
+        // 지원 가능 여부 계산(JobApplicationEligibilityAccessor, Issue #136)은 각각
+        // JobSearchServiceImplTest(Unit Test)/JobApplicationEligibilityAccessorImplTest가 이미
+        // 검증하므로 여기서는 최소 구현으로 대체한다.
+        searchService = JobSearchServiceImpl(indexManager, NoOpFileUrlPort, NoOpJobApplicationEligibilityAccessor)
 
         // 재색인(Alias 전환) 흐름은 SearchReindexServiceImplTest(Unit Test)가 이미 검증하므로,
         // 여기서는 검색 Query 자체의 정확성만 보기 위해 Alias 이름과 동일한 물리 Index를 직접
@@ -460,6 +463,23 @@ class JobSearchElasticsearchIntegrationTest {
             requesterId: Long,
             fileIds: Collection<Long>,
         ): Map<Long, String> = emptyMap()
+    }
+
+    private object NoOpJobApplicationEligibilityAccessor : JobApplicationEligibilityAccessor {
+        override fun findAllByJobIds(
+            jobIds: Set<Long>,
+            requesterMemberId: Long,
+        ): Map<Long, JobApplicationEligibilityAccessSnapshot> =
+            jobIds.associateWith {
+                JobApplicationEligibilityAccessSnapshot(
+                    canApply = false,
+                    eligibilityReason = "NOT_ENROLLED",
+                    eligibilityMessage = "",
+                    applicationId = null,
+                    applicationStatus = null,
+                    availableActions = emptyList(),
+                )
+            }
     }
 
     companion object {
