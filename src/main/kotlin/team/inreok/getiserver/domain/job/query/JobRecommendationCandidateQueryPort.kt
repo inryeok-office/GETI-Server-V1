@@ -1,6 +1,8 @@
 package team.inreok.getiserver.domain.job.query
 
 import org.springframework.modulith.NamedInterface
+import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
+import team.inreok.getiserver.domain.job.entity.type.PostingType
 import java.time.LocalDateTime
 
 /**
@@ -44,4 +46,10 @@ data class JobRecommendationCandidateSnapshot(
     val targetGrade: Int?,
     val publishedAt: LocalDateTime?,
     val recruitmentEndedAt: LocalDateTime?,
+    // 아래 세 Field는 Hard Filter/Score Engine이 쓰지 않는다 -- Notion Job Summary 계약(Issue
+    // #155, `RecommendationJobResponse`)의 조회 응답 표시용이다. [findAllPublished]/[findAllByIds]
+    // 둘 다 같은 Snapshot Type을 공유하는 기존 설계를 그대로 따른다.
+    val postingType: PostingType,
+    val applicationMethod: ApplicationMethod,
+    val viewCount: Long,
 )

@@ -36,5 +36,8 @@ class JobRecommendationCandidateQueryPortImpl(
             targetGrade = targetGrade,
             publishedAt = publishedAt,
             recruitmentEndedAt = recruitmentEndedAt,
+            postingType = type,
+            applicationMethod = applicationMethod,
+            viewCount = viewCount,
         )
 }

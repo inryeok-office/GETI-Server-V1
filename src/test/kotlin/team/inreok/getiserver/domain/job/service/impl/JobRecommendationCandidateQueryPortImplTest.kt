@@ -48,6 +48,9 @@ class JobRecommendationCandidateQueryPortImplTest {
         assertThat(result[0].status).isEqualTo("PUBLISHED")
         assertThat(result[0].targetGrade).isEqualTo(3)
         assertThat(result[0].recruitmentEndedAt).isEqualTo(LocalDateTime.of(2026, 9, 1, 0, 0))
+        assertThat(result[0].postingType).isEqualTo(PostingType.GENERAL)
+        assertThat(result[0].applicationMethod).isEqualTo(ApplicationMethod.INTERNAL)
+        assertThat(result[0].viewCount).isEqualTo(0)
     }
 
     @Test

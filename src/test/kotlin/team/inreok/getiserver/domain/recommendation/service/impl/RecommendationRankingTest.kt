@@ -2,6 +2,8 @@ package team.inreok.getiserver.domain.recommendation.service.impl
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
+import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateSnapshot
 import java.time.LocalDateTime
 
@@ -20,6 +22,9 @@ class RecommendationRankingTest {
                 targetGrade = null,
                 publishedAt = publishedAt,
                 recruitmentEndedAt = null,
+                postingType = PostingType.GENERAL,
+                applicationMethod = ApplicationMethod.INTERNAL,
+                viewCount = 0,
             ),
         result = RecommendationScoreResult(score = score, reasons = emptyList()),
     )

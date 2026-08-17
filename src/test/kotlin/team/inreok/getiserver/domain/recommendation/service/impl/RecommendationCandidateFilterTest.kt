@@ -3,8 +3,11 @@ package team.inreok.getiserver.domain.recommendation.service.impl
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchSnapshot
+import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
+import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateSnapshot
 import team.inreok.getiserver.domain.member.query.RecommendationMemberProfileSnapshot
+import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.ALREADY_BOOKMARKED
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.HIGH_SCHOOL_UNSUITABLE
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.JOB_NOT_PUBLISHED
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.NOT_INTERESTED
@@ -27,6 +30,9 @@ class RecommendationCandidateFilterTest {
         targetGrade = targetGrade,
         publishedAt = now.minusDays(1),
         recruitmentEndedAt = recruitmentEndedAt,
+        postingType = PostingType.GENERAL,
+        applicationMethod = ApplicationMethod.INTERNAL,
+        viewCount = 0,
     )
 
     private fun memberOf(
@@ -55,6 +61,7 @@ class RecommendationCandidateFilterTest {
                 job = jobOf(status = "CLOSED"),
                 member = memberOf(),
                 excludedJobIds = emptySet(),
+                bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 now = now,
             )
@@ -69,6 +76,7 @@ class RecommendationCandidateFilterTest {
                 job = jobOf(recruitmentEndedAt = now.minusHours(1)),
                 member = memberOf(),
                 excludedJobIds = emptySet(),
+                bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 now = now,
             )
@@ -83,6 +91,7 @@ class RecommendationCandidateFilterTest {
                 job = jobOf(recruitmentEndedAt = now.plusHours(1)),
                 member = memberOf(),
                 excludedJobIds = emptySet(),
+                bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 now = now,
             )
@@ -97,6 +106,7 @@ class RecommendationCandidateFilterTest {
                 job = jobOf(targetGrade = 2),
                 member = memberOf(grade = 3),
                 excludedJobIds = emptySet(),
+                bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 now = now,
             )
@@ -111,6 +121,7 @@ class RecommendationCandidateFilterTest {
                 job = jobOf(targetGrade = null),
                 member = memberOf(grade = 3),
                 excludedJobIds = emptySet(),
+                bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 now = now,
             )
@@ -125,6 +136,7 @@ class RecommendationCandidateFilterTest {
                 job = jobOf(targetGrade = 3),
                 member = memberOf(grade = null),
                 excludedJobIds = emptySet(),
+                bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 now = now,
             )
@@ -139,6 +151,37 @@ class RecommendationCandidateFilterTest {
                 job = jobOf(),
                 member = memberOf(),
                 excludedJobIds = setOf(1L),
+                bookmarkedJobIds = emptySet(),
+                aiSnapshot = aiSnapshotOf(),
+                now = now,
+            )
+
+        assertThat(reason).isEqualTo(NOT_INTERESTED)
+    }
+
+    @Test
+    fun `이미 북마크한 공고는 ALREADY_BOOKMARKED로 제외한다`() {
+        val reason =
+            computeExclusionReason(
+                job = jobOf(),
+                member = memberOf(),
+                excludedJobIds = emptySet(),
+                bookmarkedJobIds = setOf(1L),
+                aiSnapshot = aiSnapshotOf(),
+                now = now,
+            )
+
+        assertThat(reason).isEqualTo(ALREADY_BOOKMARKED)
+    }
+
+    @Test
+    fun `관심 없음이 북마크보다 우선한다(둘 다 해당해도 NOT_INTERESTED)`() {
+        val reason =
+            computeExclusionReason(
+                job = jobOf(),
+                member = memberOf(),
+                excludedJobIds = setOf(1L),
+                bookmarkedJobIds = setOf(1L),
                 aiSnapshot = aiSnapshotOf(),
                 now = now,
             )
@@ -153,6 +196,7 @@ class RecommendationCandidateFilterTest {
                 job = jobOf(),
                 member = memberOf(),
                 excludedJobIds = emptySet(),
+                bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(highSchoolGraduateFit = "UNSUITABLE"),
                 now = now,
             )
@@ -167,6 +211,7 @@ class RecommendationCandidateFilterTest {
                 job = jobOf(),
                 member = memberOf(),
                 excludedJobIds = emptySet(),
+                bookmarkedJobIds = emptySet(),
                 aiSnapshot = null,
                 now = now,
             )
@@ -181,6 +226,7 @@ class RecommendationCandidateFilterTest {
                 job = jobOf(targetGrade = 3, recruitmentEndedAt = now.plusDays(10)),
                 member = memberOf(grade = 3),
                 excludedJobIds = emptySet(),
+                bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 now = now,
             )

@@ -16,6 +16,8 @@ import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
 import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
 import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchSnapshot
+import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
+import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateQueryPort
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateSnapshot
 import team.inreok.getiserver.domain.member.query.RecommendationMemberProfileQueryPort
@@ -72,6 +74,9 @@ class RecommendationGenerationServiceImplTest {
             targetGrade = 3,
             publishedAt = LocalDateTime.of(2026, 8, 1, 0, 0),
             recruitmentEndedAt = LocalDateTime.of(2026, 12, 31, 0, 0),
+            postingType = PostingType.GENERAL,
+            applicationMethod = ApplicationMethod.INTERNAL,
+            viewCount = 0,
         )
 
     private fun aiSnapshotOf(requiredTechStackIds: List<Long> = listOf(1L)) =
@@ -135,6 +140,24 @@ class RecommendationGenerationServiceImplTest {
         given(memberProfileQueryPort.findById(1L)).willReturn(memberOf())
         given(jobCandidateQueryPort.findAllPublished()).willReturn(jobs)
         given(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(1L)).willReturn(listOf(1L))
+        given(aiAnalysisSearchQueryPort.findCompletedByJobIds(jobs.map { it.jobId })).willReturn(
+            mapOf(1L to aiSnapshotOf()),
+        )
+
+        val result = service.generateForMember(1L, limit = 10)
+
+        assertThat(result).isEmpty()
+        verify(recommendationRepository).deleteAllByMemberIdAndRecommendationDate(1L, LocalDate.now())
+        verify(recommendationRepository, never()).saveAll(anyList())
+    }
+
+    @Test
+    fun `이미 북마크한 공고는 제외되고 남은 후보가 없으면 삭제만 하고 저장은 하지 않는다`() {
+        val jobs = listOf(jobOf(1L))
+        given(memberProfileQueryPort.findById(1L)).willReturn(memberOf())
+        given(jobCandidateQueryPort.findAllPublished()).willReturn(jobs)
+        given(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(1L)).willReturn(emptyList())
+        given(memberJobPreferenceRepository.findBookmarkedJobIdsByMemberId(1L)).willReturn(listOf(1L))
         given(aiAnalysisSearchQueryPort.findCompletedByJobIds(jobs.map { it.jobId })).willReturn(
             mapOf(1L to aiSnapshotOf()),
         )

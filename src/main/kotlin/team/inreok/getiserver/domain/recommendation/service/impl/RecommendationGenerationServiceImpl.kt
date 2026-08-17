@@ -39,13 +39,15 @@ class RecommendationGenerationServiceImpl(
         val member = memberProfileQueryPort.findById(memberId) ?: return emptyList()
         val candidates = jobCandidateQueryPort.findAllPublished()
         val excludedJobIds = memberJobPreferenceRepository.findExcludedJobIdsByMemberId(memberId).toSet()
+        val bookmarkedJobIds = memberJobPreferenceRepository.findBookmarkedJobIdsByMemberId(memberId).toSet()
         val aiSnapshots = aiAnalysisSearchQueryPort.findCompletedByJobIds(candidates.map { it.jobId })
         val now = LocalDateTime.now()
 
         val scored =
             candidates.mapNotNull { job ->
                 val aiSnapshot = aiSnapshots[job.jobId]
-                val exclusionReason = computeExclusionReason(job, member, excludedJobIds, aiSnapshot, now)
+                val exclusionReason =
+                    computeExclusionReason(job, member, excludedJobIds, bookmarkedJobIds, aiSnapshot, now)
                 if (exclusionReason != null) return@mapNotNull null
                 val scoreResult = calculateScore(member.techStackIds, aiSnapshot) ?: return@mapNotNull null
                 ScoredRecommendationCandidate(job, scoreResult)

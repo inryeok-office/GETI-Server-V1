@@ -11,6 +11,7 @@ import org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.PageRequest
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
@@ -28,7 +29,6 @@ import team.inreok.getiserver.domain.member.entity.type.MemberStatus
 import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreference
-import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreferenceId
 import team.inreok.getiserver.domain.recommendation.entity.Recommendation
 import team.inreok.getiserver.domain.recommendation.entity.RecommendationPreference
 import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
@@ -38,14 +38,17 @@ import team.inreok.getiserver.domain.recommendation.repository.RecommendationPre
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationRepository
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 /**
  * Recommendation Persistence를 실제 PostgreSQL로 검증한다. Service Test(Mock Repository)로는
  * Migration이 추가한 Column/Table, Unique 제약, JSONB `reasons` 저장/조회를 확인할 수 없다.
  *
  * R2(Issue #148, V22 Migration)의 `recommendations`/`member_job_preferences` 검증에 R3(Issue
- * #152, V23 Migration)의 `recommendation_preferences` 검증을 이어서 추가했다 -- 두 Phase 모두
- * 같은 Member/Job/Company Fixture를 공유해 별도 Testcontainers Container를 새로 띄우지 않는다.
+ * #152, V23 Migration)의 `recommendation_preferences`, Notion 계약 정합성(Issue #155, V24
+ * Migration)의 `member_job_preferences` Surrogate PK/`exclusion_created_at` 검증을 이어서
+ * 추가했다 -- 세 Phase 모두 같은 Member/Job/Company Fixture를 공유해 별도 Testcontainers
+ * Container를 새로 띄우지 않는다.
  */
 @Testcontainers
 @DataJpaTest
@@ -64,6 +67,7 @@ class RecommendationPersistenceIntegrationTest
         private var memberId: Long = 0
         private var jobId: Long = 0
         private val today: LocalDate = LocalDate.now()
+        private val firstPage = PageRequest.of(0, 20)
 
         @BeforeEach
         fun setUp() {
@@ -116,15 +120,60 @@ class RecommendationPersistenceIntegrationTest
         fun `score, rank, algorithmVersion, reasons를 저장하고 그대로 조회한다`() {
             recommendationRepository.saveAndFlush(recommendationOf())
 
-            val saved = recommendationRepository.findAllByMemberIdAndRecommendationDateOrderByRank(memberId, today)
+            val saved =
+                recommendationRepository.findAllByMemberIdAndRecommendationDate(
+                    memberId,
+                    today,
+                    null,
+                    firstPage,
+                )
 
-            assertThat(saved).hasSize(1)
-            assertThat(saved[0].score).isEqualByComparingTo(BigDecimal(87))
-            assertThat(saved[0].rank).isEqualTo(1)
-            assertThat(saved[0].algorithmVersion).isEqualTo(1)
-            assertThat(saved[0].suitability).isEqualTo(SuitabilityLevel.HIGHLY_RECOMMENDED)
-            assertThat(saved[0].reasons).contains("REQUIRED_SKILL_MATCH")
-            assertThat(saved[0].createdAt).isNotNull()
+            assertThat(saved.content).hasSize(1)
+            assertThat(saved.content[0].score).isEqualByComparingTo(BigDecimal(87))
+            assertThat(saved.content[0].rank).isEqualTo(1)
+            assertThat(saved.content[0].algorithmVersion).isEqualTo(1)
+            assertThat(saved.content[0].suitability).isEqualTo(SuitabilityLevel.HIGHLY_RECOMMENDED)
+            assertThat(saved.content[0].reasons).contains("REQUIRED_SKILL_MATCH")
+            assertThat(saved.content[0].createdAt).isNotNull()
+        }
+
+        @Test
+        fun `suitabilityLevel Filter를 지정하면 일치하는 결과만 조회한다`() {
+            recommendationRepository.saveAndFlush(recommendationOf())
+
+            val matched =
+                recommendationRepository.findAllByMemberIdAndRecommendationDate(
+                    memberId,
+                    today,
+                    SuitabilityLevel.HIGHLY_RECOMMENDED,
+                    firstPage,
+                )
+            val unmatched =
+                recommendationRepository.findAllByMemberIdAndRecommendationDate(
+                    memberId,
+                    today,
+                    SuitabilityLevel.NORMAL,
+                    firstPage,
+                )
+
+            assertThat(matched.content).hasSize(1)
+            assertThat(unmatched.content).isEmpty()
+        }
+
+        @Test
+        fun `findMaxCreatedAtByMemberIdAndRecommendationDate는 오늘자 결과 중 가장 최근 생성 시각을 반환한다`() {
+            recommendationRepository.saveAndFlush(recommendationOf())
+
+            val generatedAt = recommendationRepository.findMaxCreatedAtByMemberIdAndRecommendationDate(memberId, today)
+
+            assertThat(generatedAt).isNotNull()
+        }
+
+        @Test
+        fun `오늘자 결과가 없으면 findMaxCreatedAtByMemberIdAndRecommendationDate는 null이다`() {
+            val generatedAt = recommendationRepository.findMaxCreatedAtByMemberIdAndRecommendationDate(memberId, today)
+
+            assertThat(generatedAt).isNull()
         }
 
         @Test
@@ -164,7 +213,13 @@ class RecommendationPersistenceIntegrationTest
             recommendationRepository.flush()
 
             assertThat(
-                recommendationRepository.findAllByMemberIdAndRecommendationDateOrderByRank(memberId, today),
+                recommendationRepository
+                    .findAllByMemberIdAndRecommendationDate(
+                        memberId,
+                        today,
+                        null,
+                        firstPage,
+                    ).content,
             ).isEmpty()
             assertThat(recommendationRepository.findAll()).hasSize(1)
         }
@@ -172,7 +227,7 @@ class RecommendationPersistenceIntegrationTest
         @Test
         fun `exclusion이 있는 MemberJobPreference의 jobId만 관심 없음 목록으로 조회한다`() {
             memberJobPreferenceRepository.saveAndFlush(
-                MemberJobPreference(MemberJobPreferenceId(memberId, jobId), bookmarked = false).apply {
+                MemberJobPreference(memberId = memberId, jobId = jobId, bookmarked = false).apply {
                     exclusion = ExclusionType.THIS_JOB
                 },
             )
@@ -183,14 +238,16 @@ class RecommendationPersistenceIntegrationTest
         }
 
         @Test
-        fun `exclusion이 없는(북마크만 한) MemberJobPreference는 관심 없음 목록에 없다`() {
+        fun `exclusion이 없는(북마크만 한) MemberJobPreference는 관심 없음 목록에 없지만 북마크 목록에는 있다`() {
             memberJobPreferenceRepository.saveAndFlush(
-                MemberJobPreference(MemberJobPreferenceId(memberId, jobId), bookmarked = true),
+                MemberJobPreference(memberId = memberId, jobId = jobId, bookmarked = true),
             )
 
-            val excludedJobIds = memberJobPreferenceRepository.findExcludedJobIdsByMemberId(memberId)
-
-            assertThat(excludedJobIds).isEmpty()
+            assertThat(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(memberId)).isEmpty()
+            assertThat(memberJobPreferenceRepository.findBookmarkedJobIdsByMemberId(memberId)).containsExactly(jobId)
+            assertThat(
+                memberJobPreferenceRepository.findBookmarkedJobIdsByMemberIdAndJobIdIn(memberId, setOf(jobId)),
+            ).containsExactly(jobId)
         }
 
         // ---------- R3: recommendation_preferences (Issue #152, V23 Migration) ----------
@@ -311,9 +368,15 @@ class RecommendationPersistenceIntegrationTest
             recommendationRepository.deleteAllByMemberIdAndJobId(memberId, jobId)
             recommendationRepository.flush()
 
-            val remaining = recommendationRepository.findAllByMemberIdAndRecommendationDateOrderByRank(memberId, today)
-            assertThat(remaining).hasSize(1)
-            assertThat(remaining[0].jobId).isEqualTo(otherJob.id)
+            val remaining =
+                recommendationRepository.findAllByMemberIdAndRecommendationDate(
+                    memberId,
+                    today,
+                    null,
+                    firstPage,
+                )
+            assertThat(remaining.content).hasSize(1)
+            assertThat(remaining.content[0].jobId).isEqualTo(otherJob.id)
         }
 
         @Test
@@ -346,33 +409,174 @@ class RecommendationPersistenceIntegrationTest
             recommendationRepository.flush()
 
             assertThat(
-                recommendationRepository.findAllByMemberIdAndRecommendationDateOrderByRank(memberId, today),
+                recommendationRepository
+                    .findAllByMemberIdAndRecommendationDate(
+                        memberId,
+                        today,
+                        null,
+                        firstPage,
+                    ).content,
             ).isEmpty()
             assertThat(
-                recommendationRepository.findAllByMemberIdAndRecommendationDateOrderByRank(otherMemberId, today),
+                recommendationRepository
+                    .findAllByMemberIdAndRecommendationDate(
+                        otherMemberId,
+                        today,
+                        null,
+                        firstPage,
+                    ).content,
             ).hasSize(1)
         }
 
-        // ---------- R3: 관심 없음 설정/해제 ----------
+        // ---------- Notion 계약 정합성(Issue #155, V24 Migration): 관심 없음 설정/해제 ----------
 
         @Test
         fun `관심 없음을 설정한 뒤 해제하면 Preference Row가 사라진다`() {
-            val id = MemberJobPreferenceId(memberId, jobId)
-            memberJobPreferenceRepository.saveAndFlush(
-                MemberJobPreference(id).apply {
-                    exclusion =
-                        ExclusionType.THIS_JOB
-                },
-            )
+            val saved =
+                memberJobPreferenceRepository.saveAndFlush(
+                    MemberJobPreference(memberId = memberId, jobId = jobId).apply {
+                        exclusion = ExclusionType.THIS_JOB
+                    },
+                )
             assertThat(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(memberId)).containsExactly(jobId)
 
-            val preference = requireNotNull(memberJobPreferenceRepository.findById(id).orElse(null))
+            val preference =
+                requireNotNull(memberJobPreferenceRepository.findById(requireNotNull(saved.id)).orElse(null))
             preference.exclusion = null
             memberJobPreferenceRepository.delete(preference)
             memberJobPreferenceRepository.flush()
 
             assertThat(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(memberId)).isEmpty()
-            assertThat(memberJobPreferenceRepository.findById(id).isPresent).isFalse()
+            assertThat(memberJobPreferenceRepository.findById(requireNotNull(saved.id)).isPresent).isFalse()
+        }
+
+        @Test
+        fun `member_job_preferences는 Surrogate id로 식별되고 exclusionCreatedAt을 저장한다`() {
+            val saved =
+                memberJobPreferenceRepository.saveAndFlush(
+                    MemberJobPreference(memberId = memberId, jobId = jobId).apply {
+                        exclusion = ExclusionType.THIS_JOB
+                        exclusionCreatedAt = LocalDateTime.now()
+                    },
+                )
+
+            assertThat(saved.id).isNotNull()
+            assertThat(saved.exclusionCreatedAt).isNotNull()
+
+            val found = memberJobPreferenceRepository.findByIdAndMemberId(requireNotNull(saved.id), memberId)
+            assertThat(found).isNotNull()
+        }
+
+        @Test
+        fun `findByIdAndMemberId는 다른 회원의 exclusionId를 조회하면 null이다(소유권 검증)`() {
+            val saved =
+                memberJobPreferenceRepository.saveAndFlush(
+                    MemberJobPreference(memberId = memberId, jobId = jobId).apply {
+                        exclusion = ExclusionType.THIS_JOB
+                    },
+                )
+            val otherMember =
+                memberRepository.saveAndFlush(
+                    Member(
+                        oauthProvider = OAuthProvider.DG,
+                        oauthSubject = "subject-owner-check",
+                        email = "owner-check@example.com",
+                        status = MemberStatus.ACTIVE,
+                        profilePublic = true,
+                    ),
+                )
+
+            val found =
+                memberJobPreferenceRepository.findByIdAndMemberId(
+                    requireNotNull(saved.id),
+                    requireNotNull(otherMember.id),
+                )
+
+            assertThat(found).isNull()
+        }
+
+        @Test
+        fun `existsByMemberIdAndJobIdAndExclusionIsNotNull은 관심 없음이 이미 있으면 true다`() {
+            memberJobPreferenceRepository.saveAndFlush(
+                MemberJobPreference(memberId = memberId, jobId = jobId).apply {
+                    exclusion = ExclusionType.THIS_JOB
+                },
+            )
+
+            assertThat(
+                memberJobPreferenceRepository.existsByMemberIdAndJobIdAndExclusionIsNotNull(memberId, jobId),
+            ).isTrue()
+        }
+
+        @Test
+        fun `existsByMemberIdAndJobIdAndExclusionIsNotNull은 북마크만 있으면 false다`() {
+            memberJobPreferenceRepository.saveAndFlush(
+                MemberJobPreference(memberId = memberId, jobId = jobId, bookmarked = true),
+            )
+
+            assertThat(
+                memberJobPreferenceRepository.existsByMemberIdAndJobIdAndExclusionIsNotNull(memberId, jobId),
+            ).isFalse()
+        }
+
+        @Test
+        fun `findAllExclusionsByMemberId는 본인의 관심 없음만 exclusionType으로 필터링해 조회한다`() {
+            val otherJob =
+                jobRepository.saveAndFlush(
+                    Job(
+                        companyId = jobRepository.findById(jobId).get().companyId,
+                        type = PostingType.GENERAL,
+                        applicationMethod = ApplicationMethod.INTERNAL,
+                        title = "다른 공고",
+                        status = JobStatus.PUBLISHED,
+                    ),
+                )
+            memberJobPreferenceRepository.saveAndFlush(
+                MemberJobPreference(memberId = memberId, jobId = jobId).apply {
+                    exclusion = ExclusionType.THIS_JOB
+                },
+            )
+            memberJobPreferenceRepository.saveAndFlush(
+                MemberJobPreference(memberId = memberId, jobId = requireNotNull(otherJob.id)).apply {
+                    exclusion = ExclusionType.SIMILAR_JOBS
+                },
+            )
+            val otherMember =
+                memberRepository.saveAndFlush(
+                    Member(
+                        oauthProvider = OAuthProvider.DG,
+                        oauthSubject = "subject-exclusion-list",
+                        email = "exclusion-list@example.com",
+                        status = MemberStatus.ACTIVE,
+                        profilePublic = true,
+                    ),
+                )
+            memberJobPreferenceRepository.saveAndFlush(
+                MemberJobPreference(memberId = requireNotNull(otherMember.id), jobId = jobId).apply {
+                    exclusion = ExclusionType.THIS_JOB
+                },
+            )
+
+            val all = memberJobPreferenceRepository.findAllExclusionsByMemberId(memberId, null, firstPage)
+            val onlySimilar =
+                memberJobPreferenceRepository.findAllExclusionsByMemberId(
+                    memberId,
+                    ExclusionType.SIMILAR_JOBS,
+                    firstPage,
+                )
+
+            assertThat(all.totalElements).isEqualTo(2)
+            assertThat(onlySimilar.content).hasSize(1)
+            assertThat(onlySimilar.content[0].jobId).isEqualTo(otherJob.id)
+        }
+
+        @Test
+        fun `member_job_preferences는 Surrogate id를 PK로 쓰고 member_id와 job_id 조합은 UNIQUE다`() {
+            memberJobPreferenceRepository.saveAndFlush(MemberJobPreference(memberId = memberId, jobId = jobId))
+
+            assertThatThrownBy {
+                memberJobPreferenceRepository.saveAndFlush(MemberJobPreference(memberId = memberId, jobId = jobId))
+            }.isInstanceOf(DataIntegrityViolationException::class.java)
         }
 
         companion object {
