@@ -48,6 +48,16 @@ interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
         statuses: Collection<JobApplicationStatus>,
     ): List<JobApplication>
 
+    // findByJobIdAndApplicantMemberIdAndStatusIn의 배치 버전이다(Issue #136, Job/Search 응답에
+    // 지원 가능 여부·지원 현황을 노출할 때 목록 한 Page(최대 100건)를 단건 조회 반복 없이 채우기
+    // 위한 조회). 정상 상태에서는 (jobId, applicantMemberId)당 활성 Row가 최대 1건이지만
+    // (uk_job_applications_active_singleton), 위 Method와 같은 이유로 List로 반환한다.
+    fun findByJobIdInAndApplicantMemberIdAndStatusIn(
+        jobIds: Collection<Long>,
+        applicantMemberId: Long,
+        statuses: Collection<JobApplicationStatus>,
+    ): List<JobApplication>
+
     // 교사·개발자용 지원서 목록 조회다(Issue #125 요구사항 "모든 교사가 조회 가능"). :jobId,
     // :status는 null이면 조건을 적용하지 않는다(FormRepository.search와 동일한 관례). Issue #125는
     // "제출된 지원서"만 대상으로 하므로 DRAFT(임시저장 중, 미제출)는 :status로 명시 지정해도 항상

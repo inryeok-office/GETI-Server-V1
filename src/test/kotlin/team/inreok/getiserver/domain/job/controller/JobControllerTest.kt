@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
@@ -137,6 +138,15 @@ class JobControllerTest
             createdAt = LocalDateTime.of(2026, 7, 20, 10, 0),
             updatedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
             aiAnalysis = null,
+            application =
+                JobApplicationEligibilityAccessSnapshot(
+                    canApply = true,
+                    eligibilityReason = "AVAILABLE",
+                    eligibilityMessage = "지원 가능한 공고입니다.",
+                    applicationId = null,
+                    applicationStatus = null,
+                    availableActions = listOf("CREATE_DRAFT"),
+                ),
         )
 
         private companion object {
