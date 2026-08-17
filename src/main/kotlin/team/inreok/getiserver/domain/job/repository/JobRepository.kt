@@ -22,6 +22,9 @@ interface JobRepository : JpaRepository<Job, Long> {
     fun findByIdAndDeletedAtIsNull(id: Long): Job?
 
     // findByIdAndDeletedAtIsNull의 배치 버전이다(Issue #136, JobApplicationSnapshotQueryPort.findAllByIds).
+    // Recommendation R3(Issue #152, JobRecommendationCandidateQueryPort.findAllByIds)도 같은
+    // 메서드를 그대로 재사용한다 -- 두 Issue가 같은 배치 조회(id 목록으로 삭제되지 않은 Job
+    // 찾기)가 필요해 PR #151이 먼저 추가한 것을 새로 만들지 않고 그대로 썼다.
     fun findAllByIdInAndDeletedAtIsNull(ids: Collection<Long>): List<Job>
 
     // Recommendation 후보 조회 전용이다(Issue #148). 현재 규모(활성 공고 약 1,000건)에서는

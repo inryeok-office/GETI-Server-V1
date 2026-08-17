@@ -21,6 +21,17 @@ interface JobRecommendationCandidateQueryPort {
      * 조회해도 충분하다.
      */
     fun findAllPublished(): List<JobRecommendationCandidateSnapshot>
+
+    /**
+     * 이미 저장된 Recommendation Row가 가리키는 특정 Job들을 조회한다(Recommendation R3, Issue
+     * #152 — 추천 목록 응답의 Job Card 표시용 Batch 조회, N+1 방지). [findAllPublished]와 달리
+     * PUBLISHED 여부를 걸러내지 않는다 -- 이미 만들어진 추천 결과가 가리키는 Job은 생성 시점 이후
+     * CLOSED로 전이됐을 수 있고, 그 자체는 표시를 막을 이유가 아니다(상태 표시는 호출 측 책임).
+     * 삭제된(`deletedAt != null`) Job과 존재하지 않는 id는 결과 Map에서 빠진다
+     * ([JobNotificationTargetQueryPort.findAllByIds]와 같은 관례) -- 호출 측이 삭제된 Job을
+     * 가리키는 Recommendation을 응답에서 제외할지 판단한다.
+     */
+    fun findAllByIds(jobIds: Set<Long>): Map<Long, JobRecommendationCandidateSnapshot>
 }
 
 @NamedInterface
