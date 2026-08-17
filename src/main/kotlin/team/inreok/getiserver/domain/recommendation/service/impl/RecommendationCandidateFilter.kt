@@ -4,6 +4,7 @@ import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchSnapshot
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateSnapshot
 import team.inreok.getiserver.domain.member.query.RecommendationMemberProfileSnapshot
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason
+import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.ALREADY_BOOKMARKED
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.HIGH_SCHOOL_UNSUITABLE
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.JOB_NOT_PUBLISHED
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.NOT_INTERESTED
@@ -18,12 +19,16 @@ import java.time.LocalDateTime
  *
  * `null`을 반환하면 Score 계산 대상이다. Application `canApply`/이미 지원한 공고 Filter는 R2
  * 범위가 아니다 -- Application 공개 Query Contract가 아직 없어 R5에서 연결한다(R1 설계 §15/§41).
+ *
+ * [bookmarkedJobIds]는 Notion 기능명세("이미 북마크한 공고는 추천 목록에서 제외") 반영이다(Issue
+ * #155) -- [excludedJobIds](관심 없음)와 별개 개념이라 별도 Parameter로 받는다.
  */
 @Suppress("ReturnCount")
 fun computeExclusionReason(
     job: JobRecommendationCandidateSnapshot,
     member: RecommendationMemberProfileSnapshot,
     excludedJobIds: Set<Long>,
+    bookmarkedJobIds: Set<Long>,
     aiSnapshot: AiAnalysisSearchSnapshot?,
     now: LocalDateTime,
 ): RecommendationExclusionReason? {
@@ -33,6 +38,7 @@ fun computeExclusionReason(
         return TARGET_GRADE_MISMATCH
     }
     if (job.jobId in excludedJobIds) return NOT_INTERESTED
+    if (job.jobId in bookmarkedJobIds) return ALREADY_BOOKMARKED
     if (aiSnapshot?.highSchoolGraduateFit == "UNSUITABLE") return HIGH_SCHOOL_UNSUITABLE
     return null
 }
