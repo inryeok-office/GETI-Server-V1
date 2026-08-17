@@ -1,6 +1,8 @@
 package team.inreok.getiserver.domain.recommendation.service.impl
 
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
@@ -128,7 +130,7 @@ class RecommendationServiceImpl(
         val now = LocalDateTime.now()
         preference.exclusion = exclusionType
         preference.exclusionCreatedAt = now
-        val saved = memberJobPreferenceRepository.save(preference)
+        val saved = saveExclusionPreference(memberJobPreferenceRepository, preference, jobId, log)
         // 요구사항 "관심 없음 즉시 Recommendation 결과 처리" -- 조회는 항상 오늘자 결과만
         // 보여주므로 날짜 제한 없이 이 (memberId, jobId) 조합을 통째로 지워도 안전하고, 다음
         // 생성부터는 Hard Filter(NOT_INTERESTED)가 이 Job을 다시 걸러낸다.
@@ -259,3 +261,28 @@ class RecommendationServiceImpl(
         const val DEFAULT_ENABLED = false
     }
 }
+
+/**
+ * 관심 없음 등록(Notion `POST /api/v1/me/recommendation-exclusions`)의 최종 방어선이다(코드리뷰
+ * 반영). `registerExclusion`의 `existsByMemberIdAndJobIdAndExclusionIsNotNull` 사전 확인과 이
+ * 저장 사이에는 DB 잠금이 없어(TOCTOU), 같은 (memberId, jobId)에 대한 두 요청이 거의 동시에
+ * 도착하면(더블 클릭·재시도) 둘 다 사전 확인을 통과할 수 있다.
+ * `uk_member_job_preferences_member_job`(V24 Migration) UNIQUE 제약이 최종 방어선이다 -- 위반하면
+ * DB가 `DataIntegrityViolationException`을 던지고 여기서 `EXCLUSION_ALREADY_EXISTS`(409)로
+ * 변환한다(`JobApplicationServiceImpl.saveNewApplication()`과 동일한 패턴). Class 안에 두면
+ * detekt `TooManyFunctions`(허용 11개)를 넘어서 File 최상위 함수로 둔다.
+ */
+private fun saveExclusionPreference(
+    repository: MemberJobPreferenceRepository,
+    preference: MemberJobPreference,
+    jobId: Long,
+    log: Logger,
+): MemberJobPreference =
+    try {
+        repository.saveAndFlush(preference)
+    } catch (ex: DataIntegrityViolationException) {
+        // BusinessException은 cause를 받지 않아 원본 예외를 여기서 남긴다(detekt
+        // SwallowedException 반영) -- 실제 제약 위반 여부를 나중에 DB 로그로도 추적할 수 있다.
+        log.warn("관심 없음 동시 등록 요청이 DB 제약으로 차단됨(uk_member_job_preferences_member_job)", ex)
+        throw RecommendationExclusionAlreadyExistsException(jobId)
+    }

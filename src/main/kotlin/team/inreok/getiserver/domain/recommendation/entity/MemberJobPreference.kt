@@ -46,7 +46,7 @@ class MemberJobPreference(
     var exclusion: ExclusionType? = null
 
     // 관심 없음이 설정된 시각이다(Notion 관심 없음 등록 Resource의 createdAt). exclusion을
-    // 지울 때(RecommendationServiceImpl.removeNotInterested) 함께 null로 되돌린다 --
+    // 지울 때(RecommendationServiceImpl.removeExclusion) 함께 null로 되돌린다 --
     // updated_at은 bookmarked 등 이 Row의 다른 변경으로도 갱신되어 exclusion 자체의 설정
     // 시각과 다를 수 있다.
     @Column(name = "exclusion_created_at")

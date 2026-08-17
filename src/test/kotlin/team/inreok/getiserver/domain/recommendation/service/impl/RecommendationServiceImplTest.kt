@@ -19,6 +19,7 @@ import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import team.inreok.getiserver.domain.company.query.CompanyQuery
@@ -389,7 +390,7 @@ class RecommendationServiceImplTest {
         given(jobRecommendationCandidateQueryPort.findAllByIds(setOf(1L))).willReturn(mapOf(1L to jobOf(1L)))
         given(memberJobPreferenceRepository.existsByMemberIdAndJobIdAndExclusionIsNotNull(1L, 1L)).willReturn(false)
         given(memberJobPreferenceRepository.findByMemberIdAndJobId(1L, 1L)).willReturn(null)
-        given(memberJobPreferenceRepository.save(preferenceCaptor.capture())).willAnswer { invocation ->
+        given(memberJobPreferenceRepository.saveAndFlush(preferenceCaptor.capture())).willAnswer { invocation ->
             (invocation.arguments[0] as MemberJobPreference).apply { id = 10L }
         }
         given(companyQuery.findActiveSummary(100L, 1L))
@@ -410,7 +411,7 @@ class RecommendationServiceImplTest {
         given(jobRecommendationCandidateQueryPort.findAllByIds(setOf(1L))).willReturn(mapOf(1L to jobOf(1L)))
         given(memberJobPreferenceRepository.existsByMemberIdAndJobIdAndExclusionIsNotNull(1L, 1L)).willReturn(false)
         given(memberJobPreferenceRepository.findByMemberIdAndJobId(1L, 1L)).willReturn(null)
-        given(memberJobPreferenceRepository.save(preferenceCaptor.capture())).willAnswer { invocation ->
+        given(memberJobPreferenceRepository.saveAndFlush(preferenceCaptor.capture())).willAnswer { invocation ->
             (invocation.arguments[0] as MemberJobPreference).apply { id = 11L }
         }
 
@@ -427,7 +428,24 @@ class RecommendationServiceImplTest {
 
         assertThatThrownBy { service.registerExclusion(1L, 1L, ExclusionType.THIS_JOB) }
             .isInstanceOf(RecommendationExclusionAlreadyExistsException::class.java)
-        verify(memberJobPreferenceRepository, never()).save(anyPreference())
+        verify(memberJobPreferenceRepository, never()).saveAndFlush(anyPreference())
+        verify(recommendationRepository, never()).deleteAllByMemberIdAndJobId(1L, 1L)
+    }
+
+    @Test
+    fun `사전 확인을 통과해도 동시 등록으로 DB 제약을 위반하면 409에 해당하는 예외로 변환한다`() {
+        // 코드리뷰 반영: existsByMemberIdAndJobIdAndExclusionIsNotNull과 saveAndFlush 사이의
+        // TOCTOU를 재현한다 -- 사전 확인은 false(관심 없음 없음)를 통과했지만, 그 사이 동시
+        // 요청이 먼저 Row를 만들어 uk_member_job_preferences_member_job UNIQUE 제약을 위반한
+        // 상황을 Mock으로 흉내낸다.
+        given(jobRecommendationCandidateQueryPort.findAllByIds(setOf(1L))).willReturn(mapOf(1L to jobOf(1L)))
+        given(memberJobPreferenceRepository.existsByMemberIdAndJobIdAndExclusionIsNotNull(1L, 1L)).willReturn(false)
+        given(memberJobPreferenceRepository.findByMemberIdAndJobId(1L, 1L)).willReturn(null)
+        given(memberJobPreferenceRepository.saveAndFlush(anyPreference()))
+            .willThrow(DataIntegrityViolationException("uk_member_job_preferences_member_job"))
+
+        assertThatThrownBy { service.registerExclusion(1L, 1L, ExclusionType.THIS_JOB) }
+            .isInstanceOf(RecommendationExclusionAlreadyExistsException::class.java)
         verify(recommendationRepository, never()).deleteAllByMemberIdAndJobId(1L, 1L)
     }
 
@@ -437,7 +455,7 @@ class RecommendationServiceImplTest {
         given(jobRecommendationCandidateQueryPort.findAllByIds(setOf(1L))).willReturn(mapOf(1L to jobOf(1L)))
         given(memberJobPreferenceRepository.existsByMemberIdAndJobIdAndExclusionIsNotNull(1L, 1L)).willReturn(false)
         given(memberJobPreferenceRepository.findByMemberIdAndJobId(1L, 1L)).willReturn(existing)
-        given(memberJobPreferenceRepository.save(existing)).willReturn(existing)
+        given(memberJobPreferenceRepository.saveAndFlush(existing)).willReturn(existing)
 
         val result = service.registerExclusion(1L, 1L, ExclusionType.THIS_JOB)
 
