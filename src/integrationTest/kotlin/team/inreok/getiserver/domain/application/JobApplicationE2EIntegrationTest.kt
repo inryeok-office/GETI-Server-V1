@@ -213,9 +213,12 @@ class JobApplicationE2EIntegrationTest {
         assertThat(jobApplicationAdminService.getDetail(applicationId).status)
             .isEqualTo(JobApplicationStatus.APPROVED)
 
-        // 학생 Notification 확인(Issue #135 AFTER_COMMIT Listener)
-        val notification = awaitSingleNotification(studentId)
-        assertThat(notification.content).contains("승인")
+        // 학생 Notification 확인(Issue #135 AFTER_COMMIT Listener). REQUEST_REVISION도 같은
+        // JobApplicationReviewedEvent를 발행하므로(모든 검토 Action이 공통으로 발행), 이 Flow가
+        // 끝나면 학생에게는 REQUEST_REVISION 알림과 APPROVE 알림 2건이 쌓여 있다 -- 가장 최근
+        // 알림(APPROVE)이 "승인"을 담고 있는지 확인한다.
+        val notifications = awaitNotifications(studentId, expectedCount = 2)
+        assertThat(notifications.first().content).contains("승인")
     }
 
     @Test
@@ -419,17 +422,27 @@ class JobApplicationE2EIntegrationTest {
         jobApplicationFormLinkService.link(jobId, teacherId, isDeveloper = false, linkRequest)
     }
 
-    private fun awaitSingleNotification(memberId: Long): Notification {
+    /**
+     * [expectedCount]개가 쌓일 때까지 Polling한다. 검토 Action(ALLOW_EDIT/REQUEST_REVISION/
+     * APPROVE/REJECT)은 모두 같은 JobApplicationReviewedEvent를 발행하므로(Issue #135), 한
+     * 지원서에 여러 Action이 이어지면 그만큼 알림도 쌓인다 -- 정확한 개수까지 기다려야 마지막
+     * Action의 알림만 생겼다고 성급하게 판단하지 않는다. 최신순(createdAt DESC)이라 `first()`가
+     * 가장 최근 Action의 알림이다.
+     */
+    private fun awaitNotifications(
+        memberId: Long,
+        expectedCount: Int,
+    ): List<Notification> {
         val deadline = System.nanoTime() + AWAIT_TIMEOUT_MILLIS * NANOS_PER_MILLI
         var notifications = notificationsOf(memberId)
-        while (notifications.isEmpty() && System.nanoTime() < deadline) {
+        while (notifications.size < expectedCount && System.nanoTime() < deadline) {
             Thread.sleep(POLL_INTERVAL_MILLIS)
             notifications = notificationsOf(memberId)
         }
         assertThat(notifications)
-            .`as`("%dms 안에 memberId=%d 알림이 생성되지 않았다", AWAIT_TIMEOUT_MILLIS, memberId)
-            .hasSize(1)
-        return notifications.single()
+            .`as`("%dms 안에 memberId=%d 알림이 %d건 생성되지 않았다", AWAIT_TIMEOUT_MILLIS, memberId, expectedCount)
+            .hasSize(expectedCount)
+        return notifications
     }
 
     private fun notificationsOf(memberId: Long): List<Notification> {
