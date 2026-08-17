@@ -440,6 +440,8 @@ class CoreDomainSchemaIntegrationTest
                     recommendationDate = today,
                     score = BigDecimal("87.5000"),
                     suitability = SuitabilityLevel.RECOMMENDED,
+                    rank = 1,
+                    algorithmVersion = 1,
                 ),
             )
 
@@ -451,6 +453,8 @@ class CoreDomainSchemaIntegrationTest
                         recommendationDate = today,
                         score = BigDecimal("10.0000"),
                         suitability = SuitabilityLevel.UNSUITABLE,
+                        rank = 1,
+                        algorithmVersion = 1,
                     ),
                 )
             }.isInstanceOf(DataIntegrityViolationException::class.java)

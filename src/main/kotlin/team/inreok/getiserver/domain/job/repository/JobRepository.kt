@@ -21,6 +21,11 @@ interface JobRepository : JpaRepository<Job, Long> {
     // 관리자 상세 조회는 삭제 이력까지 확인해야 하므로 findById를 그대로 쓴다.
     fun findByIdAndDeletedAtIsNull(id: Long): Job?
 
+    // Recommendation 후보 조회 전용이다(Issue #148). 현재 규모(활성 공고 약 1,000건)에서는
+    // Pagination 없이 한 번에 가져와도 충분하다 — findForReindex처럼 여러 상태를 한꺼번에
+    // 받지 않고 PUBLISHED만 조회해, CLOSED까지 가져와 매번 걸러내는 낭비를 피한다.
+    fun findAllByStatusAndDeletedAtIsNull(status: JobStatus): List<Job>
+
     // 공개 목록/검색(GET /api/v1/jobs)은 더 이상 이 Repository를 직접 쓰지 않는다(Issue #69,
     // domain.search.query.JobSearchQueryPort가 Elasticsearch로 대체). 이 Query는 Search의 전체
     // 재색인이 Postgres를 원본으로 다시 읽을 때 쓰는 최소 목적의 재색인용 조회다 — 필터는 없고
