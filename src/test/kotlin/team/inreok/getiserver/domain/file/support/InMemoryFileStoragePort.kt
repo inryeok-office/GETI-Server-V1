@@ -2,6 +2,7 @@ package team.inreok.getiserver.domain.file.support
 
 import team.inreok.getiserver.domain.file.exception.FileStorageException
 import team.inreok.getiserver.domain.file.storage.FileStoragePort
+import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.net.URI
 import java.time.Duration
@@ -21,6 +22,9 @@ class InMemoryFileStoragePort : FileStoragePort {
     var failOnDelete = false
     var failOnPresign = false
 
+    /** `FileArchivePortImplTest`의 부분 실패(한 File만 건너뛰기) 시나리오 전용이다. */
+    var failOnDownloadKeys: Set<String> = emptySet()
+
     override fun upload(
         key: String,
         contentType: String,
@@ -32,6 +36,12 @@ class InMemoryFileStoragePort : FileStoragePort {
     }
 
     override fun exists(key: String): Boolean = objects.containsKey(key)
+
+    override fun download(key: String): InputStream {
+        if (key in failOnDownloadKeys) throw FileStorageException(operation = "download")
+        val bytes = objects[key] ?: throw FileStorageException(operation = "download")
+        return ByteArrayInputStream(bytes)
+    }
 
     override fun delete(key: String) {
         deleted += key

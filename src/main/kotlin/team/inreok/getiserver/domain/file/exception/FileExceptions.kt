@@ -76,6 +76,20 @@ class FileCountExceededException(
     )
 
 /**
+ * 일괄 다운로드 대상 fileId를 모두 조회한 결과 실제로 포함할 파일이 하나도 없다(존재하지 않거나
+ * `isVisible()`이 false). 빈 ZIP을 조용히 내려주지 않고 호출자에게 알린다.
+ */
+class FileArchiveEmptyException : BusinessException(FileErrorCode.FILE_ARCHIVE_EMPTY)
+
+/**
+ * 일괄 다운로드 요청이 [FileArchiveProperties][team.inreok.getiserver.domain.file.archive.FileArchiveProperties]의
+ * 파일 개수 또는 총 용량 상한을 넘었다.
+ */
+class FileArchiveTooLargeException(
+    detail: String,
+) : BusinessException(FileErrorCode.FILE_ARCHIVE_TOO_LARGE, "일괄 다운로드 허용 개수 또는 용량을 초과했습니다. ($detail)")
+
+/**
  * Object Storage 처리 실패다.
  *
  * [GlobalExceptionHandler][team.inreok.getiserver.global.error.GlobalExceptionHandler]가
