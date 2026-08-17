@@ -91,6 +91,12 @@ app:
         mime-types: [application/pdf, image/png, image/jpeg]
         max-size-bytes: 20971520      # 20MB
         max-count: 5
+    # 일괄 다운로드(ZIP) 상한이다(Issue #154, File 도메인 Epic #84 Phase 6, Issue #138 요구사항). 아래 두
+    # 값도 policies와 마찬가지로 **잠정값**이다(docs/file/file-domain-plan.md §17
+    # DECISION_REQUIRED #10). max-total-size-bytes는 압축 전 원본 크기 합으로 검사한다.
+    archive:
+      max-file-count: 100
+      max-total-size-bytes: 524288000  # 500MB
   jwt:
     access-token-expiration-seconds: 1800
     refresh-token-expiration-seconds: 1209600

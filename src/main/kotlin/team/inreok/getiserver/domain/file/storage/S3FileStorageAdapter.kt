@@ -93,6 +93,26 @@ class S3FileStorageAdapter(
         }
     }
 
+    override fun download(key: String): InputStream {
+        val request =
+            GetObjectRequest
+                .builder()
+                .bucket(properties.bucket)
+                .key(key)
+                .build()
+        return try {
+            // ResponseInputStream은 Body를 lazy하게 스트리밍한다 -- 여기서 전체를 읽어 메모리에
+            // 올리지 않는다(지시서 §42). 호출자가 닫아야 실제 HTTP Connection이 반환된다.
+            s3Client.getObject(request)
+        } catch (ex: NoSuchKeyException) {
+            log.error("Object가 존재하지 않습니다(Metadata와 Storage 불일치). key={}", key, ex)
+            throw FileStorageException(operation = "download", cause = ex)
+        } catch (ex: SdkException) {
+            log.error("Object Storage 다운로드에 실패했습니다. key={}", key, ex)
+            throw FileStorageException(operation = "download", cause = ex)
+        }
+    }
+
     override fun delete(key: String) {
         val request =
             DeleteObjectRequest
