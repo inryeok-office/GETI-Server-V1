@@ -1,7 +1,5 @@
 package team.inreok.getiserver.domain.recommendation.service
 
-import team.inreok.getiserver.domain.recommendation.service.impl.RankedRecommendation
-
 /**
  * 회원 1명의 Recommendation을 계산하고 저장하는 R2 Core Use Case다. Daily Scheduler(R4)는 대상
  * 회원 목록을 순회하며 이 Use Case를 회원 단위로 호출하도록 설계되어 있다(R1 설계 §35, 회원 1명

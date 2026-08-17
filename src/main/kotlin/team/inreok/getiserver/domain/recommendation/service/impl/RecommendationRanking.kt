@@ -1,21 +1,7 @@
 package team.inreok.getiserver.domain.recommendation.service.impl
 
-import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateSnapshot
+import team.inreok.getiserver.domain.recommendation.service.RankedRecommendation
 import java.time.LocalDateTime
-
-/** Score까지 계산된 후보 하나다(Ranking 입력). */
-data class ScoredRecommendationCandidate(
-    val job: JobRecommendationCandidateSnapshot,
-    val result: RecommendationScoreResult,
-)
-
-/** 순위가 매겨진 추천 결과 하나다(Ranking/Persistence 출력). */
-data class RankedRecommendation(
-    val jobId: Long,
-    val score: Int,
-    val reasons: List<RecommendationReason>,
-    val rank: Int,
-)
 
 /**
  * Recommendation Ranking이다(R2 요구사항, R1 설계 §29). score DESC -> publishedAt DESC ->

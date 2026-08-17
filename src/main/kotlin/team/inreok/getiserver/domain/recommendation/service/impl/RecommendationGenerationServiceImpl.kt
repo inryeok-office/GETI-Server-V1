@@ -8,6 +8,7 @@ import team.inreok.getiserver.domain.member.query.RecommendationMemberProfileQue
 import team.inreok.getiserver.domain.recommendation.entity.Recommendation
 import team.inreok.getiserver.domain.recommendation.repository.MemberJobPreferenceRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationRepository
+import team.inreok.getiserver.domain.recommendation.service.RankedRecommendation
 import team.inreok.getiserver.domain.recommendation.service.RecommendationGenerationService
 import tools.jackson.databind.ObjectMapper
 import java.math.BigDecimal

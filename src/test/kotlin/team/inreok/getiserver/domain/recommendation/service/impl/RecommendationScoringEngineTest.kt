@@ -8,6 +8,7 @@ import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationRe
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationReasonType.PREFERRED_SKILL_MATCH
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationReasonType.REQUIRED_SKILL_MATCH
 import team.inreok.getiserver.domain.recommendation.entity.type.SuitabilityLevel
+import team.inreok.getiserver.domain.recommendation.service.RecommendationReason
 
 class RecommendationScoringEngineTest {
     private fun snapshotOf(

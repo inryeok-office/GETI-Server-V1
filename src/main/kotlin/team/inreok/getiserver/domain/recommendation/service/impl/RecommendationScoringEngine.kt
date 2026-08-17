@@ -1,12 +1,12 @@
 package team.inreok.getiserver.domain.recommendation.service.impl
 
 import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchSnapshot
-import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationReasonType
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationReasonType.ENTRY_LEVEL_SUITABLE
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationReasonType.HIGH_SCHOOL_SUITABLE
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationReasonType.PREFERRED_SKILL_MATCH
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationReasonType.REQUIRED_SKILL_MATCH
 import team.inreok.getiserver.domain.recommendation.entity.type.SuitabilityLevel
+import team.inreok.getiserver.domain.recommendation.service.RecommendationReason
 import kotlin.math.roundToInt
 
 /**
@@ -35,13 +35,6 @@ private const val HIGHLY_RECOMMENDED_MIN_SCORE = 80
 private const val RECOMMENDED_MIN_SCORE = 60
 private const val NORMAL_MIN_SCORE = 40
 private const val UNSUITABLE_MIN_SCORE = 20
-
-/** 구조화된 추천 이유 하나다(R2 설계 §23). 자연어 문장은 담지 않는다. */
-data class RecommendationReason(
-    val type: RecommendationReasonType,
-    val matchedCount: Int? = null,
-    val totalCount: Int? = null,
-)
 
 /** Score Engine의 계산 결과다. */
 data class RecommendationScoreResult(
