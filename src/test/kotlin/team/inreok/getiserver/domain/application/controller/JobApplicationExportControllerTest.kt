@@ -24,6 +24,7 @@ import team.inreok.getiserver.domain.application.exception.ApplicationReviewForb
 import team.inreok.getiserver.domain.application.exception.JobNotFoundException
 import team.inreok.getiserver.domain.application.service.JobApplicationExportService
 import team.inreok.getiserver.domain.file.archive.FileArchiveEntry
+import team.inreok.getiserver.domain.file.exception.FileArchiveEmptyException
 import team.inreok.getiserver.global.security.JwtTokenProvider
 import team.inreok.getiserver.global.security.SecurityConfig
 import java.io.ByteArrayOutputStream
@@ -94,6 +95,28 @@ class JobApplicationExportControllerTest
             mockMvc
                 .perform(get("/api/v1/admin/jobs/999/applications/export").with(authOf(100L, "TEACHER")))
                 .andExpect(status().isNotFound)
+        }
+
+        @Test
+        fun `writeZip이 아무것도 쓰지 않고 예외를 던지면 Content-Disposition을 남기지 않는다`() {
+            // PR #157 코드리뷰 반영 -- Header를 미리 설정해두면 GlobalExceptionHandler가
+            // response.reset() 없이 오류를 쓰기 때문에 Header가 오염된다(브라우저가 JSON 오류를
+            // ZIP 첨부파일로 내려받음). Byte를 하나도 쓰지 않는 예외 경로에서는 Header 자체가
+            // 없어야 한다.
+            val entries = listOf(FileArchiveEntry(1L, "홍길동_resume.pdf"))
+            given(jobApplicationExportService.buildExportEntries(1L, 100L, false)).willReturn(entries)
+            org.mockito.BDDMockito
+                .willThrow(FileArchiveEmptyException())
+                .given(jobApplicationExportService)
+                .writeZip(anyList(), anyOutputStream())
+
+            val result =
+                mockMvc
+                    .perform(get("/api/v1/admin/jobs/1/applications/export").with(authOf(100L, "TEACHER")))
+                    .andExpect(status().isNotFound)
+                    .andReturn()
+
+            assertThat(result.response.getHeader("Content-Disposition")).isNull()
         }
 
         @Test

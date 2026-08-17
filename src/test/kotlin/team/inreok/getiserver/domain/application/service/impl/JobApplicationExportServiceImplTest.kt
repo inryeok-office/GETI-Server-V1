@@ -69,8 +69,7 @@ class JobApplicationExportServiceImplTest {
         val application = applicationOf(id = 1L, applicantName = "홍길동")
         givenApplications(application)
         givenJob(createdByMemberId = 100L, managerMemberId = MANAGER_ID)
-        given(jobApplicationSubmissionRepository.findTopByApplicationIdOrderBySubmissionNumberDesc(1L))
-            .willReturn(submissionOf(applicationId = 1L, fileIds = listOf(10L, 11L)))
+        givenSubmission(applicationId = 1L, fileIds = listOf(10L, 11L))
         given(fileLinkPort.snapshotsOf(setOf(10L, 11L)))
             .willReturn(
                 mapOf(
@@ -91,8 +90,7 @@ class JobApplicationExportServiceImplTest {
     fun `개발자는 담당자가 아니어도 조회할 수 있다`() {
         val application = applicationOf(id = 1L, applicantName = "홍길동")
         givenApplications(application)
-        given(jobApplicationSubmissionRepository.findTopByApplicationIdOrderBySubmissionNumberDesc(1L))
-            .willReturn(submissionOf(applicationId = 1L, fileIds = listOf(10L)))
+        givenSubmission(applicationId = 1L, fileIds = listOf(10L))
         given(fileLinkPort.snapshotsOf(setOf(10L))).willReturn(mapOf(10L to fileSnapshotOf(10L, "resume.pdf")))
 
         val entries = service.buildExportEntries(JOB_ID, OTHER_MEMBER_ID, isDeveloper = true)
@@ -123,8 +121,7 @@ class JobApplicationExportServiceImplTest {
         val application = applicationOf(id = 1L, applicantName = null)
         givenApplications(application)
         givenJob(createdByMemberId = MANAGER_ID)
-        given(jobApplicationSubmissionRepository.findTopByApplicationIdOrderBySubmissionNumberDesc(1L))
-            .willReturn(submissionOf(applicationId = 1L, fileIds = listOf(10L)))
+        givenSubmission(applicationId = 1L, fileIds = listOf(10L))
         given(fileLinkPort.snapshotsOf(setOf(10L))).willReturn(mapOf(10L to fileSnapshotOf(10L, "resume.pdf")))
 
         val entries = service.buildExportEntries(JOB_ID, MANAGER_ID, isDeveloper = false)
@@ -137,8 +134,7 @@ class JobApplicationExportServiceImplTest {
         val application = applicationOf(id = 1L, applicantName = "홍길동")
         givenApplications(application)
         givenJob(createdByMemberId = MANAGER_ID)
-        given(jobApplicationSubmissionRepository.findTopByApplicationIdOrderBySubmissionNumberDesc(1L))
-            .willReturn(null)
+        given(jobApplicationSubmissionRepository.findLatestByApplicationIdIn(setOf(1L))).willReturn(emptyList())
 
         val entries = service.buildExportEntries(JOB_ID, MANAGER_ID, isDeveloper = false)
 
@@ -150,14 +146,43 @@ class JobApplicationExportServiceImplTest {
         val application = applicationOf(id = 1L, applicantName = "홍길동")
         givenApplications(application)
         givenJob(createdByMemberId = MANAGER_ID)
-        given(jobApplicationSubmissionRepository.findTopByApplicationIdOrderBySubmissionNumberDesc(1L))
-            .willReturn(submissionOf(applicationId = 1L, fileIds = listOf(10L, 999L)))
+        givenSubmission(applicationId = 1L, fileIds = listOf(10L, 999L))
         given(fileLinkPort.snapshotsOf(setOf(10L, 999L)))
             .willReturn(mapOf(10L to fileSnapshotOf(10L, "resume.pdf")))
 
         val entries = service.buildExportEntries(JOB_ID, MANAGER_ID, isDeveloper = false)
 
         assertThat(entries).containsExactly(FileArchiveEntry(10L, "홍길동_resume.pdf"))
+    }
+
+    @Test
+    fun `지원자가 여럿이어도 제출 Snapshot을 한 번에 배치 조회한다`() {
+        // PR #157 코드리뷰 반영 -- 지원자 수만큼 단건 조회를 반복하지 않는지 확인한다(N+1 방지).
+        val first = applicationOf(id = 1L, applicantName = "홍길동")
+        val second = applicationOf(id = 2L, applicantName = "김철수")
+        givenApplications(first, second)
+        givenJob(createdByMemberId = MANAGER_ID)
+        given(jobApplicationSubmissionRepository.findLatestByApplicationIdIn(setOf(1L, 2L)))
+            .willReturn(
+                listOf(
+                    submissionOf(applicationId = 1L, fileIds = listOf(10L)),
+                    submissionOf(applicationId = 2L, fileIds = listOf(20L)),
+                ),
+            )
+        given(fileLinkPort.snapshotsOf(setOf(10L, 20L)))
+            .willReturn(mapOf(10L to fileSnapshotOf(10L, "resume.pdf"), 20L to fileSnapshotOf(20L, "resume.pdf")))
+
+        val entries = service.buildExportEntries(JOB_ID, MANAGER_ID, isDeveloper = false)
+
+        assertThat(entries).containsExactlyInAnyOrder(
+            FileArchiveEntry(10L, "홍길동_resume.pdf"),
+            FileArchiveEntry(20L, "김철수_resume.pdf"),
+        )
+        // applicationId별 단건 조회(findTopByApplicationIdOrderBySubmissionNumberDesc)는
+        // 전혀 호출되지 않는다 -- 배치 Method 하나로만 조회한다.
+        org.mockito.Mockito
+            .verify(jobApplicationSubmissionRepository, org.mockito.Mockito.never())
+            .findTopByApplicationIdOrderBySubmissionNumberDesc(org.mockito.ArgumentMatchers.anyLong())
     }
 
     @Test
@@ -176,6 +201,14 @@ class JobApplicationExportServiceImplTest {
     private fun givenApplications(vararg applications: JobApplication) {
         given(jobApplicationRepository.search(JOB_ID, null, Pageable.unpaged()))
             .willReturn(PageImpl(applications.toList()))
+    }
+
+    private fun givenSubmission(
+        applicationId: Long,
+        fileIds: List<Long>,
+    ) {
+        given(jobApplicationSubmissionRepository.findLatestByApplicationIdIn(setOf(applicationId)))
+            .willReturn(listOf(submissionOf(applicationId = applicationId, fileIds = fileIds)))
     }
 
     private fun givenJob(

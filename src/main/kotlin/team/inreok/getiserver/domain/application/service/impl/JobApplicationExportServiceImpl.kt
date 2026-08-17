@@ -4,7 +4,7 @@ import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.application.dto.ApplicationAnswer
-import team.inreok.getiserver.domain.application.entity.JobApplication
+import team.inreok.getiserver.domain.application.entity.JobApplicationSubmission
 import team.inreok.getiserver.domain.application.exception.ApplicationReviewForbiddenException
 import team.inreok.getiserver.domain.application.exception.JobNotFoundException
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
@@ -45,8 +45,18 @@ class JobApplicationExportServiceImpl(
         // 않아(status는 UPLOADED로 돌아갈 뿐) isVisible()은 계속 true이므로 여전히 내려받을 수
         // 있다(FileArchivePort.writeZip이 이 판정을 담당).
         val applications = jobApplicationRepository.search(jobId, null, Pageable.unpaged()).content
+
+        // 지원서마다 단건 조회를 반복하면 지원자 수만큼 Query가 느는 N+1이 되므로(PR #157
+        // 코드리뷰 반영), applicationId 전체에 대해 최신 제출 Snapshot을 한 Query로 배치 조회한다.
+        val applicationIds = applications.mapNotNull { it.id }.toSet()
+        val latestSubmissionByApplicationId =
+            jobApplicationSubmissionRepository
+                .findLatestByApplicationIdIn(applicationIds)
+                .associateBy { it.applicationId }
         val fileIdsByApplication =
-            applications.associateWith { latestSubmissionFileIds(it) }.filterValues { it.isNotEmpty() }
+            applications
+                .associateWith { fileIdsOf(latestSubmissionByApplicationId[it.id]) }
+                .filterValues { it.isNotEmpty() }
         if (fileIdsByApplication.isEmpty()) return emptyList()
 
         val allFileIds = fileIdsByApplication.values.flatten().toSet()
@@ -76,10 +86,7 @@ class JobApplicationExportServiceImpl(
         fileArchivePort.writeZip(entries, outputStream)
     }
 
-    private fun latestSubmissionFileIds(application: JobApplication): List<Long> {
-        val submission =
-            jobApplicationSubmissionRepository
-                .findTopByApplicationIdOrderBySubmissionNumberDesc(requireNotNull(application.id))
+    private fun fileIdsOf(submission: JobApplicationSubmission?): List<Long> {
         if (submission == null || submission.answers.isBlank()) return emptyList()
         return objectMapper
             .readValue(submission.answers, Array<ApplicationAnswer>::class.java)

@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import team.inreok.getiserver.domain.application.service.JobApplicationExportService
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
+import java.io.OutputStream
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 
 /**
@@ -69,13 +70,63 @@ class JobApplicationExportController(
         val isDeveloper = authentication.authorities.any { it.authority == "ROLE_DEVELOPER" }
 
         // DB 조회(권한 판정 포함)를 먼저 끝내 여기서 예외가 나면 정상적인 JSON 오류 응답으로
-        // 나가게 한다 -- 이 시점까지는 response에 아무것도 쓰지 않았다. writeZip 내부에서
-        // 개수·용량 상한을 넘겨 예외가 나는 경로는 이미 응답이 시작된 뒤일 수 있어 그 경우
-        // 다운로드가 잘릴 수 있다(FileArchivePort.writeZip KDoc에 문서화된 한계와 같은 종류).
+        // 나가게 한다 -- 이 시점까지는 response에 아무것도 쓰지 않았다.
         val entries = jobApplicationExportService.buildExportEntries(jobId, requesterMemberId, isDeveloper)
 
-        response.contentType = "application/zip"
-        response.setHeader("Content-Disposition", "attachment; filename=\"job-$jobId-applications.zip\"")
-        jobApplicationExportService.writeZip(entries, response.outputStream)
+        // Content-Type/Content-Disposition을 여기서 미리 정하지 않는다 -- writeZip 내부의
+        // 개수·용량 상한 검증(FileArchivePort.writeZip, Storage 접근 전)이나 entries가 비어
+        // 던지는 FileArchiveEmptyException은 이 시점 이후에도 발생할 수 있는데, 미리 정해둔
+        // Header는 GlobalExceptionHandler가 response.reset() 없이 그대로 오류 응답을 쓰기
+        // 때문에 남아버린다(PR #157 코드리뷰 반영) -- 그러면 브라우저가 JSON 오류 Body를
+        // "job-{id}-applications.zip"이라는 첨부파일로 내려받는다. 실제로 ZIP Byte를 쓰기
+        // 시작하는 순간(Header 전송이 사실상 불가피해지는 시점)에만 Header를 늦게 설정해
+        // 이 경로에서는 오류 응답이 오염되지 않게 한다.
+        val deferredOutput =
+            HeaderDeferringOutputStream(response.outputStream) {
+                response.contentType = "application/zip"
+                response.setHeader("Content-Disposition", "attachment; filename=\"job-$jobId-applications.zip\"")
+            }
+        jobApplicationExportService.writeZip(entries, deferredOutput)
+    }
+
+    /**
+     * 실제로 Byte를 쓰기 직전에만 [onFirstWrite]를 실행하는 [OutputStream] Decorator다. ZIP 생성
+     * 성공·부분 실패(File 일부 건너뛰기) 경로는 정상적으로 Header가 설정된 채 진행되고, Storage에
+     * 전혀 접근하지 못한 검증 실패 경로(개수·용량 상한, 빈 목록)는 Header를 건드리지 않는다.
+     */
+    private class HeaderDeferringOutputStream(
+        private val delegate: OutputStream,
+        private val onFirstWrite: () -> Unit,
+    ) : OutputStream() {
+        private var headersApplied = false
+
+        private fun applyHeadersOnce() {
+            if (headersApplied) return
+            onFirstWrite()
+            headersApplied = true
+        }
+
+        override fun write(b: Int) {
+            applyHeadersOnce()
+            delegate.write(b)
+        }
+
+        override fun write(b: ByteArray) {
+            applyHeadersOnce()
+            delegate.write(b)
+        }
+
+        override fun write(
+            b: ByteArray,
+            off: Int,
+            len: Int,
+        ) {
+            applyHeadersOnce()
+            delegate.write(b, off, len)
+        }
+
+        override fun flush() = delegate.flush()
+
+        override fun close() = delegate.close()
     }
 }
