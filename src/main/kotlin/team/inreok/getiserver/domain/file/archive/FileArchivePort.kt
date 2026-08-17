@@ -43,7 +43,17 @@ interface FileArchivePort {
      * 두 개 이상의 [entries]가 같은 [FileArchiveEntry.displayName]으로 정규화되면 뒤에 오는
      * 항목에 `(2)`, `(3)`처럼 번호를 붙여 ZIP 안에서 이름이 겹치지 않게 한다.
      *
-     * @return 실제로 ZIP에 담긴 fileId와 건너뛴 fileId(사유와 무관하게 모두 포함) 목록.
+     * **[outputStream]을 닫는지 여부는 실행 경로에 따라 다르다**(PR #156 리뷰 반영). `ZipEntry`를
+     * 하나라도 쓰기 시작한 뒤(정상 반환이든 이 Method가 던지는 예외든)에는 내부에서 연
+     * `ZipOutputStream`을 `close()`하며, 이는 감싸고 있는 [outputStream]까지 함께 닫는다.
+     * 반대로 `FileArchiveTooLargeException`/[entries]가 비어 있거나 전부 보이지 않아 던지는
+     * `FileArchiveEmptyException`처럼 `ZipOutputStream`을 아예 만들기 전에(Storage에 접근하기
+     * 전에) 검증만으로 실패하는 경로에서는 [outputStream]에 전혀 손대지 않는다 -- 호출자가 직접
+     * 닫아야 한다. HTTP Response의 `OutputStream`을 넘길 소비 측(Application Phase 10, #138)은
+     * 이 비대칭을 감안해 실패 검증 경로에서도 자신이 직접 정리하도록 만들어야 한다.
+     *
+     * @return 실제로 ZIP에 담긴 fileId와 건너뛴 fileId(사유와 무관하게 모두 포함, **순서를
+     *   보장하지 않는다**) 목록.
      */
     fun writeZip(
         entries: List<FileArchiveEntry>,
