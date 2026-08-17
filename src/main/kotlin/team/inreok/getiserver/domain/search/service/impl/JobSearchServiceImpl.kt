@@ -8,6 +8,8 @@ import org.springframework.data.elasticsearch.client.elc.NativeQuery
 import org.springframework.stereotype.Service
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.file.link.FileUrlPort
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
 import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.search.document.JobSearchDocument
 import team.inreok.getiserver.domain.search.dto.JobSearchResponse
@@ -25,6 +27,7 @@ import java.time.format.DateTimeFormatter
 class JobSearchServiceImpl(
     private val indexManager: JobSearchIndexManager,
     private val fileUrlPort: FileUrlPort,
+    private val jobApplicationEligibilityAccessor: JobApplicationEligibilityAccessor,
 ) : JobSearchService {
     @Suppress("LongParameterList")
     override fun search(
@@ -77,9 +80,10 @@ class JobSearchServiceImpl(
 
         val documents = hits.searchHits.map { it.content }
         val logoUrls = resolveLogoUrls(documents, requesterId)
+        val eligibilities = resolveEligibilities(documents, requesterId)
 
         return JobSearchResponse(
-            content = documents.map { JobSummaryResponse.from(it, logoUrls) },
+            content = documents.map { JobSummaryResponse.from(it, logoUrls, eligibilities.getValue(it.jobId)) },
             page = page,
             size = size,
             totalElements = totalElements,
@@ -102,6 +106,20 @@ class JobSearchServiceImpl(
         val logoFileIds = documents.mapNotNull { it.companyLogoFileId }.distinct()
         if (logoFileIds.isEmpty()) return emptyMap()
         return fileUrlPort.presignedImageUrls(requesterId, logoFileIds)
+    }
+
+    /**
+     * 이번 Page에 담긴 공고 전체의 요청자 기준 지원 가능 여부·지원 현황을 한 번에 계산한다(Issue
+     * #136, [resolveLogoUrls]와 같은 이유 -- N+1 방지). [JobApplicationEligibilityAccessor]는
+     * `job`이 소유하지만 `search`도 그대로 소비한다(Interface Class 주석 참고).
+     */
+    private fun resolveEligibilities(
+        documents: List<JobSearchDocument>,
+        requesterId: Long,
+    ): Map<Long, JobApplicationEligibilityAccessSnapshot> {
+        val jobIds = documents.map { it.jobId }.toSet()
+        if (jobIds.isEmpty()) return emptyMap()
+        return jobApplicationEligibilityAccessor.findAllByJobIds(jobIds, requesterId)
     }
 
     @Suppress("LongParameterList")

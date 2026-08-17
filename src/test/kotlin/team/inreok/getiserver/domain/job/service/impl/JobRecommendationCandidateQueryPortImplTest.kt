@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
 import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
@@ -56,5 +57,42 @@ class JobRecommendationCandidateQueryPortImplTest {
         val result = port.findAllPublished()
 
         assertThat(result).isEmpty()
+    }
+
+    @Test
+    fun `id로 조회하면 PUBLISHED 여부와 무관하게 삭제되지 않은 Job을 Map으로 반환한다`() {
+        val closedJob =
+            Job(
+                companyId = 100L,
+                type = PostingType.GENERAL,
+                applicationMethod = ApplicationMethod.INTERNAL,
+                title = "마감된 공고",
+                status = JobStatus.CLOSED,
+            ).apply { id = 2L }
+        given(jobRepository.findAllByIdInAndDeletedAtIsNull(setOf(1L, 2L))).willReturn(listOf(jobOf(1L), closedJob))
+
+        val result = port.findAllByIds(setOf(1L, 2L))
+
+        assertThat(result).hasSize(2)
+        assertThat(result.getValue(1L).status).isEqualTo("PUBLISHED")
+        assertThat(result.getValue(2L).status).isEqualTo("CLOSED")
+    }
+
+    @Test
+    fun `삭제되었거나 존재하지 않는 id는 결과 Map에서 빠진다`() {
+        given(jobRepository.findAllByIdInAndDeletedAtIsNull(setOf(1L, 999L))).willReturn(listOf(jobOf(1L)))
+
+        val result = port.findAllByIds(setOf(1L, 999L))
+
+        assertThat(result).hasSize(1)
+        assertThat(result).containsKey(1L)
+    }
+
+    @Test
+    fun `빈 id 집합을 넘기면 빈 Map을 반환하고 Repository를 호출하지 않는다`() {
+        val result = port.findAllByIds(emptySet())
+
+        assertThat(result).isEmpty()
+        verifyNoInteractions(jobRepository)
     }
 }

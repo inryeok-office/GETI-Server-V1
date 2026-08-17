@@ -20,6 +20,8 @@ import org.springframework.context.ApplicationEventPublisher
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
 import team.inreok.getiserver.domain.job.dto.JobUpdateRequest
@@ -65,12 +67,43 @@ class JobServiceTest {
     @Mock
     private lateinit var jobAiAnalysisAccessor: JobAiAnalysisAccessor
 
+    @Mock
+    private lateinit var jobApplicationEligibilityAccessor: JobApplicationEligibilityAccessor
+
     @Captor
     private lateinit var jobCaptor: ArgumentCaptor<Job>
 
     private val service: JobService by lazy {
-        JobServiceImpl(jobRepository, companyQuery, eventPublisher, discordChannelResolver, jobAiAnalysisAccessor)
+        // 이 Test의 관심사는 지원 가능 여부 계산(Issue #136, application.access 구현체)이
+        // 아니라 Job 자체의 CRUD/상태 전이이므로, 요청된 jobId 전체에 기본값(canApply=true)을
+        // 채워주는 Stub 하나로 모든 Test가 공유한다. 다른 값을 검증하려는 개별 Test는 이 Mock을
+        // 별도로 재정의(given)하면 된다.
+        given(
+            jobApplicationEligibilityAccessor.findAllByJobIds(any() ?: emptySet(), anyLong()),
+        ).willAnswer { invocation ->
+            @Suppress("UNCHECKED_CAST")
+            val jobIds = invocation.arguments[0] as Set<Long>
+            jobIds.associateWith { defaultApplicationEligibility() }
+        }
+        JobServiceImpl(
+            jobRepository,
+            companyQuery,
+            eventPublisher,
+            discordChannelResolver,
+            jobAiAnalysisAccessor,
+            jobApplicationEligibilityAccessor,
+        )
     }
+
+    private fun defaultApplicationEligibility() =
+        JobApplicationEligibilityAccessSnapshot(
+            canApply = true,
+            eligibilityReason = "AVAILABLE",
+            eligibilityMessage = "지원 가능한 공고입니다.",
+            applicationId = null,
+            applicationStatus = null,
+            availableActions = listOf("CREATE_DRAFT"),
+        )
 
     private val companySummary = CompanySummary(companyId = 1L, name = "인력개발원")
     private val companySummaryWithLogo = CompanySummary(companyId = 1L, name = "인력개발원", logoUrl = LOGO_URL)
@@ -362,6 +395,32 @@ class JobServiceTest {
 
         assertThat(response.viewCount).isEqualTo(11)
         verify(jobRepository).incrementViewCount(1L)
+    }
+
+    @Test
+    fun `공개 상세 응답에는 요청자 기준 지원 가능 여부가 담긴다`() {
+        val job = jobOf(status = JobStatus.PUBLISHED)
+        givenFoundNotDeleted(job)
+        givenActiveCompany()
+        // service를 먼저 참조해 by lazy 초기화 블록의 기본 Stub(모든 jobId에 AVAILABLE)을 먼저
+        // 등록시킨 뒤, 이 Test만의 값으로 재정의한다 -- Mockito는 나중에 등록된 Stub을 우선하므로
+        // 순서를 반대로 하면(재정의를 먼저 하면) 기본 Stub이 이 값을 덮어써 버린다.
+        service
+        val eligibility =
+            JobApplicationEligibilityAccessSnapshot(
+                canApply = false,
+                eligibilityReason = "ALREADY_APPLIED",
+                eligibilityMessage = "이미 이 공고에 지원한 이력이 있습니다.",
+                applicationId = 42L,
+                applicationStatus = "SUBMITTED",
+                availableActions = listOf("REQUEST_EDIT", "WITHDRAW"),
+            )
+        given(jobApplicationEligibilityAccessor.findAllByJobIds(setOf(1L), REQUESTER_ID))
+            .willReturn(mapOf(1L to eligibility))
+
+        val response = service.getPublicDetail(1L, REQUESTER_ID)
+
+        assertThat(response.application).isEqualTo(eligibility)
     }
 
     @Test

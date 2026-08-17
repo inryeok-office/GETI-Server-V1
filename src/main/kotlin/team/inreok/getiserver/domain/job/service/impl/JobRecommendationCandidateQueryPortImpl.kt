@@ -19,6 +19,14 @@ class JobRecommendationCandidateQueryPortImpl(
             .findAllByStatusAndDeletedAtIsNull(JobStatus.PUBLISHED)
             .map { it.toSnapshot() }
 
+    @Transactional(readOnly = true)
+    override fun findAllByIds(jobIds: Set<Long>): Map<Long, JobRecommendationCandidateSnapshot> {
+        if (jobIds.isEmpty()) return emptyMap()
+        return jobRepository
+            .findAllByIdInAndDeletedAtIsNull(jobIds)
+            .associate { requireNotNull(it.id) { "저장된 Job은 id를 가져야 합니다." } to it.toSnapshot() }
+    }
+
     private fun Job.toSnapshot() =
         JobRecommendationCandidateSnapshot(
             jobId = requireNotNull(id) { "저장된 Job은 id를 가져야 합니다." },
