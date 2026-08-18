@@ -24,6 +24,13 @@ enum class RecommendationExclusionReason {
      * "맞춤 추천 페이지 -- 이미 북마크한 공고는 추천 목록에서 제외"(Issue #155). */
     ALREADY_BOOKMARKED,
 
+    /** 회원이 해당 공고에 이미 활성 지원서를 가짐(R5, Issue #165).
+     * `job.access.JobApplicationEligibilityAccessor`가 계산한
+     * `eligibilityReason == "ALREADY_APPLIED"`를 그대로 옮긴 값이다 -- Application의
+     * `JobApplicationEligibilityReason` Enum을 직접 참조하지 않기 위해 이름은 같지만 별도
+     * 독립적인 값으로 둔다(`RecommendationExclusionReason`은 Application 어떤 Package도 모른다). */
+    ALREADY_APPLIED,
+
     /** AI Analysis의 `highSchoolGraduateFit`이 UNSUITABLE. */
     HIGH_SCHOOL_UNSUITABLE,
 }
