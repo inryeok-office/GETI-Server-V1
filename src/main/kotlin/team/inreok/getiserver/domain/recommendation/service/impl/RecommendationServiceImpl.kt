@@ -2,6 +2,7 @@ package team.inreok.getiserver.domain.recommendation.service.impl
 
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
@@ -22,12 +23,14 @@ import team.inreok.getiserver.domain.recommendation.dto.RecommendationStatus
 import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreference
 import team.inreok.getiserver.domain.recommendation.entity.Recommendation
 import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
+import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationGenerationStatus
 import team.inreok.getiserver.domain.recommendation.entity.type.SuitabilityLevel
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationExclusionAlreadyExistsException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationExclusionNotFoundException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationJobNotFoundException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationNotEnrolledException
 import team.inreok.getiserver.domain.recommendation.repository.MemberJobPreferenceRepository
+import team.inreok.getiserver.domain.recommendation.repository.RecommendationGenerationStateRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationPreferenceRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationRepository
 import team.inreok.getiserver.domain.recommendation.service.RecommendationService
@@ -36,31 +39,73 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 
 /**
- * [RecommendationService]의 구현이다(R3 Issue #152, Notion 계약 정합성 Issue #155). R2
- * ([team.inreok.getiserver.domain.recommendation.service.RecommendationGenerationService])가
+ * [RecommendationService]의 구현이다(R3 Issue #152, Notion 계약 정합성 Issue #155, R4 Issue #160).
+ * R2([team.inreok.getiserver.domain.recommendation.service.RecommendationGenerationService])가
  * 이미 계산·저장한 결과를 읽고 사용자 설정을 바꿀 뿐, Score/Hard Filter/Ranking을 다시 계산하지
- * 않는다.
+ * 않는다. GENERATING/FAILED 상태는 R4 Daily Scheduler(`RecommendationGenerationRunner`)가 기록한
+ * `RecommendationGenerationState`를 그대로 읽는다 -- 여기서도 상태를 직접 판정하지 않는다.
  */
 @Service
 class RecommendationServiceImpl(
     private val recommendationRepository: RecommendationRepository,
     private val recommendationPreferenceRepository: RecommendationPreferenceRepository,
+    private val recommendationGenerationStateRepository: RecommendationGenerationStateRepository,
     private val memberJobPreferenceRepository: MemberJobPreferenceRepository,
     private val jobRecommendationCandidateQueryPort: JobRecommendationCandidateQueryPort,
     private val companyQuery: CompanyQuery,
     private val memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort,
     private val objectMapper: ObjectMapper,
+    // Recommendation R4(Issue #160)의 Daily Scheduler와 같은 property를 읽는다 -- Scheduler
+    // 설정이 바뀌면 이 값도 자동으로 맞아야 하므로 별도로 하드코딩하지 않는다(요구사항 "Scheduler
+    // 설정이 바뀌면 API 값도 자동으로 맞아야 한다").
+    @param:Value("\${app.recommendation.generation-scheduler.cron:-}") private val generationSchedulerCron: String,
 ) : RecommendationService {
     private val log = LoggerFactory.getLogger(RecommendationServiceImpl::class.java)
 
+    // GENERATING/FAILED 분기와 그 외(EMPTY/READY 재조회) 분기를 하나의 when으로 묶어 detekt
+    // ReturnCount(허용 2개)를 넘기지 않는다 -- disabledResponse/inProgressResponse/nextGenerationAt
+    // 자체는 상태를 갖지 않는 순수 조립 로직이라 RecommendationResponseMapper.kt의 최상위 함수로
+    // 분리했다(detekt TooManyFunctions 허용 11개, `buildRecommendationJobResponse`와 같은 이유).
     @Transactional(readOnly = true)
     override fun getMyRecommendations(
         memberId: Long,
         suitabilityLevel: SuitabilityLevel?,
         pageable: Pageable,
     ): RecommendationListResponse {
-        if (!isEnabled(memberId)) return disabledResponse(pageable)
+        if (!isEnabled(memberId)) return disabledRecommendationListResponse(pageable)
 
+        val state = recommendationGenerationStateRepository.findByMemberId(memberId)
+        // GENERATING/FAILED인 회원은 오늘자 Recommendation Row가 아직 없거나(계산 시작 전) 이번
+        // 실행에서 만들어지지 않았다(계산 실패, Transaction 자체가 Rollback됨) -- 실제 조회를 다시
+        // 하지 않고 상태만으로 즉시 응답한다(Recommendation R4, Issue #160).
+        return when (state?.status) {
+            RecommendationGenerationStatus.GENERATING -> {
+                inProgressRecommendationListResponse(
+                    pageable,
+                    RecommendationStatus.GENERATING,
+                    nextGenerationAt(generationSchedulerCron),
+                )
+            }
+
+            RecommendationGenerationStatus.FAILED -> {
+                inProgressRecommendationListResponse(
+                    pageable,
+                    RecommendationStatus.FAILED,
+                    nextGenerationAt(generationSchedulerCron),
+                )
+            }
+
+            else -> {
+                readyOrEmptyRecommendations(memberId, suitabilityLevel, pageable)
+            }
+        }
+    }
+
+    private fun readyOrEmptyRecommendations(
+        memberId: Long,
+        suitabilityLevel: SuitabilityLevel?,
+        pageable: Pageable,
+    ): RecommendationListResponse {
         val today = LocalDate.now()
         val page =
             recommendationRepository.findAllByMemberIdAndRecommendationDate(
@@ -75,20 +120,10 @@ class RecommendationServiceImpl(
             enabled = true,
             status = status,
             generatedAt = generatedAt,
-            // R4 Daily Scheduler가 없어 다음 생성 예정 시각을 계산할 근거가 없다(DTO 문서 참고).
-            nextGenerationAt = null,
+            nextGenerationAt = nextGenerationAt(generationSchedulerCron),
             page = toItemResponsePage(page, memberId),
         )
     }
-
-    private fun disabledResponse(pageable: Pageable) =
-        RecommendationListResponse.of(
-            enabled = false,
-            status = RecommendationStatus.DISABLED,
-            generatedAt = null,
-            nextGenerationAt = null,
-            page = Page.empty(pageable),
-        )
 
     @Transactional
     override fun updateSetting(

@@ -134,7 +134,9 @@ class CoreDomainSchemaIntegrationTest
             // Issue #133) 상태 이력·제출 Snapshot을 위해 job_application_status_histories,
             // job_application_submissions 2개 Table을 추가해 38개가 되었다(V20 Migration).
             // Recommendation R3(Issue #152) 추천 기능 ON/OFF 설정을 위해 recommendation_preferences
-            // 1개 Table을 추가해 39개가 되었다(V23 Migration).
+            // 1개 Table을 추가해 39개가 되었다(V23 Migration). Recommendation R4(Issue #160) 일일
+            // 추천 Generation 상태 저장을 위해 recommendation_generation_states 1개 Table을
+            // 추가해 40개가 되었다(V25 Migration).
             @Suppress("UNCHECKED_CAST")
             val tableCount =
                 entityManager
@@ -147,7 +149,7 @@ class CoreDomainSchemaIntegrationTest
                         """.trimIndent(),
                     ).singleResult as Number
 
-            assertThat(tableCount.toInt()).isEqualTo(39)
+            assertThat(tableCount.toInt()).isEqualTo(40)
         }
 
         @Test

@@ -127,6 +127,20 @@ app:
       # 문서 8절, Phase 7). DiscordDeliveryWorker(sweep-interval-ms)와 동일한 60초 기본값 --
       # 최소 자동 재시도 백오프(1분)보다 촘촘하게 돌 이유가 없다.
       interval-ms: 60000
+  recommendation:
+    generation-scheduler:
+      # 일일 추천 생성 실행 시각이다(Recommendation R4, Issue #160). GETI Notion/Figma/기존
+      # 문서 어디에도 확정 값이 없어(DECISION_REQUIRED, PR 본문 참고) 근거 없는 시각을 넣지
+      # 않는다. 기본값 "-"는 Spring @Scheduled의 비활성 Sentinel(CronExpression.DISABLED)이라
+      # 이 값을 그대로 두면 RecommendationGenerationScheduler.generateDailyRecommendations()
+      # 자체가 등록되지 않아 자동 실행되지 않는다 -- 운영자가 실제 값을 확정해 환경 변수로
+      # 명시적으로 설정해야만 켜진다(CollectorScheduler의 external-enabled 기본 false와 같은
+      # 안전 기본값 원칙).
+      cron: ${RECOMMENDATION_GENERATION_SCHEDULER_CRON:-}
+      # 회원 1명당 저장할 일일 추천 개수(Top N)다. 이 값도 확정 근거가 없다(DECISION_REQUIRED,
+      # Issue #152 PR 본문에서도 R3 범위 밖으로 명시됐다). 조회 API 기본 Page 크기(size=20)와
+      # 같은 잠정값을 둔다(docs/file/file-domain-plan.md의 "잠정값" 문서화 관례와 동일).
+      top-n: ${RECOMMENDATION_GENERATION_TOP_N:20}
   collector:
     scheduler:
       # 일일 수집 실행 시각(초 분 시 일 월 요일). 매일 03:00에 실행한다(Issue #62).

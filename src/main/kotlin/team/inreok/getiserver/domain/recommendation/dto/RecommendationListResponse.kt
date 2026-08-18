@@ -22,14 +22,17 @@ data class RecommendationListResponse(
     @param:Schema(description = "추천 상태")
     val status: RecommendationStatus,
     @param:Schema(
-        description = "오늘자 추천 결과가 생성된 시각. DISABLED이거나 아직 생성된 적 없으면 null.",
+        description =
+            "오늘자 추천 결과가 생성된 시각. DISABLED/GENERATING/FAILED이거나 아직 생성된 적 없으면 " +
+                "null.",
         nullable = true,
     )
     val generatedAt: LocalDateTime?,
     @param:Schema(
         description =
-            "다음 추천 생성 예정 시각. R4 Daily Scheduler가 구현되기 전까지는 항상 null이다(예정 " +
-                "시각을 계산할 근거가 없어 임의 값을 채우지 않는다).",
+            "다음 추천 생성 예정 시각. Daily Scheduler 실행 시각이 확정되어 있지 않으면(운영 환경에서 " +
+                "명시적으로 설정하기 전까지) 항상 null이다(예정 시각을 계산할 근거가 없어 임의 값을 " +
+                "채우지 않는다).",
         nullable = true,
     )
     val nextGenerationAt: LocalDateTime?,
