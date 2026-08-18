@@ -31,7 +31,7 @@ import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 
 @WebMvcTest(controllers = [JobApplicationExportController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class JobApplicationExportControllerTest
     @Autowired

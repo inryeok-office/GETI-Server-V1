@@ -39,7 +39,7 @@ import java.time.LocalDateTime
 // InquiryService 책임이므로, Service Mock이 InquiryAccessDeniedException을 던지게 해 Controller가
 // 그 예외를 GlobalExceptionHandler를 통해 올바른 HTTP Status/ErrorCode로 변환하는지 검증한다.
 @WebMvcTest(controllers = [InquiryController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class InquiryControllerTest
     @Autowired

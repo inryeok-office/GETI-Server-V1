@@ -33,7 +33,7 @@ import java.time.LocalDateTime
 // 목록/검색(GET /api/v1/jobs)은 Issue #69에서 domain.search.controller.JobSearchController로
 // 옮겨졌다 — 이 Class는 상세 조회만 다룬다(JobController.kt의 Class 주석 참고).
 @WebMvcTest(controllers = [JobController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class JobControllerTest
     @Autowired

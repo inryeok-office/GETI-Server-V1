@@ -39,7 +39,7 @@ import java.time.LocalDateTime
 // SecurityConfig를 명시적으로 Import해 /api/v1/admin/programs가 실제로 TEACHER 또는 DEVELOPER
 // 역할을 요구하는지(401/403)까지 검증한다(CompanyAdminControllerTest/ProgramControllerTest와 동일한 방식).
 @WebMvcTest(controllers = [ProgramAdminController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class ProgramAdminControllerTest
     @Autowired

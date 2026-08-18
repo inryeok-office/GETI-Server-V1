@@ -43,7 +43,7 @@ import java.time.LocalDateTime
 // Size(100) 강제가 이 Slice에서도 실제로 동작한다 — @WebMvcTest는 일반 @Configuration을 포함하지
 // 않기 때문이다.
 @WebMvcTest(controllers = [NotificationController::class])
-@Import(SecurityConfig::class, WebPageableConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class, WebPageableConfig::class)
 @EnableWebSecurity
 class NotificationControllerTest
     @Autowired
