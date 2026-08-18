@@ -20,6 +20,10 @@ enum class RecommendationExclusionReason {
     /** 회원이 해당 공고를 관심 없음(`MemberJobPreference.exclusion`) 처리함. */
     NOT_INTERESTED,
 
+    /** 회원이 해당 공고를 이미 북마크함(`MemberJobPreference.bookmarked`). Notion 기능명세
+     * "맞춤 추천 페이지 -- 이미 북마크한 공고는 추천 목록에서 제외"(Issue #155). */
+    ALREADY_BOOKMARKED,
+
     /** AI Analysis의 `highSchoolGraduateFit`이 UNSUITABLE. */
     HIGH_SCHOOL_UNSUITABLE,
 }

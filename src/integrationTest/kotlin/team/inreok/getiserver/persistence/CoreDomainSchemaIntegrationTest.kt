@@ -69,7 +69,6 @@ import team.inreok.getiserver.domain.program.entity.type.ProgramType
 import team.inreok.getiserver.domain.program.repository.ProgramApplicationRepository
 import team.inreok.getiserver.domain.program.repository.ProgramRepository
 import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreference
-import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreferenceId
 import team.inreok.getiserver.domain.recommendation.entity.Recommendation
 import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
 import team.inreok.getiserver.domain.recommendation.entity.type.SuitabilityLevel
@@ -334,24 +333,33 @@ class CoreDomainSchemaIntegrationTest
         }
 
         @Test
-        fun `member_job_preferences는 member_id와 job_id 복합키를 사용하고 exclusion은 NULL을 허용한다`() {
+        fun `member_job_preferences는 Surrogate id를 PK로 쓰고 member_id와 job_id 조합은 UNIQUE이며 exclusion은 NULL을 허용한다`() {
             val member = persistMember("preference-subject")
             val company = persistCompany()
             val job = jobRepository.saveAndFlush(newJob(company.id!!))
 
             val preference =
                 memberJobPreferenceRepository.saveAndFlush(
-                    MemberJobPreference(MemberJobPreferenceId(member.id!!, job.id!!), bookmarked = true),
+                    MemberJobPreference(memberId = member.id!!, jobId = job.id!!, bookmarked = true),
                 )
 
+            assertThat(preference.id).isNotNull
             assertThat(preference.exclusion).isNull()
 
             preference.exclusion = ExclusionType.SIMILAR_JOBS
             memberJobPreferenceRepository.saveAndFlush(preference)
 
-            val found = memberJobPreferenceRepository.findById(MemberJobPreferenceId(member.id!!, job.id!!))
+            val found = memberJobPreferenceRepository.findById(preference.id!!)
             assertThat(found).isPresent
             assertThat(found.get().exclusion).isEqualTo(ExclusionType.SIMILAR_JOBS)
+
+            // (member_id, job_id) 조합의 유일성은 이제 PK가 아니라
+            // uk_member_job_preferences_member_job UNIQUE 제약이 보존한다(V24 Migration).
+            assertThatThrownBy {
+                memberJobPreferenceRepository.saveAndFlush(
+                    MemberJobPreference(memberId = member.id!!, jobId = job.id!!),
+                )
+            }.isInstanceOf(DataIntegrityViolationException::class.java)
         }
 
         @Test

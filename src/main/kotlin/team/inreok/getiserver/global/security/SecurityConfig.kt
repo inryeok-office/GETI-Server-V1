@@ -33,8 +33,10 @@ import tools.jackson.databind.ObjectMapper
  * File 도메인 Issue #85)도 인증만 요구하고, 파일별 소유권·접근 권한은 File 도메인이 판정한다.
  * `/api/v1/inquiries`(문의 등록·상세 조회)와 `/api/v1/me/inquiries`(내 문의 목록, 기존
  * `/api/v1/me/` 이하 규칙에 포함)도 인증만 요구한다 — 상세 조회의 본인 소유권 검증(개발자는 예외)은
- * Role로 알 수 없어 InquiryService가 별도로 수행한다. `/api/v1/recommendations`(맞춤 공고 추천
- * 조회·설정·관심 없음, Recommendation R3 Issue #152)는 학생 전용 기능이라 STUDENT Role까지 요구한다.
+ * Role로 알 수 없어 InquiryService가 별도로 수행한다. `/api/v1/me/job-recommendations`,
+ * `/api/v1/me/recommendation-exclusions**`, `/api/v1/recommendations/settings`(맞춤 공고 추천
+ * 조회·설정·관심 없음, Recommendation R3 Issue #152, Notion 계약 정합성 Issue #155)는 학생 전용
+ * 기능이라 STUDENT Role까지 요구한다.
  * 전공/기술스택 메타데이터 조회 등 다른
  * Domain은 아직 Spring Security와 연동되지 않아
  * ([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport] 참고)
@@ -94,6 +96,14 @@ class SecurityConfig(
                 // 가려지지 않는다.
                 authorize("/api/v1/me/forms", hasAnyRole("TEACHER", "DEVELOPER"))
                 authorize("/api/v1/me/forms/**", hasAnyRole("TEACHER", "DEVELOPER"))
+                // 맞춤 공고 추천 조회와 관심 없음(추천 제외)은 학생 전용 기능이라 STUDENT Role을
+                // 요구한다(Notion 계약 정합성, Issue #155). 아래 "/api/v1/me/**" 규칙(인증만
+                // 요구)에 가려지지 않도록 더 구체적인 경로를 먼저 선언한다 -- 위 Form 규칙과 같은
+                // 이유. 요청자 본인 범위로 한정하는 것은 Role로 알 수 없어 RecommendationService가
+                // memberId를 인증 Principal에서만 받아 처리한다.
+                authorize("/api/v1/me/job-recommendations", hasRole("STUDENT"))
+                authorize("/api/v1/me/recommendation-exclusions", hasRole("STUDENT"))
+                authorize("/api/v1/me/recommendation-exclusions/**", hasRole("STUDENT"))
                 // 내 문의 목록(요구사항 §13)도 학생·교사·개발자 모두 인증만 있으면 접근할 수
                 // 있어 값 자체는 아래 "/api/v1/me/**" 규칙과 같다. 그래도 명시적으로 선언한다 --
                 // 그 규칙에 암묵적으로 기대면 나중에 "/api/v1/me/**" 기본값이 바뀔 때(예: 다른
@@ -191,11 +201,12 @@ class SecurityConfig(
                 // 추가하지 않는다.
                 authorize("/api/v1/inquiries", authenticated)
                 authorize("/api/v1/inquiries/**", authenticated)
-                // 맞춤 공고 추천 조회·설정·관심 없음(Recommendation R3, Issue #152)은 학생 전용
-                // 기능이라 STUDENT Role을 요구한다. 요청자 본인 범위로 한정하는 것은 Role로 알 수
-                // 없어 RecommendationService가 memberId를 인증 Principal에서만 받아 처리한다.
-                authorize("/api/v1/recommendations", hasRole("STUDENT"))
-                authorize("/api/v1/recommendations/**", hasRole("STUDENT"))
+                // 추천 기능 ON/OFF 설정(Recommendation R3, Issue #152)도 학생 전용이라 STUDENT
+                // Role을 요구한다. 조회·관심 없음은 위 "/api/v1/me/job-recommendations",
+                // "/api/v1/me/recommendation-exclusions**"로 이미 다룬다(Notion 계약 정합성,
+                // Issue #155) -- "settings"는 대응하는 Notion Endpoint를 찾지 못해 기존 경로를
+                // 유지했다.
+                authorize("/api/v1/recommendations/settings", hasRole("STUDENT"))
                 authorize(anyRequest, permitAll)
             }
             exceptionHandling {
