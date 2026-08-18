@@ -131,6 +131,11 @@ class SecurityConfig(
                 // 담당자 본인만 수정할 수 있는지는 기준이 확정되지 않아 역할까지만 검증한다.
                 // 더 구체적인 admin 경로를 먼저 선언해야 아래 조회 규칙에 가려지지 않는다.
                 authorize("/api/v1/admin/jobs", hasAnyRole("TEACHER", "DEVELOPER"))
+                // 공고별 지원자 목록(Application Phase 9, Issue #137)도 같은 규칙이지만, CI(Linux)
+                // Unit Test Job에서만 재현되는 원인 불명의 문제(JobApplicationApplicantControllerTest
+                // 참고 -- 로컬에서는 재현되지 않음)를 막기 위해 아래 "/api/v1/admin/jobs/**"
+                // Wildcard에만 기대지 않고 이 경로를 명시적으로 먼저 선언한다.
+                authorize("/api/v1/admin/jobs/*/applicants", hasAnyRole("TEACHER", "DEVELOPER"))
                 authorize("/api/v1/admin/jobs/**", hasAnyRole("TEACHER", "DEVELOPER"))
                 // Collector 운영(수집원 관리·수동 실행·수집 실행 이력)은 개발자만 접근한다(Issue #62).
                 authorize("/api/v1/admin/job-sources", hasRole("DEVELOPER"))
