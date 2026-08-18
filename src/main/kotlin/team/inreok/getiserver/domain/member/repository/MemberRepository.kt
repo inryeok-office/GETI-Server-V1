@@ -84,4 +84,24 @@ interface MemberRepository : JpaRepository<Member, Long> {
     fun findIdsByNameContaining(
         @Param("name") name: String,
     ): List<Long>
+
+    // Recommendation Daily Scheduler(R4, Issue #160, RecommendationAudienceQueryPortImpl)가 이미
+    // 추천을 활성화한 memberId 집합 중 지금도 실제 대상일 수 있는 재학생만 추려낼 때 쓴다.
+    // :status/:academicStatus/:role은 `search`와 같은 관례로 호출 측(Service)이 항상
+    // ACTIVE/ENROLLED/STUDENT로 고정해 전달한다.
+    @Query(
+        """
+        SELECT m.id FROM Member m
+        WHERE m.id IN :memberIds
+          AND m.status = :status
+          AND m.academicStatus = :academicStatus
+          AND EXISTS (SELECT 1 FROM MemberRole mr WHERE mr.id.memberId = m.id AND mr.id.role = :role)
+        """,
+    )
+    fun findIdsByIdInAndStatusAndAcademicStatusAndRole(
+        @Param("memberIds") memberIds: Collection<Long>,
+        @Param("status") status: MemberStatus,
+        @Param("academicStatus") academicStatus: AcademicStatus,
+        @Param("role") role: RoleType,
+    ): List<Long>
 }

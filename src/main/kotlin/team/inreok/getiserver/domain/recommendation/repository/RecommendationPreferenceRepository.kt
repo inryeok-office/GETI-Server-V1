@@ -9,6 +9,12 @@ import team.inreok.getiserver.domain.recommendation.entity.RecommendationPrefere
 interface RecommendationPreferenceRepository : JpaRepository<RecommendationPreference, Long> {
     fun findByMemberId(memberId: Long): RecommendationPreference?
 
+    /** Daily Scheduler(R4, Issue #160)가 추천 활성화된 회원부터 좁혀 오기 위한 조회다. 이 결과를
+     * `RecommendationAudienceQueryPort.filterEligibleStudentIds`에 넘겨 실제 대상 재학생만 다시
+     * 추린다. */
+    @Query("SELECT rp.memberId FROM RecommendationPreference rp WHERE rp.enabled = true")
+    fun findMemberIdsByEnabledTrue(): List<Long>
+
     /**
      * ON/OFF 설정을 원자적으로 Upsert한다(코드리뷰 반영, PR #153).
      *

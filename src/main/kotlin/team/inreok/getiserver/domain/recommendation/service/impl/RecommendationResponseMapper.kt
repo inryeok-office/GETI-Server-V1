@@ -1,14 +1,20 @@
 package team.inreok.getiserver.domain.recommendation.service.impl
 
 import org.slf4j.Logger
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
+import org.springframework.scheduling.support.CronExpression
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateSnapshot
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobResponse
+import team.inreok.getiserver.domain.recommendation.dto.RecommendationListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationReasonResponse
+import team.inreok.getiserver.domain.recommendation.dto.RecommendationStatus
 import team.inreok.getiserver.domain.recommendation.entity.Recommendation
 import team.inreok.getiserver.domain.recommendation.service.RecommendationReason
 import tools.jackson.databind.ObjectMapper
+import java.time.LocalDateTime
 
 /**
  * [RecommendationServiceImpl]의 응답 조립 Helper다. 상태를 갖지 않는 순수 변환 로직이라
@@ -62,3 +68,49 @@ internal fun parseRecommendationReasons(
         emptyList()
     }
 }
+
+/** 추천 기능이 꺼진 회원에게 돌려주는 고정 응답이다(Recommendation R3, Issue #152). */
+internal fun disabledRecommendationListResponse(pageable: Pageable): RecommendationListResponse =
+    RecommendationListResponse.of(
+        enabled = false,
+        status = RecommendationStatus.DISABLED,
+        generatedAt = null,
+        nextGenerationAt = null,
+        page = Page.empty(pageable),
+    )
+
+/**
+ * GENERATING/FAILED 상태인 회원에게 돌려주는 응답이다(Recommendation R4, Issue #160). 두 상태 모두
+ * 오늘자 Recommendation Row가 없거나(계산 시작 전) 신뢰할 수 없어(계산 실패, Transaction 자체가
+ * Rollback됨) `content`/`generatedAt`을 항상 비운다.
+ */
+internal fun inProgressRecommendationListResponse(
+    pageable: Pageable,
+    status: RecommendationStatus,
+    nextGenerationAt: LocalDateTime?,
+): RecommendationListResponse =
+    RecommendationListResponse.of(
+        enabled = true,
+        status = status,
+        generatedAt = null,
+        nextGenerationAt = nextGenerationAt,
+        page = Page.empty(pageable),
+    )
+
+/**
+ * Daily Scheduler의 [cron] 설정 기준으로 다음 생성 예정 시각을 계산한다(Recommendation R4, Issue
+ * #160). [cron]이 [SCHEDULER_DISABLED_CRON](Spring `@Scheduled`가 지원하는 비활성 Sentinel)이면
+ * Scheduler 자체가 등록되지 않으므로 null을 반환한다(임의 값을 채우지 않는다, DTO 문서 참고).
+ */
+internal fun nextGenerationAt(cron: String): LocalDateTime? {
+    if (cron == SCHEDULER_DISABLED_CRON) return null
+    return CronExpression.parse(cron).next(LocalDateTime.now())
+}
+
+/**
+ * Spring `@Scheduled`의 cron 비활성 Sentinel이다(Reference Manual "Cron Expressions" 절 참고).
+ * `RecommendationGenerationScheduler`/`application.yaml`의 기본값과 항상 같은 값이어야 하는 계약이라
+ * 이 값이 바뀌면 세 곳(이 상수, Scheduler의 `@Scheduled` 기본값, application.yaml 기본값)을 함께
+ * 바꿔야 한다.
+ */
+internal const val SCHEDULER_DISABLED_CRON = "-"
