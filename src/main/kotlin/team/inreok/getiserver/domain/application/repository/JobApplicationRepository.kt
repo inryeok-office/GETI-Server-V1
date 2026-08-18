@@ -76,4 +76,24 @@ interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
         @Param("status") status: JobApplicationStatus?,
         pageable: Pageable,
     ): Page<JobApplication>
+
+    // 공고별 공개 신청자 목록이다(Issue #137). "SUBMITTED 이후 전체"(DRAFT/WITHDRAWN 제외)만
+    // 대상으로 한다(정책 확정, Issue #137 코멘트) -- 아직 제출하지 않은 임시저장과 철회한 지원은
+    // "신청자"가 아니다. search()와 달리 jobId는 필수이고 status 필터는 받지 않는다(Phase 9는
+    // 상태별 필터링 요구사항이 없다).
+    @Query(
+        """
+        SELECT a FROM JobApplication a
+        WHERE a.jobId = :jobId
+          AND a.status NOT IN (
+            team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus.DRAFT,
+            team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus.WITHDRAWN
+          )
+        ORDER BY a.id DESC
+        """,
+    )
+    fun findApplicantsOf(
+        @Param("jobId") jobId: Long,
+        pageable: Pageable,
+    ): Page<JobApplication>
 }
