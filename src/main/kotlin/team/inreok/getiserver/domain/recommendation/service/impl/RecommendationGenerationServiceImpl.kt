@@ -54,7 +54,14 @@ class RecommendationGenerationServiceImpl(
         val scored =
             candidates.mapNotNull { job ->
                 val aiSnapshot = aiSnapshots[job.jobId]
-                val hasActiveApplication = eligibilityByJobId[job.jobId]?.eligibilityReason == ALREADY_APPLIED_REASON
+                // eligibilityReason 문자열("ALREADY_APPLIED")과 비교하지 않는다 -- Application의
+                // computeEligibilityReason은 hasActiveApplication -> ALREADY_APPLIED보다
+                // !hasActiveLinkedForm -> JOB_NOT_PUBLISHED를 먼저 평가해, 이미 활성 지원서가
+                // 있어도 연결 Form이 비활성화되면 reason이 "JOB_NOT_PUBLISHED"로 나올 수 있다
+                // (코드리뷰 반영, PR #166). applicationId는 그 분기 순서와 무관하게 활성 지원서
+                // 유무만으로 채워지므로(JobApplicationEligibilityAccessorImpl 참고) 더 안전한
+                // 신호다.
+                val hasActiveApplication = eligibilityByJobId[job.jobId]?.applicationId != null
                 val exclusionReason =
                     computeExclusionReason(
                         job,
@@ -97,9 +104,3 @@ class RecommendationGenerationServiceImpl(
         recommendationRepository.saveAll(entities)
     }
 }
-
-// `job.access.JobApplicationEligibilityAccessSnapshot.eligibilityReason`은
-// `application.entity.type.JobApplicationEligibilityReason`의 Enum 이름 문자열이다(그 값 자체를
-// `recommendation`에 노출하지 않기 위한 의도적 설계, Accessor Class 주석 참고). `recommendation`도
-// `application` Enum을 직접 참조하지 않으므로 이름 문자열로만 비교한다.
-private const val ALREADY_APPLIED_REASON = "ALREADY_APPLIED"

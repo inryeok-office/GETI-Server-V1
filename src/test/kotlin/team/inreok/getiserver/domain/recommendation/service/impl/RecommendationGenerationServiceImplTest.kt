@@ -96,15 +96,17 @@ class RecommendationGenerationServiceImplTest {
             difficulty = "NORMAL",
         )
 
-    private fun eligibilityOf(eligibilityReason: String = "AVAILABLE") =
-        JobApplicationEligibilityAccessSnapshot(
-            canApply = eligibilityReason == "AVAILABLE",
-            eligibilityReason = eligibilityReason,
-            eligibilityMessage = "message",
-            applicationId = null,
-            applicationStatus = null,
-            availableActions = emptyList(),
-        )
+    private fun eligibilityOf(
+        eligibilityReason: String = "AVAILABLE",
+        applicationId: Long? = null,
+    ) = JobApplicationEligibilityAccessSnapshot(
+        canApply = eligibilityReason == "AVAILABLE",
+        eligibilityReason = eligibilityReason,
+        eligibilityMessage = "message",
+        applicationId = applicationId,
+        applicationStatus = if (applicationId != null) "SUBMITTED" else null,
+        availableActions = emptyList(),
+    )
 
     @Test
     fun `Member Profile을 찾을 수 없으면 아무것도 하지 않고 빈 목록을 반환한다`() {
@@ -210,13 +212,38 @@ class RecommendationGenerationServiceImplTest {
             mapOf(1L to aiSnapshotOf()),
         )
         given(jobApplicationEligibilityAccessor.findAllByJobIds(jobs.map { it.jobId }.toSet(), 1L)).willReturn(
-            mapOf(1L to eligibilityOf(eligibilityReason = "ALREADY_APPLIED")),
+            mapOf(1L to eligibilityOf(eligibilityReason = "ALREADY_APPLIED", applicationId = 10L)),
         )
 
         val result = service.generateForMember(1L, limit = 10)
 
         assertThat(result).isEmpty()
         verify(recommendationRepository).deleteAllByMemberIdAndRecommendationDate(1L, LocalDate.now())
+        verify(recommendationRepository, never()).saveAll(anyList())
+    }
+
+    @Test
+    fun `연결 Form이 비활성화돼 eligibilityReason이 JOB_NOT_PUBLISHED로 나와도 activeApplication이 있으면 제외한다`() {
+        // JobApplicationEligibility.computeEligibilityReason은 hasActiveApplication ->
+        // ALREADY_APPLIED보다 !hasActiveLinkedForm -> JOB_NOT_PUBLISHED를 먼저 평가한다. 이미
+        // 활성 지원서가 있어도 그 Job에 연결된 Form이 비활성화되면 eligibilityReason은
+        // "ALREADY_APPLIED"가 아니라 "JOB_NOT_PUBLISHED"로 돌아온다 -- 이때도 applicationId는
+        // activeApplication?.id로 그대로 채워지므로 hasActiveApplication은 여전히 true여야
+        // 한다(코드리뷰 반영, PR #166).
+        val jobs = listOf(jobOf(1L))
+        given(memberProfileQueryPort.findById(1L)).willReturn(memberOf())
+        given(jobCandidateQueryPort.findAllPublished()).willReturn(jobs)
+        given(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(1L)).willReturn(emptyList())
+        given(aiAnalysisSearchQueryPort.findCompletedByJobIds(jobs.map { it.jobId })).willReturn(
+            mapOf(1L to aiSnapshotOf()),
+        )
+        given(jobApplicationEligibilityAccessor.findAllByJobIds(jobs.map { it.jobId }.toSet(), 1L)).willReturn(
+            mapOf(1L to eligibilityOf(eligibilityReason = "JOB_NOT_PUBLISHED", applicationId = 10L)),
+        )
+
+        val result = service.generateForMember(1L, limit = 10)
+
+        assertThat(result).isEmpty()
         verify(recommendationRepository, never()).saveAll(anyList())
     }
 

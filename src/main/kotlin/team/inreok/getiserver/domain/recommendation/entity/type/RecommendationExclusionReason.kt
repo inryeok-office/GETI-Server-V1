@@ -26,9 +26,12 @@ enum class RecommendationExclusionReason {
 
     /** 회원이 해당 공고에 이미 활성 지원서를 가짐(R5, Issue #165).
      * `job.access.JobApplicationEligibilityAccessor`가 계산한
-     * `eligibilityReason == "ALREADY_APPLIED"`를 그대로 옮긴 값이다 -- Application의
-     * `JobApplicationEligibilityReason` Enum을 직접 참조하지 않기 위해 이름은 같지만 별도
-     * 독립적인 값으로 둔다(`RecommendationExclusionReason`은 Application 어떤 Package도 모른다). */
+     * `JobApplicationEligibilityAccessSnapshot.applicationId != null` 여부를 옮긴 값이다 --
+     * Application의 `JobApplicationEligibilityReason` Enum(`ALREADY_APPLIED`)을 직접 참조하지
+     * 않기 위해 이름은 같지만 별도 독립적인 값으로 둔다(`RecommendationExclusionReason`은
+     * Application 어떤 Package도 모른다). `eligibilityReason` 문자열이 아니라 `applicationId`
+     * 기준인 이유는 `RecommendationCandidateFilter.computeExclusionReason`의 `hasActiveApplication`
+     * KDoc 참고(코드리뷰 반영, PR #166). */
     ALREADY_APPLIED,
 
     /** AI Analysis의 `highSchoolGraduateFit`이 UNSUITABLE. */
