@@ -76,6 +76,7 @@ Profile을 지정하지 않으면 공통 설정만 적용된다(현재는 `local
 | `FILE_STORAGE_REGION` | `app.file.storage.region` | **prod 필수** | `prod` | 아니오 | `local`은 `us-east-1` 고정, `prod`는 없음(미지정 시 기동 실패) |
 | `OPENAI_API_KEY` | `app.ai.openai.api-key` | 선택 | 전체 | 예 | 없음(비어 있으면 `isConfigured()=false`, 분석 요청은 즉시 FAILED) |
 | `OPENAI_MODEL` | `app.ai.openai.model` | 선택 | 전체 | 아니오 | `gpt-4o-mini`(실제 운영 값이 아닌 최소 Fallback) |
+| `APP_WEB_OAUTH_CALLBACK_REDIRECT_URL` | `app.web.oauth.callback-redirect-url` | 선택 | 전체 | 아니오(공개 Frontend URL) | 없음(비어 있으면 `clientType=WEB` 요청만 `OAUTH_WEB_REDIRECT_NOT_CONFIGURED`로 실패) |
 
 `APP_VERSION`/`APP_GIT_SHA`/`APP_BUILD_TIME`/`APP_ENVIRONMENT`는 `/actuator/info`의 `deployment` Field(`DeploymentInfoContributor`)와 CD의 배포 SHA 검증에 쓰인다. CD가 Docker Build/Runtime 시점에 실제 값을 주입하며([`cd.md`](./cd.md) 참고), 로컬 개발자가 직접 설정할 필요가 없어(안전한 기본값으로 기동됨) `.env.example`에는 포함하지 않았다.
 
@@ -90,6 +91,8 @@ Profile을 지정하지 않으면 공통 설정만 적용된다(현재는 `local
 `FILE_STORAGE_*`는 File 도메인(Issue #85)에서 추가했다. 운영은 AWS S3, local은 `compose.yaml`의 MinIO를 쓰지만 Adapter 구현은 하나이며 Endpoint와 Path Style 설정으로만 갈린다. **운영에서는 Access Key를 환경 변수로 주입하지 않는다** — `app.file.storage.access-key`/`secret-key`를 선언하지 않으면 AWS SDK가 `DefaultCredentialsProvider`로 EC2 Instance Profile(IAM Role)에서 자격증명을 받아오기 때문이다. local은 기존 `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`를 그대로 재사용한다(`application-local.yaml`). 자세한 구성과 인프라 선행 조건은 [`persistence.md`](./persistence.md)의 "Object Storage" 절과 [`file-domain-plan.md`](../file/file-domain-plan.md) §14를 따른다.
 
 `OPENAI_*`는 AI Analysis Phase 1(Issue #132)에서 추가했다. `OPENAI_API_KEY`가 비어 있어도 애플리케이션 기동과 공고 게시 API는 정상 동작하며, `OpenAiAnalysisProvider.isConfigured()`가 false를 반환해 실제 분석 요청만 즉시 FAILED로 기록된다(Fail-Fast 아님, Collector/Discord Bot과 동일한 방식). `OPENAI_MODEL`의 `gpt-4o-mini` 기본값은 값이 없을 때도 기동이 깨지지 않게 하는 최소 Fallback일 뿐 실제 운영 값을 의미하지 않는다 — Business Code에는 Model 이름을 Hard Coding하지 않았다.
+
+`APP_WEB_OAUTH_CALLBACK_REDIRECT_URL`은 OAuth Web Callback 결함 수정(Issue #162)에서 추가했다. `GET /api/v1/auth/{provider}/authorize?clientType=WEB`으로 시작한 로그인만 이 값을 쓴다 — `/callback`이 Token/회원 정보 JSON 대신 이 URL로 302 Redirect하고(성공 시 그대로, 실패 시 `?error={ErrorCode}`만 덧붙여), Frontend는 이미 설정된 Refresh Token Cookie로 `POST /api/v1/auth/token/refresh`를 호출해 Access Token을 얻는다. `clientType`을 지정하지 않는 기존 호출자(App 등)는 이 값과 무관하게 기존 JSON 응답을 그대로 받는다(Breaking Change 없음). 값 자체는 공개 Frontend URL이라 Secret은 아니지만, 실제 운영 URL이 아직 확정되지 않아 예시 값도 채우지 않았다(DECISION_REQUIRED).
 
 PostgreSQL/Redis 연결 환경 변수(`DATABASE_URL` 등)는 이 표에 중복하지 않고 [`persistence.md`](./persistence.md)에서 관리한다.
 

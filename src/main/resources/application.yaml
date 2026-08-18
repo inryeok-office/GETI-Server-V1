@@ -103,6 +103,15 @@ app:
   oauth:
     google:
       scope: openid,email,profile
+  web:
+    oauth:
+      # Web Client의 OAuth 로그인 완료 Redirect 대상이다(OAuth Web Callback 결함 수정, Issue
+      # #162). GETI Notion/Figma 어디에도 확정된 Frontend URL이 없어(DECISION_REQUIRED, PR 본문
+      # 참고) 근거 없는 값을 채우지 않는다. 비어 있으면(기본값) `/authorize`에 clientType=WEB을
+      # 지정해도 OAuthWebRedirectNotConfiguredException(500)으로 실패한다 -- Web Redirect
+      # 기능이 아직 켜지지 않은 상태라는 뜻이다(clientType 미지정 App 등 기존 호출자에는 영향이
+      # 없다). 실제 Frontend URL이 확정되면 환경 변수로 채운다.
+      callback-redirect-url: ${APP_WEB_OAUTH_CALLBACK_REDIRECT_URL:}
   ai:
     # OpenAI Responses API 연동 설정이다(AI Analysis Phase 1, Issue #132). api-key가 비어 있으면
     # OpenAiAnalysisProvider.isConfigured()가 false를 반환해 분석 요청이 즉시 FAILED로 기록되고,
@@ -118,6 +127,20 @@ app:
       # 문서 8절, Phase 7). DiscordDeliveryWorker(sweep-interval-ms)와 동일한 60초 기본값 --
       # 최소 자동 재시도 백오프(1분)보다 촘촘하게 돌 이유가 없다.
       interval-ms: 60000
+  recommendation:
+    generation-scheduler:
+      # 일일 추천 생성 실행 시각이다(Recommendation R4, Issue #160). GETI Notion/Figma/기존
+      # 문서 어디에도 확정 값이 없어(DECISION_REQUIRED, PR 본문 참고) 근거 없는 시각을 넣지
+      # 않는다. 기본값 "-"는 Spring @Scheduled의 비활성 Sentinel(CronExpression.DISABLED)이라
+      # 이 값을 그대로 두면 RecommendationGenerationScheduler.generateDailyRecommendations()
+      # 자체가 등록되지 않아 자동 실행되지 않는다 -- 운영자가 실제 값을 확정해 환경 변수로
+      # 명시적으로 설정해야만 켜진다(CollectorScheduler의 external-enabled 기본 false와 같은
+      # 안전 기본값 원칙).
+      cron: ${RECOMMENDATION_GENERATION_SCHEDULER_CRON:-}
+      # 회원 1명당 저장할 일일 추천 개수(Top N)다. 이 값도 확정 근거가 없다(DECISION_REQUIRED,
+      # Issue #152 PR 본문에서도 R3 범위 밖으로 명시됐다). 조회 API 기본 Page 크기(size=20)와
+      # 같은 잠정값을 둔다(docs/file/file-domain-plan.md의 "잠정값" 문서화 관례와 동일).
+      top-n: ${RECOMMENDATION_GENERATION_TOP_N:20}
   collector:
     scheduler:
       # 일일 수집 실행 시각(초 분 시 일 월 요일). 매일 03:00에 실행한다(Issue #62).

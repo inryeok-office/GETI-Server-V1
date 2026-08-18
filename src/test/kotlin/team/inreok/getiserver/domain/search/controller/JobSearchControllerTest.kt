@@ -35,7 +35,7 @@ import java.time.LocalDateTime
 // SecurityConfig를 명시적으로 Import해 /api/v1/jobs가 실제로 인증을 요구하는지(401)까지 검증한다
 // (JobControllerTest와 동일한 방식, Issue #69로 목록/검색만 이 Controller로 옮겨졌다).
 @WebMvcTest(controllers = [JobSearchController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class JobSearchControllerTest
     @Autowired

@@ -15,6 +15,10 @@ enum class AuthErrorCode(
         HttpStatus.BAD_REQUEST,
         "Refresh Token이 필요합니다. Cookie, X-Refresh-Token Header 또는 Body로 전달하세요.",
     ),
+    OAUTH_WEB_REDIRECT_NOT_CONFIGURED(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        "Web Client Redirect URL이 설정되지 않았습니다.",
+    ),
     ;
 
     override val code: String get() = name

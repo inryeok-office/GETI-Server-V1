@@ -208,7 +208,11 @@ Contributor 이름(`livenessState`/`readinessState`/`db`/`redis`)은 실제 `Hea
 
 ## Security
 
-`/actuator/health`, `/actuator/health/**`, `/actuator/info`는 `SecurityConfig`에서 인증 없이 permitAll로 명시한다(CD Readiness Check, Docker Health Check가 인증 없이 호출해야 하므로). `env`/`beans`/`mappings` 등 노출되지 않은 다른 Actuator Endpoint는 `management.endpoints.web.exposure.include`에도 없어 애초에 404다.
+### 임시 Security Bypass
+
+현재 Frontend/API 연동 단계에서는 Spring Security HTTP Authorization을 전역 `permitAll`로 적용한다. 기존 Role/Authentication Rule은 `SecurityConfig.kt`의 private `applyNormalSecurityRules()`에 보존되어 있으며, 연동 완료 후 전역 `authorize(anyRequest, permitAll)`을 제거하고 해당 Method를 다시 호출해 복구한다.
+
+이 설정에서는 CD 배포 환경의 모든 노출된 HTTP Endpoint가 인증 없이 Security Layer를 통과한다. Actuator exposure 설정 자체는 변경하지 않으므로 실제 노출 Endpoint는 기존 설정을 따른다. 이 상태를 운영 서비스에 사용하지 않는다.
 
 ## Docker 연계
 

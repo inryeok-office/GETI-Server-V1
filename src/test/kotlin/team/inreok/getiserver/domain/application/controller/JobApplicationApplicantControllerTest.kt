@@ -14,7 +14,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication
-import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -26,19 +25,14 @@ import team.inreok.getiserver.domain.application.exception.ApplicationReviewForb
 import team.inreok.getiserver.domain.application.exception.JobNotFoundException
 import team.inreok.getiserver.domain.application.service.JobApplicationApplicantService
 import team.inreok.getiserver.global.security.JwtTokenProvider
-import team.inreok.getiserver.global.security.SecurityConfig
+import team.inreok.getiserver.global.security.NormalSecurityTestConfig
 
-// CI(Linux)에서만 재현되고 로컬(Windows, 단독/전체 Suite 5회 이상)에서는 재현되지 않는
-// "인증 없이 호출하면 401이다"/"학생 Role로 호출하면 403이다" 실패를 조사했다 -- 두 Case 모두
-// AuthorizationFilter는 실제로 실행됐지만(Servlet Filter Chain Stack Trace로 확인) 요청을
-// Controller까지 통과시켰다. 즉 이 Class의 SecurityFilterChain이 다른 WebMvcTest Class와 공유된
-// ApplicationContext Cache에서 의도와 다르게 재사용됐을 가능성이 가장 높다(Spring TestContext
-// Cache 상호작용, GETI-Server가 사용하는 Spring Boot 4.1 Preview 계열 Test Slice에서 관찰됨).
-// 이 Class가 시작하기 전에 Cache된 Context를 강제로 폐기하고 새로 만들어, 다른 Test와 Context를
-// 공유하지 않도록 원인을 격리한다.
-@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_CLASS)
+// SecurityConfig::class를 직접 Import하지 않는다 -- Issue #162(develop 병합)가 securityFilterChain
+// 자체를 개발 단계 임시 전역 permitAll로 바꿨고, 보존된 실제 Role 규칙은 NormalSecurityTestConfig가
+// 제공하는 별도 Bean(SecurityConfig.normalSecurityFilterChainForTest)으로만 검증할 수 있다(다른
+// 모든 Controller Test와 동일한 관례, JobApplicationAdminControllerTest 참고).
 @WebMvcTest(controllers = [JobApplicationApplicantController::class])
-@Import(SecurityConfig::class)
+@Import(NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class JobApplicationApplicantControllerTest
     @Autowired

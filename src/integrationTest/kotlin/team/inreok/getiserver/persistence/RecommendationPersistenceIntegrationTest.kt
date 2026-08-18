@@ -30,10 +30,13 @@ import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreference
 import team.inreok.getiserver.domain.recommendation.entity.Recommendation
+import team.inreok.getiserver.domain.recommendation.entity.RecommendationGenerationState
 import team.inreok.getiserver.domain.recommendation.entity.RecommendationPreference
 import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
+import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationGenerationStatus
 import team.inreok.getiserver.domain.recommendation.entity.type.SuitabilityLevel
 import team.inreok.getiserver.domain.recommendation.repository.MemberJobPreferenceRepository
+import team.inreok.getiserver.domain.recommendation.repository.RecommendationGenerationStateRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationPreferenceRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationRepository
 import java.math.BigDecimal
@@ -46,9 +49,10 @@ import java.time.LocalDateTime
  *
  * R2(Issue #148, V22 Migration)의 `recommendations`/`member_job_preferences` 검증에 R3(Issue
  * #152, V23 Migration)의 `recommendation_preferences`, Notion 계약 정합성(Issue #155, V24
- * Migration)의 `member_job_preferences` Surrogate PK/`exclusion_created_at` 검증을 이어서
- * 추가했다 -- 세 Phase 모두 같은 Member/Job/Company Fixture를 공유해 별도 Testcontainers
- * Container를 새로 띄우지 않는다.
+ * Migration)의 `member_job_preferences` Surrogate PK/`exclusion_created_at` 검증, R4(Issue #160,
+ * V25 Migration)의 `recommendation_generation_states` Upsert 검증을 이어서 추가했다 -- 네 Phase
+ * 모두 같은 Member/Job/Company Fixture를 공유해 별도 Testcontainers Container를 새로 띄우지
+ * 않는다.
  */
 @Testcontainers
 @DataJpaTest
@@ -59,6 +63,7 @@ class RecommendationPersistenceIntegrationTest
     constructor(
         private val recommendationRepository: RecommendationRepository,
         private val recommendationPreferenceRepository: RecommendationPreferenceRepository,
+        private val recommendationGenerationStateRepository: RecommendationGenerationStateRepository,
         private val memberJobPreferenceRepository: MemberJobPreferenceRepository,
         private val memberRepository: MemberRepository,
         private val jobRepository: JobRepository,
@@ -73,6 +78,7 @@ class RecommendationPersistenceIntegrationTest
         fun setUp() {
             recommendationRepository.deleteAll()
             recommendationPreferenceRepository.deleteAll()
+            recommendationGenerationStateRepository.deleteAll()
             memberJobPreferenceRepository.deleteAll()
             jobRepository.deleteAll()
             memberRepository.deleteAll()
@@ -577,6 +583,68 @@ class RecommendationPersistenceIntegrationTest
             assertThatThrownBy {
                 memberJobPreferenceRepository.saveAndFlush(MemberJobPreference(memberId = memberId, jobId = jobId))
             }.isInstanceOf(DataIntegrityViolationException::class.java)
+        }
+
+        // ---------- R4: recommendation_generation_states (Issue #160, V25 Migration) ----------
+
+        @Test
+        fun `같은 회원의 Generation State Row를 두 번 만들 수 없다(memberId Unique 제약)`() {
+            recommendationGenerationStateRepository.saveAndFlush(
+                RecommendationGenerationState(memberId = memberId, status = RecommendationGenerationStatus.READY),
+            )
+
+            assertThatThrownBy {
+                recommendationGenerationStateRepository.saveAndFlush(
+                    RecommendationGenerationState(memberId = memberId, status = RecommendationGenerationStatus.EMPTY),
+                )
+            }.isInstanceOf(DataIntegrityViolationException::class.java)
+        }
+
+        @Test
+        fun `markGenerating은 Row가 없으면 새로 만들고 있으면 GENERATING으로 갱신한다`() {
+            recommendationGenerationStateRepository.markGenerating(memberId)
+            val created = requireNotNull(recommendationGenerationStateRepository.findByMemberId(memberId))
+            assertThat(created.status).isEqualTo(RecommendationGenerationStatus.GENERATING)
+
+            recommendationGenerationStateRepository.markCompleted(memberId, "READY", LocalDateTime.now())
+            recommendationGenerationStateRepository.markGenerating(memberId)
+
+            val updated = requireNotNull(recommendationGenerationStateRepository.findByMemberId(memberId))
+            assertThat(updated.status).isEqualTo(RecommendationGenerationStatus.GENERATING)
+            assertThat(recommendationGenerationStateRepository.count()).isEqualTo(1)
+        }
+
+        @Test
+        fun `markCompleted는 status와 generatedAt을 갱신하고 이전 실패 시각은 건드리지 않는다`() {
+            val failedAt = LocalDateTime.now().minusDays(1)
+            recommendationGenerationStateRepository.markFailed(memberId, failedAt)
+
+            val generatedAt = LocalDateTime.now()
+            recommendationGenerationStateRepository.markCompleted(memberId, "READY", generatedAt)
+
+            val found = requireNotNull(recommendationGenerationStateRepository.findByMemberId(memberId))
+            assertThat(found.status).isEqualTo(RecommendationGenerationStatus.READY)
+            assertThat(found.generatedAt).isEqualToIgnoringNanos(generatedAt)
+            assertThat(found.lastFailureAt).isEqualToIgnoringNanos(failedAt)
+        }
+
+        @Test
+        fun `markFailed는 status를 FAILED로 갱신하고 이전 성공 시각은 건드리지 않는다`() {
+            val generatedAt = LocalDateTime.now().minusDays(1)
+            recommendationGenerationStateRepository.markCompleted(memberId, "READY", generatedAt)
+
+            val failedAt = LocalDateTime.now()
+            recommendationGenerationStateRepository.markFailed(memberId, failedAt)
+
+            val found = requireNotNull(recommendationGenerationStateRepository.findByMemberId(memberId))
+            assertThat(found.status).isEqualTo(RecommendationGenerationStatus.FAILED)
+            assertThat(found.lastFailureAt).isEqualToIgnoringNanos(failedAt)
+            assertThat(found.generatedAt).isEqualToIgnoringNanos(generatedAt)
+        }
+
+        @Test
+        fun `설정한 적 없는 회원은 Generation State 조회 결과가 없다`() {
+            assertThat(recommendationGenerationStateRepository.findByMemberId(memberId)).isNull()
         }
 
         companion object {

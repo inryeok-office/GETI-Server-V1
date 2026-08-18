@@ -41,7 +41,7 @@ import java.time.LocalDateTime
 // SecurityConfig를 명시적으로 Import해 /api/v1/admin/companies가 실제로 DEVELOPER 권한을
 // 요구하는지(401/403)까지 검증한다.
 @WebMvcTest(controllers = [CompanyAdminController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class CompanyAdminControllerTest
     @Autowired

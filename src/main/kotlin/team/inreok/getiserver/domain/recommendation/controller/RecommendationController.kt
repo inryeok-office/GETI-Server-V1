@@ -64,12 +64,14 @@ class RecommendationController(
 
             - DISABLED: 추천 기능이 꺼져 있다(설정한 적 없는 회원 포함). `content`는 항상 빈 배열이고
               `generatedAt`은 항상 null이다 -- 기존 추천 결과가 있어도 노출하지 않는다.
-            - EMPTY: 추천 기능은 켜져 있지만 오늘자 추천 결과가 없다.
+            - GENERATING: Daily Scheduler가 이 회원의 추천을 계산하는 중이다. `content`는 빈 배열이다.
+            - FAILED: Daily Scheduler의 마지막 계산이 실패했다. `content`는 빈 배열이다.
+            - EMPTY: 추천 기능은 켜져 있고 마지막 계산은 성공했지만 오늘자 추천 결과가 없다.
             - READY: 오늘자 추천 결과가 1건 이상 있다. `content`는 rank 오름차순으로 정렬된다.
 
-            `suitabilityLevel`로 필터링할 수 있다. `nextGenerationAt`은 R4 Daily Scheduler가 구현되기
-            전까지 항상 null이다. 목록 기본값은 page=0, size=20이며 최대 size=100이다. 결과가
-            없어도(DISABLED/EMPTY) 오류가 아니라 200이다.
+            `suitabilityLevel`로 필터링할 수 있다. `nextGenerationAt`은 Daily Scheduler 실행 시각이
+            운영 환경에 명시적으로 설정되기 전까지 항상 null이다. 목록 기본값은 page=0, size=20이며
+            최대 size=100이다. 결과가 없어도(DISABLED/EMPTY/GENERATING/FAILED) 오류가 아니라 200이다.
         """,
     )
     @ApiResponses(

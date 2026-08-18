@@ -37,7 +37,7 @@ import java.time.LocalDateTime
 // SecurityConfig를 명시적으로 Import해 POST /api/v1/programs/{programId}/application-actions가
 // 실제로 STUDENT 권한을 요구하는지(401/403)까지 검증한다(CompanyAdminControllerTest와 동일한 방식).
 @WebMvcTest(controllers = [ProgramController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class ProgramControllerTest
     @Autowired

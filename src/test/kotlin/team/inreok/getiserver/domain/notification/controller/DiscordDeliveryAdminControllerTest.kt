@@ -29,7 +29,7 @@ import java.time.LocalDateTime
 // SecurityConfig를 명시적으로 Import해 각 경로가 실제로 요구하는 Role까지 검증한다
 // (ProgramAdminControllerTest와 동일한 방식).
 @WebMvcTest(controllers = [DiscordDeliveryAdminController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class DiscordDeliveryAdminControllerTest
     @Autowired
