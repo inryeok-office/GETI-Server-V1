@@ -147,6 +147,24 @@ class JobServiceTest {
     }
 
     @Test
+    fun `등록 요청의 근무지역과 고용형태를 그대로 저장하고 응답한다`() {
+        givenActiveCompany()
+        givenSaveAssignsId()
+
+        val response =
+            service.create(
+                draftRequest(location = "서울특별시 중구", employmentType = "인턴"),
+                createdByMemberId = REQUESTER_ID,
+            )
+
+        verify(jobRepository).saveAndFlush(jobCaptor.capture() ?: newJob())
+        assertThat(jobCaptor.value.location).isEqualTo("서울특별시 중구")
+        assertThat(jobCaptor.value.employmentType).isEqualTo("인턴")
+        assertThat(response.location).isEqualTo("서울특별시 중구")
+        assertThat(response.employmentType).isEqualTo("인턴")
+    }
+
+    @Test
     fun `삭제되었거나 없는 기업으로 등록하면 COMPANY_NOT_FOUND로 거부한다`() {
         given(companyQuery.findActiveSummary(anyLong(), any())).willReturn(null)
 
@@ -270,6 +288,22 @@ class JobServiceTest {
 
         assertThat(job.title).isEqualTo("새 제목")
         assertThat(job.capacity).isEqualTo(5)
+    }
+
+    @Test
+    fun `근무지역만 수정하면 고용형태는 기존 값을 유지한다`() {
+        val job =
+            jobOf(status = JobStatus.DRAFT).apply {
+                location = "서울특별시 중구"
+                employmentType = "인턴"
+            }
+        givenFoundNotDeleted(job)
+        givenActiveCompany()
+
+        service.update(1L, JobUpdateRequest(location = "부산광역시 해운대구"), REQUESTER_ID)
+
+        assertThat(job.location).isEqualTo("부산광역시 해운대구")
+        assertThat(job.employmentType).isEqualTo("인턴")
     }
 
     @Test
@@ -635,6 +669,8 @@ class JobServiceTest {
         endDate: LocalDateTime? = null,
         targetGrade: Int? = null,
         capacity: Int? = null,
+        location: String? = null,
+        employmentType: String? = null,
     ) = JobCreateRequest(
         companyId = 1L,
         postingType = PostingType.MOU,
@@ -647,6 +683,8 @@ class JobServiceTest {
         endDate = endDate,
         targetGrade = targetGrade,
         capacity = capacity,
+        location = location,
+        employmentType = employmentType,
     )
 
     private fun publishableRequest(

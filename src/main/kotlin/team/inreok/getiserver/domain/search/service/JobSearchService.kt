@@ -1,6 +1,8 @@
 package team.inreok.getiserver.domain.search.service
 
 import org.springframework.data.domain.Pageable
+import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
+import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.search.dto.JobSearchResponse
@@ -27,6 +29,9 @@ interface JobSearchService {
         companyType: CompanyType?,
         sourceName: String?,
         targetGrade: Int?,
+        highSchoolGraduateFit: AiFitLevel?,
+        entryLevelFit: AiFitLevel?,
+        difficulty: AiDifficulty?,
         openOnly: Boolean,
         sort: JobSort,
         direction: SortDirection?,
