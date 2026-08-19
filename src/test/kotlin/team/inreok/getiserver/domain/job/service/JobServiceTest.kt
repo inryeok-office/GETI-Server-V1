@@ -22,6 +22,7 @@ import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
+import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
 import team.inreok.getiserver.domain.job.dto.JobUpdateRequest
@@ -70,14 +71,18 @@ class JobServiceTest {
     @Mock
     private lateinit var jobApplicationEligibilityAccessor: JobApplicationEligibilityAccessor
 
+    @Mock
+    private lateinit var jobBookmarkAccessor: JobBookmarkAccessor
+
     @Captor
     private lateinit var jobCaptor: ArgumentCaptor<Job>
 
     private val service: JobService by lazy {
-        // 이 Test의 관심사는 지원 가능 여부 계산(Issue #136, application.access 구현체)이
-        // 아니라 Job 자체의 CRUD/상태 전이이므로, 요청된 jobId 전체에 기본값(canApply=true)을
-        // 채워주는 Stub 하나로 모든 Test가 공유한다. 다른 값을 검증하려는 개별 Test는 이 Mock을
-        // 별도로 재정의(given)하면 된다.
+        // 이 Test의 관심사는 지원 가능 여부 계산(Issue #136, application.access 구현체)이나 북마크
+        // 여부 계산(Issue #171, recommendation.access 구현체)이 아니라 Job 자체의 CRUD/상태
+        // 전이이므로, 요청된 jobId 전체에 기본값(canApply=true, bookmarked=false)을 채워주는 Stub
+        // 하나로 모든 Test가 공유한다. 다른 값을 검증하려는 개별 Test는 이 Mock을 별도로
+        // 재정의(given)하면 된다.
         given(
             jobApplicationEligibilityAccessor.findAllByJobIds(any() ?: emptySet(), anyLong()),
         ).willAnswer { invocation ->
@@ -85,6 +90,7 @@ class JobServiceTest {
             val jobIds = invocation.arguments[0] as Set<Long>
             jobIds.associateWith { defaultApplicationEligibility() }
         }
+        given(jobBookmarkAccessor.findAllByJobIds(any() ?: emptySet(), anyLong())).willReturn(emptySet())
         JobServiceImpl(
             jobRepository,
             companyQuery,
@@ -92,6 +98,7 @@ class JobServiceTest {
             discordChannelResolver,
             jobAiAnalysisAccessor,
             jobApplicationEligibilityAccessor,
+            jobBookmarkAccessor,
         )
     }
 
@@ -455,6 +462,21 @@ class JobServiceTest {
         val response = service.getPublicDetail(1L, REQUESTER_ID)
 
         assertThat(response.application).isEqualTo(eligibility)
+    }
+
+    @Test
+    fun `공개 상세 응답에는 요청자 기준 북마크 여부가 담긴다`() {
+        val job = jobOf(status = JobStatus.PUBLISHED)
+        givenFoundNotDeleted(job)
+        givenActiveCompany()
+        // service를 먼저 참조해 기본 Stub(bookmarked=false)을 등록시킨 뒤 이 Test만의 값으로
+        // 재정의한다(위 지원 가능 여부 Test와 같은 이유).
+        service
+        given(jobBookmarkAccessor.findAllByJobIds(setOf(1L), REQUESTER_ID)).willReturn(setOf(1L))
+
+        val response = service.getPublicDetail(1L, REQUESTER_ID)
+
+        assertThat(response.bookmarked).isTrue()
     }
 
     @Test
