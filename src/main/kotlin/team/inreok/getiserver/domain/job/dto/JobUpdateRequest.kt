@@ -36,6 +36,23 @@ data class JobUpdateRequest(
     val targetGrade: Int? = null,
     @param:Schema(description = "모집 인원(1 이상)", example = "2", nullable = true)
     val capacity: Int? = null,
+    // 근무지역과 고용형태는 정해진 값 집합이 없는 표시 전용 자유 문자열이다(Issue #169).
+    @field:Size(max = 255, message = "근무지역은 255자를 넘을 수 없습니다.")
+    @param:Schema(
+        description = "근무지역. 정해진 값 집합이 없는 표시 전용 문자열이다.",
+        example = "서울특별시 중구",
+        nullable = true,
+        maxLength = 255,
+    )
+    val location: String? = null,
+    @field:Size(max = 255, message = "고용형태는 255자를 넘을 수 없습니다.")
+    @param:Schema(
+        description = "고용형태. 정해진 값 집합이 없는 표시 전용 문자열이다.",
+        example = "인턴",
+        nullable = true,
+        maxLength = 255,
+    )
+    val employmentType: String? = null,
     @param:Schema(description = "선착순 모집 여부", example = "true", nullable = true)
     val firstComeServed: Boolean? = null,
     @field:Size(max = 255, message = "Discord 채널 Key는 255자를 넘을 수 없습니다.")
