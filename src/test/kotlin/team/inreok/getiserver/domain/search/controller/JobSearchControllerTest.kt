@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyBoolean
 import org.mockito.ArgumentMatchers.anyLong
+import org.mockito.ArgumentMatchers.eq
 import org.mockito.BDDMockito.given
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
@@ -19,6 +20,8 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
+import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
@@ -204,7 +207,7 @@ class JobSearchControllerTest
         }
 
         @Test
-        fun `AI 분석 필터를 함께 보내면 200을 반환한다`() {
+        fun `AI 분석 필터를 Service에 올바른 순서로 전달하면 200을 반환한다`() {
             given(
                 jobSearchService.search(
                     any(),
@@ -213,9 +216,9 @@ class JobSearchControllerTest
                     any(),
                     any(),
                     any(),
-                    any(),
-                    any(),
-                    any(),
+                    eq(AiFitLevel.SUITABLE),
+                    eq(AiFitLevel.CONDITIONAL),
+                    eq(AiDifficulty.EASY),
                     anyBoolean(),
                     anySort(),
                     any(),
