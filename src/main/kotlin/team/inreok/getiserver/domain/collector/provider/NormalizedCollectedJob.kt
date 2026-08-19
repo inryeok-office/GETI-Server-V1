@@ -25,8 +25,10 @@ data class NormalizedCollectedJob(
     val dataQualityStatus: JobDataQualityStatus,
     val missingFields: List<String> = emptyList(),
     // 아래는 마이스터고 학생 적합성 판정(JobEligibilityPolicy)에 필요한 Provider 원본 정보다.
-    // Job Entity에는 반영하지 않고 Collector 내부 판정과 Discord 알림 표시에만 사용한다
-    // (Issue #62 확장 범위, "적합성 판정" 참고). Provider가 값을 주지 않으면 null이다.
+    // 대부분은 Collector 내부 판정과 Discord 알림 표시에만 사용하고 Job Entity에는 반영하지
+    // 않는다(Issue #62 확장 범위, "적합성 판정" 참고). 다만 [workRegion]과 [employmentType]은
+    // 공고 카드가 표시해야 하는 값이라 Job Entity의 location/employmentType에도 반영한다
+    // (Issue #169, CollectorExecutionServiceImpl 참고). Provider가 값을 주지 않으면 null이다.
     val educationCondition: String? = null,
     val careerCondition: String? = null,
     val employmentType: String? = null,
