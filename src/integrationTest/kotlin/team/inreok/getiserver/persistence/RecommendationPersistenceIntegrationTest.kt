@@ -256,6 +256,46 @@ class RecommendationPersistenceIntegrationTest
             ).containsExactly(jobId)
         }
 
+        // ---------- 북마크 등록·해제(Issue #170) ----------
+
+        @Test
+        fun `bookmarked와 exclusion을 같은 Row에 함께 저장하고 그대로 조회한다`() {
+            val saved =
+                memberJobPreferenceRepository.saveAndFlush(
+                    MemberJobPreference(memberId = memberId, jobId = jobId, bookmarked = true).apply {
+                        exclusion = ExclusionType.THIS_JOB
+                        exclusionCreatedAt = LocalDateTime.now()
+                    },
+                )
+
+            val found = requireNotNull(memberJobPreferenceRepository.findByMemberIdAndJobId(memberId, jobId))
+            assertThat(found.id).isEqualTo(saved.id)
+            assertThat(found.bookmarked).isTrue()
+            assertThat(found.exclusion).isEqualTo(ExclusionType.THIS_JOB)
+            assertThat(memberJobPreferenceRepository.findBookmarkedJobIdsByMemberId(memberId)).containsExactly(jobId)
+            assertThat(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(memberId)).containsExactly(jobId)
+        }
+
+        @Test
+        fun `북마크를 해제해도 exclusion이 남아 있으면 Row는 유지된다`() {
+            val saved =
+                memberJobPreferenceRepository.saveAndFlush(
+                    MemberJobPreference(memberId = memberId, jobId = jobId, bookmarked = true).apply {
+                        exclusion = ExclusionType.SIMILAR_JOBS
+                        exclusionCreatedAt = LocalDateTime.now()
+                    },
+                )
+
+            val preference =
+                requireNotNull(memberJobPreferenceRepository.findById(requireNotNull(saved.id)).orElse(null))
+            preference.bookmarked = false
+            memberJobPreferenceRepository.saveAndFlush(preference)
+
+            val found = requireNotNull(memberJobPreferenceRepository.findByMemberIdAndJobId(memberId, jobId))
+            assertThat(found.bookmarked).isFalse()
+            assertThat(found.exclusion).isEqualTo(ExclusionType.SIMILAR_JOBS)
+        }
+
         // ---------- R3: recommendation_preferences (Issue #152, V23 Migration) ----------
 
         @Test
