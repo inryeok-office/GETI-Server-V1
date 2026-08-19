@@ -69,6 +69,8 @@ class JobServiceImpl(
                 recruitmentEndedAt = request.endDate
                 targetGrade = request.targetGrade
                 capacity = request.capacity
+                location = request.location
+                employmentType = request.employmentType
                 this.discordChannelKey = discordChannelKey
             }
 
@@ -108,21 +110,10 @@ class JobServiceImpl(
     ): JobDetailResponse {
         val job = findNotDeleted(jobId)
 
-        // 전달하지 않았거나 null인 Field는 여기서 아무 일도 하지 않으므로 기존 값이 유지된다.
-        job.apply {
-            request.title?.trim()?.let {
-                if (it.isEmpty()) throw JobValidationFailedException("공고 제목은 비어 있을 수 없습니다.")
-                title = it
-            }
-            request.content?.let { bodyMarkdown = it }
-            request.externalUrl?.let { externalUrl = it }
-            request.startDate?.let { recruitmentStartedAt = it }
-            request.endDate?.let { recruitmentEndedAt = it }
-            request.targetGrade?.let { targetGrade = it }
-            request.capacity?.let { capacity = it }
-            request.firstComeServed?.let { firstComeServed = it }
-            request.discordChannelKey?.let { discordChannelKey = requireAllowedDiscordChannelKey(it) }
-        }
+        applyUpdatableFields(job, request)
+        // Discord 채널 Key만 같이 옮기지 않는 이유는 허용 목록 검증이 Service의 설정 의존성을
+        // 필요로 하기 때문이다 -- 순수 함수로 분리한 applyUpdatableFields에는 넣을 수 없다.
+        request.discordChannelKey?.let { job.discordChannelKey = requireAllowedDiscordChannelKey(it) }
 
         validateCommon(job)
         // 이미 공개된 공고라면 수정 후에도 게시 조건을 계속 만족해야 한다. 그렇지 않으면 본문이
@@ -300,3 +291,28 @@ private fun applicationEligibilityOf(
     jobId: Long,
     requesterId: Long,
 ): JobApplicationEligibilityAccessSnapshot = accessor.findAllByJobIds(setOf(jobId), requesterId).getValue(jobId)
+
+// JobServiceImpl의 Method 개수를 detekt TooManyFunctions 한도 안에서 유지하기 위해 분리했다
+// (위 applicationEligibilityOf와 같은 이유). 전달하지 않았거나 null인 Field는 여기서 아무 일도
+// 하지 않으므로 기존 값이 유지된다. 값을 비우는 기능은 이번 범위가 아니다(JobUpdateRequest 주석).
+// Discord 채널 Key는 허용 목록 검증이 필요해 호출 측(JobServiceImpl.update)에 남겨 둔다.
+private fun applyUpdatableFields(
+    job: Job,
+    request: JobUpdateRequest,
+) {
+    job.apply {
+        request.title?.trim()?.let {
+            if (it.isEmpty()) throw JobValidationFailedException("공고 제목은 비어 있을 수 없습니다.")
+            title = it
+        }
+        request.content?.let { bodyMarkdown = it }
+        request.externalUrl?.let { externalUrl = it }
+        request.startDate?.let { recruitmentStartedAt = it }
+        request.endDate?.let { recruitmentEndedAt = it }
+        request.targetGrade?.let { targetGrade = it }
+        request.capacity?.let { capacity = it }
+        request.location?.let { location = it }
+        request.employmentType?.let { employmentType = it }
+        request.firstComeServed?.let { firstComeServed = it }
+    }
+}

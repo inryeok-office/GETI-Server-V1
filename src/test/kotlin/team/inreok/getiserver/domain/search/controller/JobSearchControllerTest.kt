@@ -89,6 +89,8 @@ class JobSearchControllerTest
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.content[0].jobId").value(1))
                 .andExpect(jsonPath("$.data.content[0].company.name").value("인력개발원"))
+                .andExpect(jsonPath("$.data.content[0].location").value("서울특별시 중구"))
+                .andExpect(jsonPath("$.data.content[0].employmentType").value("인턴"))
                 .andExpect(
                     jsonPath("$.data.content[0].company.logoUrl")
                         .value("https://storage.example/company-logo?signature=test"),
@@ -266,6 +268,8 @@ class JobSearchControllerTest
                 endDate = null,
                 targetGrade = 3,
                 capacity = 2,
+                location = "서울특별시 중구",
+                employmentType = "인턴",
                 firstComeServed = false,
                 viewCount = 10,
                 publishedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
