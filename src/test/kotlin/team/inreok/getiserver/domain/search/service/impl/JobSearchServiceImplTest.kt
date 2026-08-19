@@ -127,6 +127,20 @@ class JobSearchServiceImplTest {
         verify(jobApplicationEligibilityAccessor, times(1)).findAllByJobIds(setOf(1L, 2L), REQUESTER_ID)
     }
 
+    // Elasticsearch Document의 근무지역·고용형태는 PostgreSQL을 다시 조회하지 않고 그대로
+    // 응답으로 옮긴다(Issue #69의 Read Model 원칙, Issue #169).
+    @Test
+    fun `검색 결과의 근무지역과 고용형태를 목록 응답에 그대로 옮긴다`() {
+        given(searchHits.searchHits).willReturn(listOf(hitOf(documentOf(jobId = 1L, companyLogoFileId = null))))
+        given(searchHits.totalHits).willReturn(1L)
+        given(indexManager.search(anyQuery())).willReturn(searchHits)
+
+        val response = search()
+
+        assertThat(response.content[0].location).isEqualTo("서울특별시 중구")
+        assertThat(response.content[0].employmentType).isEqualTo("인턴")
+    }
+
     @Test
     fun `기업에 로고가 없으면 logoUrl은 null이고 File Port를 호출하지 않는다`() {
         given(searchHits.searchHits).willReturn(listOf(hitOf(documentOf(jobId = 1L, companyLogoFileId = null))))
@@ -211,6 +225,8 @@ class JobSearchServiceImplTest {
         publishedAt = LocalDateTime.now(),
         startDate = null,
         endDate = null,
+        location = "서울특별시 중구",
+        employmentType = "인턴",
     )
 
     private companion object {

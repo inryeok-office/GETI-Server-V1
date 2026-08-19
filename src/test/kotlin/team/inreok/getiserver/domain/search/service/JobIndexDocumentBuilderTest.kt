@@ -58,6 +58,8 @@ class JobIndexDocumentBuilderTest {
         assertThat(document.companyLogoFileId).isEqualTo(43L)
         assertThat(document.postingType).isEqualTo("MOU")
         assertThat(document.status).isEqualTo("PUBLISHED")
+        assertThat(document.location).isEqualTo("서울특별시 중구")
+        assertThat(document.employmentType).isEqualTo("인턴")
     }
 
     @Test
@@ -165,5 +167,7 @@ class JobIndexDocumentBuilderTest {
             startDate = null,
             endDate = null,
             sourceName = "MMA",
+            location = "서울특별시 중구",
+            employmentType = "인턴",
         )
 }

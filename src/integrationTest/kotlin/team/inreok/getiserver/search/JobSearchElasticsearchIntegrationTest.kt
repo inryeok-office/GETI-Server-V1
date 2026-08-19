@@ -121,6 +121,30 @@ class JobSearchElasticsearchIntegrationTest {
     }
 
     @Test
+    fun `근무지역과 고용형태가 색인되어 목록 응답에 그대로 담긴다`() {
+        indexDocument(jobId = 1L, title = "채용 공고", location = "서울특별시 중구", employmentType = "인턴")
+        refresh()
+
+        val result = search()
+
+        assertThat(result.content).hasSize(1)
+        assertThat(result.content[0].location).isEqualTo("서울특별시 중구")
+        assertThat(result.content[0].employmentType).isEqualTo("인턴")
+    }
+
+    // 두 Field를 Keyword로 색인하고 multiMatch 대상에서 제외한 결정을 고정한다(Issue #169).
+    // 검색 대상에 넣으면 기존 검색 결과집합과 순위가 바뀌어 API 계약이 조용히 바뀐다.
+    @Test
+    fun `근무지역은 검색어 매칭 대상이 아니다`() {
+        indexDocument(jobId = 1L, title = "채용 공고", location = "서울특별시 중구")
+        refresh()
+
+        val result = search(query = "서울특별시")
+
+        assertThat(result.content).isEmpty()
+    }
+
+    @Test
     fun `공고 유형과 기업 유형 필터를 동시에 적용한다`() {
         indexDocument(jobId = 1L, title = "A", postingType = PostingType.MOU, companyType = CompanyType.GENERAL)
         indexDocument(jobId = 2L, title = "B", postingType = PostingType.MOU, companyType = CompanyType.FOREIGN)
@@ -402,6 +426,8 @@ class JobSearchElasticsearchIntegrationTest {
         viewCount: Long = 0,
         publishedAt: LocalDateTime? = LocalDateTime.now(),
         endDate: LocalDateTime? = null,
+        location: String? = null,
+        employmentType: String? = null,
     ) {
         indexManager.upsert(
             documentOf(
@@ -417,6 +443,8 @@ class JobSearchElasticsearchIntegrationTest {
                 viewCount = viewCount,
                 publishedAt = publishedAt,
                 endDate = endDate,
+                location = location,
+                employmentType = employmentType,
             ),
         )
     }
@@ -435,6 +463,8 @@ class JobSearchElasticsearchIntegrationTest {
         viewCount: Long = 0,
         publishedAt: LocalDateTime? = LocalDateTime.now(),
         endDate: LocalDateTime? = null,
+        location: String? = null,
+        employmentType: String? = null,
     ) = JobSearchDocument(
         id = jobId.toString(),
         jobId = jobId,
@@ -455,6 +485,8 @@ class JobSearchElasticsearchIntegrationTest {
         publishedAt = publishedAt,
         startDate = null,
         endDate = endDate,
+        location = location,
+        employmentType = employmentType,
     )
 
     /** 항상 빈 Map을 돌려주는 최소 구현이다. 이 Test는 Query 정확성만 다루고 File URL 발급은 다루지 않는다. */
