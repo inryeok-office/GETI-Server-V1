@@ -126,7 +126,7 @@ Migration 파일 상단 주석과 `V2__create_core_domain_schema.sql`의 각 `ON
 
 ## Enum 목록
 
-23개 Enum은 각 Domain Package의 `entity/type` Package에 있으며(예: `domain.member.entity.type.OAuthProvider`) `@Enumerated(EnumType.STRING)`으로 문자열 저장한다. DB 문자열과 Kotlin Enum 이름이 동일하다. 정확한 값은 각 Enum Kotlin 파일과 Migration의 `CHECK`/`VARCHAR` 정의를 참고한다.
+25개 Enum은 각 Domain Package의 `entity/type` Package에 있다. 이 중 23개는 Entity Field에 `@Enumerated(EnumType.STRING)`으로 매핑되어(예: `domain.member.entity.type.OAuthProvider`) DB 문자열과 Kotlin Enum 이름이 동일하게 저장된다. 나머지 2개는 `@Enumerated`를 쓰지 않는다 -- Recommendation R2(Issue #148)가 추가한 `RecommendationReasonType`은 `recommendations.reasons`(JSONB) 안에 문자열로 직렬화되고, `RecommendationExclusionReason`은 Hard Filter 내부 판정용으로 어떤 Table에도 저장되지 않는다. 정확한 값은 각 Enum Kotlin 파일과 Migration의 `CHECK`/`VARCHAR` 정의를 참고한다.
 
 ## Test로 검증한 내용
 
