@@ -9,6 +9,7 @@ import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateQueryPort
@@ -59,6 +60,10 @@ class RecommendationServiceImpl(
     // 설정이 바뀌면 이 값도 자동으로 맞아야 하므로 별도로 하드코딩하지 않는다(요구사항 "Scheduler
     // 설정이 바뀌면 API 값도 자동으로 맞아야 한다").
     @param:Value("\${app.recommendation.generation-scheduler.cron:-}") private val generationSchedulerCron: String,
+    // SIMILAR_JOBS 등록 즉시 반영(R6, Issue #167)에 쓴다. RecommendationGenerationServiceImpl과
+    // 같은 property를 읽어 두 호출부가 서로 다른 Threshold를 쓰지 않게 한다.
+    @param:Value("\${app.recommendation.similarity.tech-stack-threshold:0.6}") private val similarityThreshold: Double,
+    private val aiAnalysisSearchQueryPort: AiAnalysisSearchQueryPort,
 ) : RecommendationService {
     private val log = LoggerFactory.getLogger(RecommendationServiceImpl::class.java)
 
@@ -170,6 +175,17 @@ class RecommendationServiceImpl(
         // 보여주므로 날짜 제한 없이 이 (memberId, jobId) 조합을 통째로 지워도 안전하고, 다음
         // 생성부터는 Hard Filter(NOT_INTERESTED)가 이 Job을 다시 걸러낸다.
         recommendationRepository.deleteAllByMemberIdAndJobId(memberId, jobId)
+        // SIMILAR_JOBS는 다음 Scheduler를 기다리지 않고 오늘자 결과 중 유사 판정되는 Job도 즉시
+        // 지운다(R6, Issue #167 §5) -- 새 Recommendation을 만들지 않고 기존 Row만 지운다.
+        if (exclusionType == ExclusionType.SIMILAR_JOBS) {
+            deleteSimilarJobRecommendations(
+                recommendationRepository,
+                aiAnalysisSearchQueryPort,
+                memberId,
+                jobId,
+                similarityThreshold,
+            )
+        }
 
         val company = companyQuery.findActiveSummary(job.companyId, memberId)
         return RecommendationExclusionResponse(
@@ -295,6 +311,39 @@ class RecommendationServiceImpl(
     private companion object {
         const val DEFAULT_ENABLED = false
     }
+}
+
+/**
+ * SIMILAR_JOBS 등록 즉시 반영이다(R6, Issue #167 §5). 오늘자 Recommendation 중 기준(Source) Job과
+ * 유사 판정되는 Job의 Row만 지운다 -- 새로 Recommendation을 만들지 않고 다른 회원/다른 Job에는
+ * 영향이 없다. `RecommendationGenerationServiceImpl.generateForMember`와 같은
+ * `RecommendationSimilarityEvaluator`(`isSimilarJob`/`techStackSetOf`)를 그대로 재사용해 두
+ * 호출부가 서로 다른 Formula를 구현하지 않게 한다. Class 안에 두면 detekt `TooManyFunctions`
+ * (허용 11개)를 넘어서 [saveExclusionPreference]와 같은 이유로 File 최상위 함수로 둔다.
+ */
+@Suppress("ReturnCount")
+private fun deleteSimilarJobRecommendations(
+    recommendationRepository: RecommendationRepository,
+    aiAnalysisSearchQueryPort: AiAnalysisSearchQueryPort,
+    memberId: Long,
+    sourceJobId: Long,
+    threshold: Double,
+) {
+    val existingJobIds =
+        recommendationRepository.findJobIdsByMemberIdAndRecommendationDate(memberId, LocalDate.now()).toSet()
+    if (existingJobIds.isEmpty()) return
+    // 기준 Job의 AI 분석이 없거나 COMPLETED가 아니면 확장하지 않는다(보수적 Fallback, Issue #167
+    // §4) -- Generation의 similarJobsSourceTechStackSets 계산과 동일한 근거다.
+    val aiSnapshots = aiAnalysisSearchQueryPort.findCompletedByJobIds(existingJobIds + sourceJobId)
+    val sourceTechStackIds = aiSnapshots[sourceJobId]?.let(::techStackSetOf) ?: return
+    val similarJobIds =
+        existingJobIds
+            .filter { candidateJobId ->
+                val candidateSnapshot = aiSnapshots[candidateJobId] ?: return@filter false
+                isSimilarJob(sourceTechStackIds, techStackSetOf(candidateSnapshot), threshold)
+            }.toSet()
+    if (similarJobIds.isEmpty()) return
+    recommendationRepository.deleteAllByMemberIdAndJobIdIn(memberId, similarJobIds)
 }
 
 /**

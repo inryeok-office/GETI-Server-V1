@@ -141,6 +141,13 @@ app:
       # Issue #152 PR 본문에서도 R3 범위 밖으로 명시됐다). 조회 API 기본 Page 크기(size=20)와
       # 같은 잠정값을 둔다(docs/file/file-domain-plan.md의 "잠정값" 문서화 관례와 동일).
       top-n: ${RECOMMENDATION_GENERATION_TOP_N:20}
+    similarity:
+      # SIMILAR_JOBS 유사 공고 판정 Threshold다(R6, Issue #167 DECISION_REQUIRED 확정). 두 공고의
+      # requiredTechStackIds/preferredTechStackIds를 합친 Set의 Jaccard Similarity가 이 값 이상이면
+      # 유사 공고로 판정한다(RecommendationSimilarityEvaluator.isSimilarJob). Magic Number로 두지
+      # 않고 이 값으로 분리했다(top-n/cron과 같은 관례) -- Default 0.6은 근거 없는 잠정값이 아니라
+      # Issue #167에서 실제로 확정된 값이다.
+      tech-stack-threshold: ${RECOMMENDATION_SIMILARITY_TECH_STACK_THRESHOLD:0.6}
   collector:
     scheduler:
       # 일일 수집 실행 시각(초 분 시 일 월 요일). 매일 03:00에 실행한다(Issue #62).

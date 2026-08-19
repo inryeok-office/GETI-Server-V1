@@ -22,6 +22,7 @@ import org.mockito.quality.Strictness
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
+import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
@@ -76,6 +77,9 @@ class RecommendationServiceImplTest {
     @Mock
     private lateinit var memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort
 
+    @Mock
+    private lateinit var aiAnalysisSearchQueryPort: AiAnalysisSearchQueryPort
+
     @Captor
     private lateinit var preferenceCaptor: ArgumentCaptor<MemberJobPreference>
 
@@ -90,6 +94,8 @@ class RecommendationServiceImplTest {
             memberApplicantSnapshotQueryPort,
             JsonMapper(),
             "0 0 3 * * *",
+            0.6,
+            aiAnalysisSearchQueryPort,
         )
     }
 
@@ -316,6 +322,8 @@ class RecommendationServiceImplTest {
                 memberApplicantSnapshotQueryPort,
                 JsonMapper(),
                 "-",
+                0.6,
+                aiAnalysisSearchQueryPort,
             )
         given(recommendationPreferenceRepository.findByMemberId(1L))
             .willReturn(RecommendationPreference(memberId = 1L, enabled = true))
