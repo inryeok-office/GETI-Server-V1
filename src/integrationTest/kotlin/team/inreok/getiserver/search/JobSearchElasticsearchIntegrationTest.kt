@@ -17,6 +17,8 @@ import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.images.builder.ImageFromDockerfile
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
+import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
+import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.file.link.FileUrlPort
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
@@ -166,6 +168,40 @@ class JobSearchElasticsearchIntegrationTest {
         val result = search(sourceName = "MMA", targetGrade = 3)
 
         assertThat(result.content.map { it.jobId }).containsExactly(1L)
+    }
+
+    @Test
+    fun `AI 적합성과 난이도 필터를 Elasticsearch에서 정확히 적용한다`() {
+        indexDocument(
+            jobId = 1L,
+            title = "고졸 가능 쉬운 공고",
+            highSchoolGraduateFit = AiFitLevel.SUITABLE,
+            entryLevelFit = AiFitLevel.CONDITIONAL,
+            difficulty = AiDifficulty.EASY,
+        )
+        indexDocument(
+            jobId = 2L,
+            title = "신입 가능 어려운 공고",
+            highSchoolGraduateFit = AiFitLevel.UNSUITABLE,
+            entryLevelFit = AiFitLevel.SUITABLE,
+            difficulty = AiDifficulty.HARD,
+        )
+        indexDocument(jobId = 3L, title = "AI 분석 전 공고")
+        refresh()
+
+        assertThat(search().content.map { it.jobId }).containsExactly(3L, 2L, 1L)
+        assertThat(search(highSchoolGraduateFit = AiFitLevel.SUITABLE).content.map { it.jobId })
+            .containsExactly(1L)
+        assertThat(search(entryLevelFit = AiFitLevel.SUITABLE).content.map { it.jobId })
+            .containsExactly(2L)
+        assertThat(search(difficulty = AiDifficulty.EASY).content.map { it.jobId }).containsExactly(1L)
+        assertThat(
+            search(
+                postingType = PostingType.MOU,
+                highSchoolGraduateFit = AiFitLevel.SUITABLE,
+                difficulty = AiDifficulty.EASY,
+            ).content.map { it.jobId },
+        ).containsExactly(1L)
     }
 
     @Test
@@ -394,6 +430,9 @@ class JobSearchElasticsearchIntegrationTest {
         companyType: CompanyType? = null,
         sourceName: String? = null,
         targetGrade: Int? = null,
+        highSchoolGraduateFit: AiFitLevel? = null,
+        entryLevelFit: AiFitLevel? = null,
+        difficulty: AiDifficulty? = null,
         openOnly: Boolean = false,
         sort: JobSort = JobSort.LATEST,
         direction: SortDirection? = null,
@@ -405,6 +444,9 @@ class JobSearchElasticsearchIntegrationTest {
         companyType,
         sourceName,
         targetGrade,
+        highSchoolGraduateFit,
+        entryLevelFit,
+        difficulty,
         openOnly,
         sort,
         direction,
@@ -422,6 +464,9 @@ class JobSearchElasticsearchIntegrationTest {
         companyType: CompanyType = CompanyType.GENERAL,
         sourceName: String? = null,
         targetGrade: Int? = null,
+        highSchoolGraduateFit: AiFitLevel? = null,
+        entryLevelFit: AiFitLevel? = null,
+        difficulty: AiDifficulty? = null,
         status: JobStatus = JobStatus.PUBLISHED,
         viewCount: Long = 0,
         publishedAt: LocalDateTime? = LocalDateTime.now(),
@@ -439,6 +484,9 @@ class JobSearchElasticsearchIntegrationTest {
                 companyType = companyType,
                 sourceName = sourceName,
                 targetGrade = targetGrade,
+                highSchoolGraduateFit = highSchoolGraduateFit,
+                entryLevelFit = entryLevelFit,
+                difficulty = difficulty,
                 status = status,
                 viewCount = viewCount,
                 publishedAt = publishedAt,
@@ -459,6 +507,9 @@ class JobSearchElasticsearchIntegrationTest {
         companyType: CompanyType = CompanyType.GENERAL,
         sourceName: String? = null,
         targetGrade: Int? = null,
+        highSchoolGraduateFit: AiFitLevel? = null,
+        entryLevelFit: AiFitLevel? = null,
+        difficulty: AiDifficulty? = null,
         status: JobStatus = JobStatus.PUBLISHED,
         viewCount: Long = 0,
         publishedAt: LocalDateTime? = LocalDateTime.now(),
@@ -479,6 +530,9 @@ class JobSearchElasticsearchIntegrationTest {
         companyLogoFileId = null,
         sourceName = sourceName,
         targetGrade = targetGrade,
+        highSchoolGraduateFit = highSchoolGraduateFit?.name,
+        entryLevelFit = entryLevelFit?.name,
+        difficulty = difficulty?.name,
         capacity = null,
         firstComeServed = false,
         viewCount = viewCount,

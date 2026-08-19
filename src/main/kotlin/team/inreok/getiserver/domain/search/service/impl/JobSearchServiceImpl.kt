@@ -6,6 +6,8 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query
 import org.springframework.data.domain.Pageable
 import org.springframework.data.elasticsearch.client.elc.NativeQuery
 import org.springframework.stereotype.Service
+import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
+import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.file.link.FileUrlPort
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
@@ -37,6 +39,9 @@ class JobSearchServiceImpl(
         companyType: CompanyType?,
         sourceName: String?,
         targetGrade: Int?,
+        highSchoolGraduateFit: AiFitLevel?,
+        entryLevelFit: AiFitLevel?,
+        difficulty: AiDifficulty?,
         openOnly: Boolean,
         sort: JobSort,
         direction: SortDirection?,
@@ -60,6 +65,9 @@ class JobSearchServiceImpl(
                         companyType,
                         trimmedSourceName,
                         targetGrade,
+                        highSchoolGraduateFit,
+                        entryLevelFit,
+                        difficulty,
                         openOnly,
                         now,
                     ),
@@ -130,6 +138,9 @@ class JobSearchServiceImpl(
         companyType: CompanyType?,
         sourceName: String?,
         targetGrade: Int?,
+        highSchoolGraduateFit: AiFitLevel?,
+        entryLevelFit: AiFitLevel?,
+        difficulty: AiDifficulty?,
         openOnly: Boolean,
         now: LocalDateTime,
     ): Query =
@@ -142,6 +153,13 @@ class JobSearchServiceImpl(
                 companyType?.let { b.filter { f -> f.term { t -> t.field("companyType").value(it.name) } } }
                 sourceName?.let { b.filter { f -> f.term { t -> t.field("sourceName").value(it) } } }
                 targetGrade?.let { b.filter { f -> f.term { t -> t.field("targetGrade").value(it.toLong()) } } }
+                highSchoolGraduateFit?.let {
+                    b.filter { f -> f.term { t -> t.field("highSchoolGraduateFit").value(it.name) } }
+                }
+                entryLevelFit?.let {
+                    b.filter { f -> f.term { t -> t.field("entryLevelFit").value(it.name) } }
+                }
+                difficulty?.let { b.filter { f -> f.term { t -> t.field("difficulty").value(it.name) } } }
                 if (openOnly) {
                     b.filter { f -> f.term { t -> t.field("status").value(PublicJobStatus.PUBLISHED.jobStatus.name) } }
                     b.filter { f ->

@@ -245,6 +245,8 @@ AI Analysis Phase 1(Issue #132)이 `FileAccessChecker`식 역방향 SPI의 두 �
 
 Application Phase 8(Issue #136)이 `job.access` 역방향 SPI의 세 번째 사례다. `application`은 이미 `job.query.JobApplicationSnapshotQueryPort`(공고 정보 조회) 때문에 `job`에 의존한다. Job 상세·검색 응답에 요청자 기준 지원 가능 여부(`application`)를 실으려면 반대로 `job`/`search`가 `application`을 읽어야 하는데, 그러면 `application -> job -> application` 순환 의존이 생긴다. 그래서 `job`이 `job.access.JobApplicationEligibilityAccessor`(SPI)를 정의하고 `application`(`JobApplicationEligibilityAccessorImpl`)이 구현해 Bean으로 등록한다. `search`(`JobSearchServiceImpl`)도 같은 Interface를 그대로 소비하는데, `search`는 이미 공고 색인·동기화(Issue #69) 때문에 `job`에 의존하므로 새 순환을 만들지 않는다 — 여러 소비자가 같은 SPI를 공유하는 첫 사례다. `eligibilityReason`/`applicationStatus`/`availableActions`도 `AiStatus` 사례와 같은 이유로 Enum이 아닌 String으로 노출한다. Recommendation R5(Issue #165)에서 `recommendation`도 이미 지원한 공고를 추천 후보에서 제외하기 위해 같은 `JobApplicationEligibilityAccessor`를 세 번째 소비자로 그대로 재사용한다 -- `recommendation`도 이미 `job.query.JobRecommendationCandidateQueryPort` 때문에 `job`에 의존하므로 새 순환이 생기지 않는다. `eligibilityReason` 문자열 중 `ALREADY_APPLIED`만 신호로 쓰고(`RecommendationExclusionReason.ALREADY_APPLIED`라는 독립적인 값으로 옮겨 저장), `NOT_INTERNAL`(외부 지원 공고)까지 배제하면 외부 지원 공고 전체가 추천에서 사라지는 회귀가 생겨 `canApply` Boolean 전체는 Hard Filter 신호로 쓰지 않는다.
 
+Search AI Filter(Issue #173)는 `search`가 `ai.entity.type`의 `AiFitLevel`/`AiDifficulty`를 Controller·Service API 계약에 사용해야 하므로 두 Enum에 `@NamedInterface`를 직접 선언해 공개한 사례다. `search`는 이미 `ai.query.AiAnalysisSearchQueryPort`를 통해 `ai`에 의존하고 있어 이 공개 Type 참조가 새 순환을 만들지 않는다. Elasticsearch Read Model에는 이 Enum의 `name`을 문자열로 저장하고, Search Filter는 같은 값에 대한 Keyword 정확 일치를 사용한다. 목록 응답의 내부 AI Metadata는 공개하지 않는다.
+
 새로운 Domain 간 의존이 필요해지면 이 방식(Named Interface로 필요한 Package/타입만 명시적으로 공개)을 그대로 따른다.
 
 ## 만들지 않는 Package
