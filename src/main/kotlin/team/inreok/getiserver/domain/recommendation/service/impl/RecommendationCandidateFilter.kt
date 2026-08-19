@@ -10,6 +10,7 @@ import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationEx
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.JOB_NOT_PUBLISHED
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.NOT_INTERESTED
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.RECRUITMENT_ENDED
+import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.SIMILAR_JOB_EXCLUDED
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.TARGET_GRADE_MISMATCH
 import java.time.LocalDateTime
 
@@ -39,6 +40,12 @@ import java.time.LocalDateTime
  * 외부 지원 공고 전체가 추천에서 사라지는 회귀가 생긴다(Issue #165 PR 본문 지원 상태 Matrix
  * 참고). 그래서 Application의 `canApply` Boolean 전체가 아니라 활성 지원서 유무 하나만 신호로
  * 받는다 -- 이 함수 자체는 Application의 어떤 타입도 모른다(순수 `Boolean`).
+ *
+ * [isSimilarToExcludedJob]은 회원이 SIMILAR_JOBS로 관심 없음 처리한 다른 공고와 이 공고가 유사한지
+ * 여부다(R6, Issue #167) -- 호출부(`RecommendationGenerationServiceImpl`)가
+ * `RecommendationSimilarityEvaluator.isSimilarToAnySource`로 미리 계산해 넘긴다. 이 공고 자체가
+ * 직접 관심 없음 처리된 경우([NOT_INTERESTED])보다는 뒤에서 검사한다 -- 자기 자신에 대한 명시적
+ * 신호가 확장된 유사 판정보다 우선한다.
  */
 @Suppress("ReturnCount")
 fun computeExclusionReason(
@@ -48,6 +55,7 @@ fun computeExclusionReason(
     bookmarkedJobIds: Set<Long>,
     aiSnapshot: AiAnalysisSearchSnapshot?,
     hasActiveApplication: Boolean,
+    isSimilarToExcludedJob: Boolean,
     now: LocalDateTime,
 ): RecommendationExclusionReason? {
     if (job.status != "PUBLISHED") return JOB_NOT_PUBLISHED
@@ -57,6 +65,7 @@ fun computeExclusionReason(
     }
     if (hasActiveApplication) return ALREADY_APPLIED
     if (job.jobId in excludedJobIds) return NOT_INTERESTED
+    if (isSimilarToExcludedJob) return SIMILAR_JOB_EXCLUDED
     if (job.jobId in bookmarkedJobIds) return ALREADY_BOOKMARKED
     if (aiSnapshot?.highSchoolGraduateFit == "UNSUITABLE") return HIGH_SCHOOL_UNSUITABLE
     return null
