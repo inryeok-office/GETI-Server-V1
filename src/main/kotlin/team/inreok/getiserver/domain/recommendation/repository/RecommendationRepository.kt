@@ -69,4 +69,26 @@ interface RecommendationRepository : JpaRepository<Recommendation, Long> {
         memberId: Long,
         jobId: Long,
     )
+
+    /** SIMILAR_JOBS 등록 즉시 반영(R6, Issue #167)에서 "현재 오늘자 Recommendation 중 어떤
+     * Job이 유사 판정 대상인지"를 계산하기 위한 후보 jobId 목록이다. Job 개수만큼 반복 조회하지
+     * 않도록 회원 1명당 한 번만 호출한다. */
+    @Query(
+        """
+        SELECT r.jobId FROM Recommendation r
+        WHERE r.memberId = :memberId AND r.recommendationDate = :date
+        """,
+    )
+    fun findJobIdsByMemberIdAndRecommendationDate(
+        @Param("memberId") memberId: Long,
+        @Param("date") date: LocalDate,
+    ): List<Long>
+
+    /** SIMILAR_JOBS 등록 즉시 반영에서 유사로 판정된 여러 Job의 오늘자 Recommendation을 한 번에
+     * 지운다(R6, Issue #167) -- [jobIds] 개수만큼 [deleteAllByMemberIdAndJobId]를 반복 호출하지
+     * 않는다(N+1 방지). */
+    fun deleteAllByMemberIdAndJobIdIn(
+        memberId: Long,
+        jobIds: Set<Long>,
+    )
 }

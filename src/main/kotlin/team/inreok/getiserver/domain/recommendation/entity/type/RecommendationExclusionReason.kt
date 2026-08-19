@@ -20,6 +20,13 @@ enum class RecommendationExclusionReason {
     /** 회원이 해당 공고를 관심 없음(`MemberJobPreference.exclusion`) 처리함. */
     NOT_INTERESTED,
 
+    /** 회원이 SIMILAR_JOBS로 관심 없음 처리한 다른 공고와 유사하다고 판정됨(R6, Issue #167).
+     * `RecommendationSimilarityEvaluator.isSimilarToAnySource`가 Jaccard Similarity(기술
+     * 스택 기반) `>=` `app.recommendation.similarity.tech-stack-threshold`로 판정한다. 공고
+     * 자체가 THIS_JOB/SIMILAR_JOBS로 직접 관심 없음 처리된 경우([NOT_INTERESTED])와는 구분되는
+     * 별도 값이다. */
+    SIMILAR_JOB_EXCLUDED,
+
     /** 회원이 해당 공고를 이미 북마크함(`MemberJobPreference.bookmarked`). Notion 기능명세
      * "맞춤 추천 페이지 -- 이미 북마크한 공고는 추천 목록에서 제외"(Issue #155). */
     ALREADY_BOOKMARKED,

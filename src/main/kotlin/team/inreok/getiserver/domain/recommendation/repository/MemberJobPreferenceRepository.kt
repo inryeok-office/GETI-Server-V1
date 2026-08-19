@@ -44,6 +44,20 @@ interface MemberJobPreferenceRepository : JpaRepository<MemberJobPreference, Lon
         @Param("memberId") memberId: Long,
     ): List<Long>
 
+    /** SIMILAR_JOBS로 등록된 기준(Source) Job만 조회한다(R6, Issue #167). THIS_JOB은 그 Job
+     * 자체만 제외하면 되므로 유사 공고 확장 대상에서 제외한다 -- [findExcludedJobIdsByMemberId]와
+     * 달리 exclusionType을 SIMILAR_JOBS로 좁힌다. */
+    @Query(
+        """
+        SELECT p.jobId FROM MemberJobPreference p
+        WHERE p.memberId = :memberId AND p.exclusion = :exclusionType
+        """,
+    )
+    fun findJobIdsByMemberIdAndExclusionType(
+        @Param("memberId") memberId: Long,
+        @Param("exclusionType") exclusionType: ExclusionType,
+    ): List<Long>
+
     /** 이미 북마크한 공고를 추천 후보에서 제외하기 위한 Batch 조회다(Notion 기능명세 "이미
      * 북마크한 공고는 추천 목록에서 제외", Issue #155). [findExcludedJobIdsByMemberId]와 같은
      * 이유로 N+1을 피한다. */
