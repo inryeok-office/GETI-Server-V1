@@ -71,6 +71,13 @@ data class JobSearchDocument(
     val startDate: LocalDateTime?,
     @Field(type = FieldType.Date, format = [DateFormat.date_hour_minute_second_millis])
     val endDate: LocalDateTime?,
+    // 근무지역·고용형태(Issue #169). 정해진 값 집합이 없는 표시 전용 문자열이라 Keyword로 색인하고
+    // 검색어 매칭(multiMatch) 대상에는 넣지 않는다 -- 넣으면 기존 검색 결과집합과 순위가 바뀐다.
+    // 기존 색인 Document에는 이 Field가 없으므로 전체 재색인 전까지는 비어 있다(additive 확장).
+    @Field(type = FieldType.Keyword)
+    val location: String? = null,
+    @Field(type = FieldType.Keyword)
+    val employmentType: String? = null,
     // AI Analysis(Issue #132) 결과 중 검색에 안전하게 노출할 수 있는 값만 additive로 더한다
     // (Issue #144). `AiAnalysisSearchQueryPort`가 COMPLETED 상태일 때만 값을 채워 주므로,
     // 분석이 아직 없거나 진행 중이거나 마지막 시도가 실패했으면 아래 필드는 모두 빈 값/null이다.
