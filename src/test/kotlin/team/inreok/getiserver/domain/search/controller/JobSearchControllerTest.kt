@@ -69,6 +69,9 @@ class JobSearchControllerTest
                     any(),
                     any(),
                     any(),
+                    any(),
+                    any(),
+                    any(),
                     anyBoolean(),
                     anySort(),
                     any(),
@@ -104,6 +107,9 @@ class JobSearchControllerTest
                     any(),
                     any(),
                     any(),
+                    any(),
+                    any(),
+                    any(),
                     anyBoolean(),
                     anySort(),
                     any(),
@@ -120,6 +126,9 @@ class JobSearchControllerTest
         fun `size 0과 100은 허용되고 101은 서버가 최대값으로 강제한다`() {
             given(
                 jobSearchService.search(
+                    any(),
+                    any(),
+                    any(),
                     any(),
                     any(),
                     any(),
@@ -184,6 +193,45 @@ class JobSearchControllerTest
                 .perform(get("/api/v1/jobs").param("companyType", "BOGUS").with(authOf(1L, "STUDENT")))
                 .andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.error.code").value("TYPE_MISMATCH"))
+        }
+
+        @Test
+        fun `지원하지 않는 AI 분석 필터 값을 보내면 400을 반환한다`() {
+            mockMvc
+                .perform(get("/api/v1/jobs").param("difficulty", "IMPOSSIBLE").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.error.code").value("TYPE_MISMATCH"))
+        }
+
+        @Test
+        fun `AI 분석 필터를 함께 보내면 200을 반환한다`() {
+            given(
+                jobSearchService.search(
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    anyBoolean(),
+                    anySort(),
+                    any(),
+                    anyPageable(),
+                    anyLong(),
+                ),
+            ).willReturn(searchResponse())
+
+            mockMvc
+                .perform(
+                    get("/api/v1/jobs")
+                        .param("highSchoolGraduateFit", "SUITABLE")
+                        .param("entryLevelFit", "CONDITIONAL")
+                        .param("difficulty", "EASY")
+                        .with(authOf(1L, "STUDENT")),
+                ).andExpect(status().isOk)
         }
 
         // --- Fixture ---
