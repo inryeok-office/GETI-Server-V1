@@ -144,7 +144,12 @@ class RecommendationController(
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "403", description = "학생 권한이 없음 (FORBIDDEN)"),
         SwaggerApiResponse(responseCode = "404", description = "공고가 없거나 삭제됨 (JOB_NOT_FOUND)"),
-        SwaggerApiResponse(responseCode = "409", description = "이미 관심 없음으로 설정됨 (EXCLUSION_ALREADY_EXISTS)"),
+        SwaggerApiResponse(
+            responseCode = "409",
+            description =
+                "이미 관심 없음으로 설정됨 (EXCLUSION_ALREADY_EXISTS), 또는 북마크 등록과 동시에 도착해 " +
+                    "경합함 -- 재시도 가능 (PREFERENCE_WRITE_CONFLICT)",
+        ),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @PostMapping("/api/v1/me/recommendation-exclusions")
@@ -227,7 +232,12 @@ class RecommendationController(
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "403", description = "학생 권한이 없음 (FORBIDDEN)"),
         SwaggerApiResponse(responseCode = "404", description = "공고가 없거나 삭제됨 (JOB_NOT_FOUND)"),
-        SwaggerApiResponse(responseCode = "409", description = "이미 북마크한 공고 (BOOKMARK_ALREADY_EXISTS)"),
+        SwaggerApiResponse(
+            responseCode = "409",
+            description =
+                "이미 북마크한 공고 (BOOKMARK_ALREADY_EXISTS), 또는 관심 없음 등록과 동시에 도착해 " +
+                    "경합함 -- 재시도 가능 (PREFERENCE_WRITE_CONFLICT)",
+        ),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @PostMapping("/api/v1/me/bookmarks")

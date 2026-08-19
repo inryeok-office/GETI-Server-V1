@@ -41,6 +41,15 @@ enum class RecommendationErrorCode(
      * 경우 모두 포함) -- `EXCLUSION_NOT_FOUND`와 동일한 정책을 따른다. */
     BOOKMARK_NOT_FOUND(HttpStatus.NOT_FOUND, "북마크한 공고를 찾을 수 없습니다."),
 
+    /** 관심 없음/북마크 등록이 같은 (memberId, jobId) Row를 동시에 새로 만들려는 다른 요청과
+     * 경합해 `uk_member_job_preferences_member_job` UNIQUE 제약을 위반함(코드리뷰 반영, PR
+     * #178). `member_job_preferences`는 관심 없음과 북마크가 같은 Row/제약을 공유하므로, 이
+     * 경합에서 진 요청은 상대가 같은 종류의 등록이었는지 알 수 없다 -- `EXCLUSION_ALREADY_EXISTS`/
+     * `BOOKMARK_ALREADY_EXISTS`로 단정하면 실제로는 등록되지 않은 상태인데도 "이미 등록됨"으로
+     * 잘못 응답할 수 있다(`saveExclusionPreference`/`saveBookmarkPreference` KDoc 참고). Client는
+     * 이 Code를 받으면 현재 상태를 다시 조회하거나 재시도할 수 있다. */
+    PREFERENCE_WRITE_CONFLICT(HttpStatus.CONFLICT, "다른 요청과 동시에 처리되어 실패했습니다. 다시 시도해 주세요."),
+
     /** Notion 기능명세("추천 설정 -- 졸업생에게는 추천 설정을 제공하지 않는다"). `AcademicStatus`가
      * ENROLLED가 아니면(졸업·자퇴) 차단한다 -- `JobApplicationEligibility`/`ProgramEligibility`의
      * `academicStatus != "ENROLLED"` 판정과 같은 관례를 따른다. */

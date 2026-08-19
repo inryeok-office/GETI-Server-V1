@@ -5,6 +5,7 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.any
 import org.mockito.BDDMockito.given
 import org.mockito.Captor
 import org.mockito.Mock
@@ -14,6 +15,7 @@ import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
+import org.springframework.dao.DataIntegrityViolationException
 import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
@@ -27,6 +29,7 @@ import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationBookmarkAlreadyExistsException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationBookmarkNotFoundException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationJobNotFoundException
+import team.inreok.getiserver.domain.recommendation.exception.RecommendationPreferenceWriteConflictException
 import team.inreok.getiserver.domain.recommendation.repository.MemberJobPreferenceRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationGenerationStateRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationPreferenceRepository
@@ -109,6 +112,11 @@ class RecommendationServiceImplBookmarkTest {
         }
     }
 
+    // Kotlin non-null 파라미터에 bare any()를 쓰면 null 반환으로 NPE가 나므로 Elvis로 기본값을
+    // 채운다(RecommendationServiceImplTest.anyPreference()와 동일한 관례).
+    private fun anyPreference(): MemberJobPreference =
+        any(MemberJobPreference::class.java) ?: MemberJobPreference(memberId = 0L, jobId = 0L)
+
     // ---------- 등록 ----------
 
     @Test
@@ -181,6 +189,24 @@ class RecommendationServiceImplBookmarkTest {
         assertThatThrownBy { service.registerBookmark(1L, 1L) }
             .isInstanceOf(RecommendationBookmarkAlreadyExistsException::class.java)
         verify(memberJobPreferenceRepository, never()).saveAndFlush(existing)
+    }
+
+    @Test
+    fun `사전 확인을 통과해도 동시 등록으로 DB 제약을 위반하면 재시도 가능한 예외로 변환한다`() {
+        // 코드리뷰 반영(PR #178): findByMemberIdAndJobId 사전 확인과 saveAndFlush 사이의
+        // TOCTOU를 재현한다 -- 사전 확인은 null(북마크 없음)을 통과했지만, 그 사이 동시 요청(관심
+        // 없음 등록일 수도 있다)이 먼저 Row를 만들어 uk_member_job_preferences_member_job UNIQUE
+        // 제약을 위반한 상황을 Mock으로 흉내낸다. 경합 상대가 관심 없음 등록이었을 수도 있어
+        // BOOKMARK_ALREADY_EXISTS로 단정하지 않고 공통 PREFERENCE_WRITE_CONFLICT로 변환해야 한다
+        // (실제로는 북마크되지 않았는데 "이미 북마크됨"으로 잘못 응답하는 것을 방지).
+        stubJobExists()
+        given(memberJobPreferenceRepository.findByMemberIdAndJobId(1L, 1L)).willReturn(null)
+        given(memberJobPreferenceRepository.saveAndFlush(anyPreference()))
+            .willThrow(DataIntegrityViolationException("uk_member_job_preferences_member_job"))
+
+        assertThatThrownBy { service.registerBookmark(1L, 1L) }
+            .isInstanceOf(RecommendationPreferenceWriteConflictException::class.java)
+        verify(recommendationRepository, never()).deleteAllByMemberIdAndJobId(1L, 1L)
     }
 
     @Test
