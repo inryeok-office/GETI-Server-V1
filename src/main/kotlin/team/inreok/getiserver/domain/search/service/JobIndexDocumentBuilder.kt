@@ -57,6 +57,8 @@ class JobIndexDocumentBuilder(
             companyType = companyType?.name,
             companyLogoFileId = companyLogoFileId,
             sourceName = snapshot.sourceName,
+            location = snapshot.location,
+            employmentType = snapshot.employmentType,
             targetGrade = snapshot.targetGrade,
             capacity = snapshot.capacity,
             firstComeServed = snapshot.firstComeServed,

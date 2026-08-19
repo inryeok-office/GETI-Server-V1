@@ -54,6 +54,18 @@ data class JobDetailResponse(
     val targetGrade: Int?,
     @param:Schema(description = "모집 인원", example = "2", nullable = true)
     val capacity: Int?,
+    @param:Schema(
+        description = "근무지역. 정해진 값 집합이 없는 표시 전용 문자열이다. 입력되지 않았으면 null.",
+        example = "서울특별시 중구",
+        nullable = true,
+    )
+    val location: String?,
+    @param:Schema(
+        description = "고용형태. 정해진 값 집합이 없는 표시 전용 문자열이다. 입력되지 않았으면 null.",
+        example = "인턴",
+        nullable = true,
+    )
+    val employmentType: String?,
     @param:Schema(description = "선착순 모집 여부", example = "false")
     val firstComeServed: Boolean,
     @param:Schema(description = "조회수. 공개 상세 조회 응답에는 이번 조회분이 반영된 값이 담긴다.", example = "129")
@@ -99,6 +111,8 @@ data class JobDetailResponse(
                 endDate = job.recruitmentEndedAt,
                 targetGrade = job.targetGrade,
                 capacity = job.capacity,
+                location = job.location,
+                employmentType = job.employmentType,
                 firstComeServed = job.firstComeServed,
                 viewCount = viewCount,
                 publishedAt = job.publishedAt,

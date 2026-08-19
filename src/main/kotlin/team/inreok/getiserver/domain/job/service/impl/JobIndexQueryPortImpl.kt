@@ -54,5 +54,7 @@ class JobIndexQueryPortImpl(
             startDate = job.recruitmentStartedAt,
             endDate = job.recruitmentEndedAt,
             sourceName = job.sourceName,
+            location = job.location,
+            employmentType = job.employmentType,
         )
 }
