@@ -17,6 +17,14 @@ import java.time.LocalDateTime
 interface JobApplicationSnapshotQueryPort {
     /** 존재하지 않거나 삭제됐으면 null을 반환한다. */
     fun findById(jobId: Long): JobApplicationJobSnapshot?
+
+    /**
+     * 존재하지 않거나 삭제된 id는 결과 Map에서 빠진다(`JobNotificationTargetQueryPort.findAllByIds`와
+     * 같은 관례). Job/Search 응답에 지원 가능 여부를 함께 노출할 때(Issue #136,
+     * `job.access.JobApplicationEligibilityAccessor`) 목록 한 Page(최대 100건)를 단건 조회
+     * 반복 없이 한 번에 채우기 위한 배치 조회다.
+     */
+    fun findAllByIds(jobIds: Set<Long>): Map<Long, JobApplicationJobSnapshot>
 }
 
 @NamedInterface
