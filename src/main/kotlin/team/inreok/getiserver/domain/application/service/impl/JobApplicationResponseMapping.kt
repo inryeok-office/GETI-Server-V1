@@ -20,15 +20,28 @@ import tools.jackson.databind.ObjectMapper
  * 미리 조회해 전달한다(Issue #134) -- 이 함수를 순수 함수로 유지하기 위해 Port 호출 자체는
  * 여기서 하지 않는다. 방금 생성된 초안처럼 애초에 연결된 파일이 있을 수 없는 호출부는 빈 목록을
  * 그대로 넘긴다(불필요한 조회를 피함, `InquiryServiceImpl.create`와 동일한 판단).
+ *
+ * [jobTitle]/[companyName]/[managerMemberId]/[managerName]은 교사·개발자용 조회
+ * (`JobApplicationAdminServiceImpl`, Issue #172)에서만 실제 값을 채워 넘긴다 -- 학생용 초안·Action
+ * 결과(`JobApplicationServiceImpl`)는 이 함수를 그대로 재사용하되 기본값 null을 그대로 두어, 이번
+ * Issue 범위가 아닌 학생 조회 경로에 불필요한 Job/Company/Member 조회를 추가하지 않는다.
  */
 fun toJobApplicationDraftResponse(
     objectMapper: ObjectMapper,
     application: JobApplication,
     files: List<FileSnapshot>,
+    jobTitle: String? = null,
+    companyName: String? = null,
+    managerMemberId: Long? = null,
+    managerName: String? = null,
 ): JobApplicationDraftResponse =
     JobApplicationDraftResponse(
         applicationId = requireNotNull(application.id),
         jobId = application.jobId,
+        jobTitle = jobTitle,
+        companyName = companyName,
+        managerMemberId = managerMemberId,
+        managerName = managerName,
         formId = application.formId,
         formVersion = application.formVersion,
         status = application.status,
