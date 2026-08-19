@@ -27,9 +27,10 @@ interface JobApplicationEligibilityAccessor {
      *
      * [requesterMemberId]가 학생이 아니거나(교사·개발자, 재학 상태 없음) 존재하지 않으면 별도
      * 분기 없이 `computeEligibilityReason`의 `member == null` 판정(NOT_ENROLLED)을 그대로
-     * 따른다 -- 미인증 요청은 이 Interface에 도달하지 않는다(`SecurityConfig`가 공고 조회 경로를
-     * 인증 필수로 지정, 요구사항 원문에 명시가 없어 보수적 기본값으로 정함, Issue #136
-     * DECISION_REQUIRED).
+     * 따른다 -- 미인증 요청은 이 Interface에 도달하지 않는다. `SecurityConfig`가 `/api/v1/jobs`
+     * 하위 전체 경로(상세·검색 둘 다 포함)를 `authenticated`로 지정해, 요구사항 원문에 없던 이
+     * 가정을 PR #151 코드리뷰 시점에 실제 설정으로 확인했다(Issue #136 DECISION_REQUIRED, 확인
+     * 완료).
      */
     fun findAllByJobIds(
         jobIds: Set<Long>,
