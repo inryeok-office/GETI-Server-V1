@@ -26,11 +26,15 @@ import team.inreok.getiserver.domain.application.exception.ApplicationReviewForb
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
+import team.inreok.getiserver.domain.company.query.CompanyQuery
+import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.link.FileLinkPort
 import team.inreok.getiserver.domain.file.link.FileSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
+import team.inreok.getiserver.domain.member.query.InquiryMemberSnapshot
+import team.inreok.getiserver.domain.member.query.InquiryMemberSnapshotQueryPort
 import tools.jackson.databind.json.JsonMapper
 import java.time.LocalDateTime
 import java.util.Optional
@@ -50,6 +54,12 @@ class JobApplicationAdminServiceImplTest {
     private lateinit var fileLinkPort: FileLinkPort
 
     @Mock
+    private lateinit var companyQuery: CompanyQuery
+
+    @Mock
+    private lateinit var inquiryMemberSnapshotQueryPort: InquiryMemberSnapshotQueryPort
+
+    @Mock
     private lateinit var eventPublisher: ApplicationEventPublisher
 
     private val service: JobApplicationAdminService by lazy {
@@ -58,6 +68,8 @@ class JobApplicationAdminServiceImplTest {
             jobApplicationSnapshotQueryPort,
             jobApplicationStatusHistoryRepository,
             fileLinkPort,
+            companyQuery,
+            inquiryMemberSnapshotQueryPort,
             eventPublisher,
             JsonMapper(),
         )
@@ -113,6 +125,68 @@ class JobApplicationAdminServiceImplTest {
         assertThat(result.totalElements).isEqualTo(1)
     }
 
+    // Issue #172 -- 목록 응답에 기수·학과(Snapshot)·공고명·기업명·담당자가 채워지는지 확인한다.
+    @Test
+    fun `목록 조회 결과에는 기수학과·공고명·기업명·담당자가 채워진다`() {
+        val application =
+            applicationOf().apply {
+                applicantCohort = 5
+                applicantDepartment = "SW"
+            }
+        val page = PageImpl(listOf(application), PageRequest.of(0, 20), 1)
+        given(jobApplicationRepository.search(null, null, PageRequest.of(0, 20))).willReturn(page)
+        given(jobApplicationSnapshotQueryPort.findAllByIds(setOf(1L)))
+            .willReturn(mapOf(1L to jobOf(createdByMemberId = 100L, managerMemberId = 200L)))
+        given(companyQuery.findActiveSummaries(setOf(1L)))
+            .willReturn(mapOf(1L to CompanySummary(companyId = 1L, name = "인력개발원")))
+        given(inquiryMemberSnapshotQueryPort.findAllByIds(setOf(200L)))
+            .willReturn(mapOf(200L to InquiryMemberSnapshot(200L, "김담당", null, null, null, true)))
+
+        val item = service.list(null, null, PageRequest.of(0, 20)).content[0]
+
+        assertThat(item.applicantCohort).isEqualTo(5)
+        assertThat(item.applicantDepartment).isEqualTo("SW")
+        assertThat(item.jobTitle).isEqualTo("인턴 채용")
+        assertThat(item.companyName).isEqualTo("인력개발원")
+        assertThat(item.managerMemberId).isEqualTo(200L)
+        assertThat(item.managerName).isEqualTo("김담당")
+    }
+
+    // 담당 교사가 지정되지 않은 공고는 등록자로 대체하지 않고 빈 값으로 둔다(사용자 확인 완료,
+    // Issue #172 DECISION_REQUIRED).
+    @Test
+    fun `공고에 담당 교사가 없으면 담당자 정보는 빈 값이다`() {
+        val page = PageImpl(listOf(applicationOf()), PageRequest.of(0, 20), 1)
+        given(jobApplicationRepository.search(null, null, PageRequest.of(0, 20))).willReturn(page)
+        given(jobApplicationSnapshotQueryPort.findAllByIds(setOf(1L)))
+            .willReturn(mapOf(1L to jobOf(createdByMemberId = 100L, managerMemberId = null)))
+        given(companyQuery.findActiveSummaries(setOf(1L))).willReturn(emptyMap())
+
+        val item = service.list(null, null, PageRequest.of(0, 20)).content[0]
+
+        assertThat(item.managerMemberId).isNull()
+        assertThat(item.managerName).isNull()
+    }
+
+    // 목록 항목마다 공고·기업·담당자를 개별 조회하면 N+1이 되므로(PR #172 목표), 여러 항목이 같은
+    // 공고를 가리켜도 배치 조회 Method가 한 번만 호출되는지 확인한다.
+    @Test
+    fun `목록 항목이 여러 건이어도 공고·기업·담당자 배치 조회는 한 번만 호출된다`() {
+        val applications = listOf(applicationOf(id = 1L), applicationOf(id = 2L))
+        val page = PageImpl(applications, PageRequest.of(0, 20), 2)
+        given(jobApplicationRepository.search(null, null, PageRequest.of(0, 20))).willReturn(page)
+        given(jobApplicationSnapshotQueryPort.findAllByIds(setOf(1L)))
+            .willReturn(mapOf(1L to jobOf(createdByMemberId = 100L, managerMemberId = 200L)))
+        given(companyQuery.findActiveSummaries(setOf(1L))).willReturn(emptyMap())
+        given(inquiryMemberSnapshotQueryPort.findAllByIds(setOf(200L))).willReturn(emptyMap())
+
+        service.list(null, null, PageRequest.of(0, 20))
+
+        verify(jobApplicationSnapshotQueryPort).findAllByIds(setOf(1L))
+        verify(companyQuery).findActiveSummaries(setOf(1L))
+        verify(inquiryMemberSnapshotQueryPort).findAllByIds(setOf(200L))
+    }
+
     // ---------- getDetail ----------
 
     @Test
@@ -130,6 +204,23 @@ class JobApplicationAdminServiceImplTest {
 
         assertThat(result.applicationId).isEqualTo(1L)
         assertThat(result.status).isEqualTo(JobApplicationStatus.SUBMITTED)
+    }
+
+    @Test
+    fun `상세 조회 결과에는 공고명·기업명·담당자가 채워진다`() {
+        given(jobApplicationRepository.findById(1L)).willReturn(Optional.of(applicationOf()))
+        given(jobApplicationSnapshotQueryPort.findById(1L))
+            .willReturn(jobOf(createdByMemberId = 100L, managerMemberId = 200L))
+        given(companyQuery.findActiveSummary(1L)).willReturn(CompanySummary(companyId = 1L, name = "인력개발원"))
+        given(inquiryMemberSnapshotQueryPort.findAllByIds(setOf(200L)))
+            .willReturn(mapOf(200L to InquiryMemberSnapshot(200L, "김담당", null, null, null, true)))
+
+        val result = service.getDetail(1L)
+
+        assertThat(result.jobTitle).isEqualTo("인턴 채용")
+        assertThat(result.companyName).isEqualTo("인력개발원")
+        assertThat(result.managerMemberId).isEqualTo(200L)
+        assertThat(result.managerName).isEqualTo("김담당")
     }
 
     @Test
@@ -178,6 +269,32 @@ class JobApplicationAdminServiceImplTest {
 
         assertThat(result.status).isEqualTo(JobApplicationStatus.REVISION_REQUESTED)
         assertThat(result.statusReason).isEqualTo("보완 필요")
+    }
+
+    // Issue #172 -- Action 수행 결과 응답에도 상세 조회와 동일하게 공고명·기업명·담당자가 채워진다.
+    @Test
+    fun `Action 수행 결과에는 공고명·기업명·담당자가 채워진다`() {
+        given(
+            jobApplicationRepository.findByIdForUpdate(1L),
+        ).willReturn(applicationOf(status = JobApplicationStatus.SUBMITTED))
+        given(jobApplicationSnapshotQueryPort.findById(1L))
+            .willReturn(jobOf(createdByMemberId = 100L, managerMemberId = 200L))
+        given(companyQuery.findActiveSummary(1L)).willReturn(CompanySummary(companyId = 1L, name = "인력개발원"))
+        given(inquiryMemberSnapshotQueryPort.findAllByIds(setOf(200L)))
+            .willReturn(mapOf(200L to InquiryMemberSnapshot(200L, "김담당", null, null, null, true)))
+
+        val result =
+            service.executeAction(
+                1L,
+                100L,
+                isDeveloper = false,
+                JobApplicationAdminActionRequest(JobApplicationAdminAction.APPROVE),
+            )
+
+        assertThat(result.jobTitle).isEqualTo("인턴 채용")
+        assertThat(result.companyName).isEqualTo("인력개발원")
+        assertThat(result.managerMemberId).isEqualTo(200L)
+        assertThat(result.managerName).isEqualTo("김담당")
     }
 
     @Test
