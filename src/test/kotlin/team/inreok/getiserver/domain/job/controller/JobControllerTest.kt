@@ -98,6 +98,16 @@ class JobControllerTest
         }
 
         @Test
+        fun `공개 상세 응답에 요청자 기준 북마크 여부가 포함된다`() {
+            given(jobService.getPublicDetail(1L, 1L)).willReturn(detailResponse(viewCount = 11, bookmarked = true))
+
+            mockMvc
+                .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.bookmarked").value(true))
+        }
+
+        @Test
         fun `근무지역과 고용형태가 없는 공고는 두 Field가 null이다`() {
             given(jobService.getPublicDetail(1L, 1L))
                 .willReturn(detailResponse(viewCount = 11, location = null, employmentType = null))
@@ -143,6 +153,7 @@ class JobControllerTest
             company: CompanySummary? = CompanySummary(1L, "인력개발원", logoUrl = LOGO_URL),
             location: String? = "서울특별시 중구",
             employmentType: String? = "인턴",
+            bookmarked: Boolean = false,
         ) = JobDetailResponse(
             jobId = 1L,
             title = "2026 상반기 백엔드 채용",
@@ -174,6 +185,7 @@ class JobControllerTest
                     applicationStatus = null,
                     availableActions = listOf("CREATE_DRAFT"),
                 ),
+            bookmarked = bookmarked,
         )
 
         private companion object {
