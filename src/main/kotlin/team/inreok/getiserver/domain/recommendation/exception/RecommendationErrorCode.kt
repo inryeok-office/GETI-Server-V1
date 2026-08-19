@@ -33,6 +33,14 @@ enum class RecommendationErrorCode(
      * 요청자 본인 소유가 아님(소유권 노출 방지를 위해 두 경우를 구분하지 않는다). */
     EXCLUSION_NOT_FOUND(HttpStatus.NOT_FOUND, "관심 없음 설정을 찾을 수 없습니다."),
 
+    /** Issue #170: 같은 공고를 이미 북마크했는데 다시 등록을 요청함 -- 같은 Entity를 쓰는
+     * `EXCLUSION_ALREADY_EXISTS`와 동일한 정책(멱등이 아니라 409)을 따른다. */
+    BOOKMARK_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 북마크한 공고입니다."),
+
+    /** Issue #170: 북마크하지 않은 공고를 해제하려 함(Row 자체가 없거나 `bookmarked=false`인
+     * 경우 모두 포함) -- `EXCLUSION_NOT_FOUND`와 동일한 정책을 따른다. */
+    BOOKMARK_NOT_FOUND(HttpStatus.NOT_FOUND, "북마크한 공고를 찾을 수 없습니다."),
+
     /** Notion 기능명세("추천 설정 -- 졸업생에게는 추천 설정을 제공하지 않는다"). `AcademicStatus`가
      * ENROLLED가 아니면(졸업·자퇴) 차단한다 -- `JobApplicationEligibility`/`ProgramEligibility`의
      * `academicStatus != "ENROLLED"` 판정과 같은 관례를 따른다. */

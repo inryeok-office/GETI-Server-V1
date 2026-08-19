@@ -18,6 +18,7 @@ import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPo
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationItemResponse
+import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationSettingResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationStatus
@@ -26,6 +27,8 @@ import team.inreok.getiserver.domain.recommendation.entity.Recommendation
 import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationGenerationStatus
 import team.inreok.getiserver.domain.recommendation.entity.type.SuitabilityLevel
+import team.inreok.getiserver.domain.recommendation.exception.RecommendationBookmarkAlreadyExistsException
+import team.inreok.getiserver.domain.recommendation.exception.RecommendationBookmarkNotFoundException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationExclusionAlreadyExistsException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationExclusionNotFoundException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationJobNotFoundException
@@ -40,12 +43,16 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 
 /**
- * [RecommendationService]의 구현이다(R3 Issue #152, Notion 계약 정합성 Issue #155, R4 Issue #160).
+ * [RecommendationService]의 구현이다(R3 Issue #152, Notion 계약 정합성 Issue #155, R4 Issue #160,
+ * 북마크 등록·해제 Issue #170).
  * R2([team.inreok.getiserver.domain.recommendation.service.RecommendationGenerationService])가
  * 이미 계산·저장한 결과를 읽고 사용자 설정을 바꿀 뿐, Score/Hard Filter/Ranking을 다시 계산하지
  * 않는다. GENERATING/FAILED 상태는 R4 Daily Scheduler(`RecommendationGenerationRunner`)가 기록한
  * `RecommendationGenerationState`를 그대로 읽는다 -- 여기서도 상태를 직접 판정하지 않는다.
  */
+@Suppress("TooManyFunctions") // 관심 없음(R3/R6)과 북마크(Issue #170)가 같은 Entity를 공유하는
+// 자연스러운 확장이라(CollectorExecutionServiceImpl/InquiryServiceImpl 등과 같은 전례) Class를
+// 인위적으로 나누지 않는다.
 @Service
 class RecommendationServiceImpl(
     private val recommendationRepository: RecommendationRepository,
@@ -246,6 +253,44 @@ class RecommendationServiceImpl(
         }
     }
 
+    @Transactional
+    override fun registerBookmark(
+        memberId: Long,
+        jobId: Long,
+    ): RecommendationJobResponse {
+        val job = requireJobExists(jobId)
+        val existing = memberJobPreferenceRepository.findByMemberIdAndJobId(memberId, jobId)
+        if (existing?.bookmarked == true) throw RecommendationBookmarkAlreadyExistsException(jobId)
+        val preference = existing ?: MemberJobPreference(memberId = memberId, jobId = jobId)
+        preference.bookmarked = true
+        saveBookmarkPreference(memberJobPreferenceRepository, preference, jobId, log)
+        // 북마크한 공고는 추천 후보에서 제외한다는 기존 Hard Filter 정책(RecommendationCandidateFilter
+        // ALREADY_BOOKMARKED)을 다음 생성까지 기다리지 않고 오늘자 결과에도 즉시 반영한다(R6
+        // SIMILAR_JOBS/관심 없음 등록과 동일한 원칙) -- 새 Recommendation을 만들지 않고 기존
+        // Row만 지운다.
+        recommendationRepository.deleteAllByMemberIdAndJobId(memberId, jobId)
+        val company = companyQuery.findActiveSummary(job.companyId, memberId)
+        return buildRecommendationJobResponse(job, company, bookmarked = true)
+    }
+
+    @Transactional
+    override fun removeBookmark(
+        memberId: Long,
+        jobId: Long,
+    ) {
+        val preference = memberJobPreferenceRepository.findByMemberIdAndJobId(memberId, jobId)
+        if (preference?.bookmarked != true) throw RecommendationBookmarkNotFoundException(jobId)
+        preference.bookmarked = false
+        // exclusion(관심 없음)이 남아 있으면 Row 자체는 지우지 않는다(removeExclusion과 대칭인
+        // Row Lifecycle) -- 두 값 모두 없어질 때만 빈 Row를 정리한다.
+        if (preference.exclusion == null) {
+            memberJobPreferenceRepository.delete(preference)
+        } else {
+            memberJobPreferenceRepository.save(preference)
+            Unit
+        }
+    }
+
     private fun isEnabled(memberId: Long): Boolean =
         recommendationPreferenceRepository.findByMemberId(memberId)?.enabled ?: DEFAULT_ENABLED
 
@@ -369,4 +414,22 @@ private fun saveExclusionPreference(
         // SwallowedException 반영) -- 실제 제약 위반 여부를 나중에 DB 로그로도 추적할 수 있다.
         log.warn("관심 없음 동시 등록 요청이 DB 제약으로 차단됨(uk_member_job_preferences_member_job)", ex)
         throw RecommendationExclusionAlreadyExistsException(jobId)
+    }
+
+/**
+ * 북마크 등록(Issue #170)의 최종 방어선이다. [saveExclusionPreference]와 같은 이유로
+ * `registerBookmark`의 사전 확인과 저장 사이 TOCTOU를 `uk_member_job_preferences_member_job`
+ * UNIQUE 제약으로 최종 방어한다.
+ */
+private fun saveBookmarkPreference(
+    repository: MemberJobPreferenceRepository,
+    preference: MemberJobPreference,
+    jobId: Long,
+    log: Logger,
+): MemberJobPreference =
+    try {
+        repository.saveAndFlush(preference)
+    } catch (ex: DataIntegrityViolationException) {
+        log.warn("북마크 동시 등록 요청이 DB 제약으로 차단됨(uk_member_job_preferences_member_job)", ex)
+        throw RecommendationBookmarkAlreadyExistsException(jobId)
     }
