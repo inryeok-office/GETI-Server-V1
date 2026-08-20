@@ -36,4 +36,11 @@ interface JobBookmarkAccessor {
         jobIds: Set<Long>,
         requesterMemberId: Long,
     ): Set<Long>
+
+    /**
+     * [jobIds] 각각의 전체 북마크 수를 배치로 반환한다(Job Summary의 `bookmarkCount` Field, Issue
+     * #196). [findAllByJobIds]와 달리 특정 회원 기준이 아니라 전체 회원의 북마크 수를 센다.
+     * 북마크가 하나도 없는 jobId는 결과 Map에 없으므로 호출 측이 0으로 취급해야 한다.
+     */
+    fun countAllByJobIds(jobIds: Set<Long>): Map<Long, Long>
 }

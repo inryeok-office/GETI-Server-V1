@@ -17,6 +17,7 @@ import org.mockito.quality.Strictness
 import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
 import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchSnapshot
 import team.inreok.getiserver.domain.company.query.CompanyQuery
+import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateQueryPort
@@ -65,6 +66,9 @@ class RecommendationServiceImplSimilarJobsTest {
     @Mock
     private lateinit var aiAnalysisSearchQueryPort: AiAnalysisSearchQueryPort
 
+    @Mock
+    private lateinit var jobAiAnalysisAccessor: JobAiAnalysisAccessor
+
     @Captor
     private lateinit var preferenceCaptor: ArgumentCaptor<MemberJobPreference>
 
@@ -81,6 +85,7 @@ class RecommendationServiceImplSimilarJobsTest {
             "0 0 3 * * *",
             0.6,
             aiAnalysisSearchQueryPort,
+            jobAiAnalysisAccessor,
         )
     }
 

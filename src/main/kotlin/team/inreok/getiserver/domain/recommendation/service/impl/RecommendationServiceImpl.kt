@@ -12,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
+import team.inreok.getiserver.domain.job.access.JobAiSkillAccessView
 import team.inreok.getiserver.domain.job.query.JobBookmarkQuery
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateQueryPort
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateSnapshot
@@ -74,6 +76,11 @@ class RecommendationServiceImpl(
     // 같은 property를 읽어 두 호출부가 서로 다른 Threshold를 쓰지 않게 한다.
     @param:Value("\${app.recommendation.similarity.tech-stack-threshold:0.6}") private val similarityThreshold: Double,
     private val aiAnalysisSearchQueryPort: AiAnalysisSearchQueryPort,
+    // RecommendationJobResponse.techStacks(Issue #196)를 채우기 위해 쓴다. job이 소유하고 ai가
+    // 구현하는 SPI의 새 소비자다(JobApplicationServiceImpl과 같은 이유). bookmarkCount는 이 Domain이
+    // 이미 memberJobPreferenceRepository로 MemberJobPreference를 직접 소유하고 있어 별도 SPI 없이
+    // Repository를 그대로 재사용한다.
+    private val jobAiAnalysisAccessor: JobAiAnalysisAccessor,
 ) : RecommendationService {
     private val log = LoggerFactory.getLogger(RecommendationServiceImpl::class.java)
 
@@ -231,7 +238,14 @@ class RecommendationServiceImpl(
         val company = companyQuery.findActiveSummary(job.companyId, memberId)
         return RecommendationExclusionResponse(
             exclusionId = requireNotNull(saved.id) { "저장된 MemberJobPreference는 id를 가져야 합니다." },
-            job = buildRecommendationJobResponse(job, company, bookmarked = saved.bookmarked),
+            job =
+                buildRecommendationJobResponse(
+                    job,
+                    company,
+                    bookmarked = saved.bookmarked,
+                    techStacks = techStacksOf(jobId),
+                    bookmarkCount = bookmarkCountOf(jobId),
+                ),
             exclusionType = exclusionType,
             createdAt = requireNotNull(saved.exclusionCreatedAt) { "관심 없음을 저장했으면 exclusionCreatedAt이 있어야 합니다." },
         )
@@ -248,13 +262,22 @@ class RecommendationServiceImpl(
         val jobs = jobRecommendationCandidateQueryPort.findAllByIds(jobIds)
         val companyIds = jobs.values.map { it.companyId }.toSet()
         val companies = companyQuery.findActiveSummaries(companyIds, memberId)
+        val techStacks = techStacksOf(jobIds)
+        val bookmarkCounts = bookmarkCountsOf(jobIds)
 
         val items =
             page.content.mapNotNull { preference ->
                 val job = jobs[preference.jobId] ?: return@mapNotNull null
                 RecommendationExclusionResponse(
                     exclusionId = requireNotNull(preference.id) { "저장된 MemberJobPreference는 id를 가져야 합니다." },
-                    job = buildRecommendationJobResponse(job, companies[job.companyId], preference.bookmarked),
+                    job =
+                        buildRecommendationJobResponse(
+                            job,
+                            companies[job.companyId],
+                            preference.bookmarked,
+                            techStacks = techStacks[job.jobId] ?: emptyList(),
+                            bookmarkCount = bookmarkCounts[job.jobId] ?: 0L,
+                        ),
                     exclusionType =
                         requireNotNull(preference.exclusion) { "관심 없음 목록 조회 결과는 exclusion이 있어야 합니다." },
                     createdAt =
@@ -304,7 +327,13 @@ class RecommendationServiceImpl(
         // Row만 지운다.
         recommendationRepository.deleteAllByMemberIdAndJobId(memberId, jobId)
         val company = companyQuery.findActiveSummary(job.companyId, memberId)
-        return buildRecommendationJobResponse(job, company, bookmarked = true)
+        return buildRecommendationJobResponse(
+            job,
+            company,
+            bookmarked = true,
+            techStacks = techStacksOf(jobId),
+            bookmarkCount = bookmarkCountOf(jobId),
+        )
     }
 
     @Transactional
@@ -351,6 +380,8 @@ class RecommendationServiceImpl(
                     memberId,
                     jobIds,
                 ).toSet()
+        val techStacks = techStacksOf(jobIds)
+        val bookmarkCounts = bookmarkCountsOf(jobIds)
 
         // 추천 생성 이후 Job이 삭제됐으면(Soft Delete) jobs Map에 없다 -- 삭제된 공고를 담아
         // 반환하지 않고 해당 항목만 건너뛴다(호출부가 판단할 표시 규칙이 없어 가장 안전한 기본값).
@@ -360,7 +391,7 @@ class RecommendationServiceImpl(
         val items =
             rows.mapNotNull { row ->
                 val job = jobs[row.jobId] ?: return@mapNotNull null
-                toItemResponse(row, job, companies, bookmarkedJobIds)
+                toItemResponse(row, job, companies, bookmarkedJobIds, techStacks, bookmarkCounts)
             }
         return PageImpl(items, page.pageable, page.totalElements)
     }
@@ -370,6 +401,8 @@ class RecommendationServiceImpl(
         job: JobRecommendationCandidateSnapshot,
         companies: Map<Long, CompanySummary>,
         bookmarkedJobIds: Set<Long>,
+        techStacks: Map<Long, List<JobAiSkillAccessView>>,
+        bookmarkCounts: Map<Long, Long>,
     ): RecommendationItemResponse =
         RecommendationItemResponse(
             recommendationId = requireNotNull(row.id) { "저장된 Recommendation은 id를 가져야 합니다." },
@@ -379,6 +412,8 @@ class RecommendationServiceImpl(
                     companies[job.companyId],
                     bookmarked =
                         job.jobId in bookmarkedJobIds,
+                    techStacks = techStacks[job.jobId] ?: emptyList(),
+                    bookmarkCount = bookmarkCounts[job.jobId] ?: 0L,
                 ),
             score = row.score.toInt(),
             suitabilityLevel = row.suitability,
@@ -386,6 +421,25 @@ class RecommendationServiceImpl(
             reasons = parseRecommendationReasons(row, objectMapper, log),
             generatedAt = requireNotNull(row.createdAt) { "저장된 Recommendation은 createdAt을 가져야 합니다." },
         )
+
+    // registerExclusion/registerBookmark(단건)와 listExclusions/toItemResponsePage(목록)가 모두
+    // 쓰는 Helper다. jobIds가 비어 있으면 SPI Method 자체를 호출하지 않는다(application의
+    // JobApplicationServiceImpl.list()와 같은 관례).
+    private fun techStacksOf(jobIds: Set<Long>): Map<Long, List<JobAiSkillAccessView>> =
+        if (jobIds.isEmpty()) emptyMap() else jobAiAnalysisAccessor.findMatchedTechStacks(jobIds)
+
+    private fun techStacksOf(jobId: Long): List<JobAiSkillAccessView> = techStacksOf(setOf(jobId))[jobId] ?: emptyList()
+
+    private fun bookmarkCountsOf(jobIds: Set<Long>): Map<Long, Long> =
+        if (jobIds.isEmpty()) {
+            emptyMap()
+        } else {
+            memberJobPreferenceRepository
+                .countBookmarksByJobIds(jobIds)
+                .associate { it.jobId to it.bookmarkCount }
+        }
+
+    private fun bookmarkCountOf(jobId: Long): Long = bookmarkCountsOf(setOf(jobId))[jobId] ?: 0L
 
     private companion object {
         const val DEFAULT_ENABLED = false

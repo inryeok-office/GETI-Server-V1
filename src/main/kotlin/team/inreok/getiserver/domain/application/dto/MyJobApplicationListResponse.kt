@@ -3,6 +3,7 @@ package team.inreok.getiserver.domain.application.dto
 import io.swagger.v3.oas.annotations.media.Schema
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobAiSkillAccessView
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
@@ -51,9 +52,11 @@ data class MyJobApplicationListItemResponse(
  * 같은 모양이되 별도 Class로 둔다 -- Domain 간 DTO 직접 의존을 만들지 않기 위해서다
  * (`RecommendationJobResponse` KDoc과 같은 이유).
  *
- * Notion Job Summary 계약의 `techStacks`, `bookmarkCount`는 포함하지 않았다 --
- * `RecommendationJobResponse` KDoc과 같은 이유로 실제 뒷받침하는 구현이 없다(Job에 기술스택 Column
- * 없음, 북마크 수를 세는 Query 없음). 가짜 값을 채우지 않고 CONTRACT_MISMATCH로 남겼다.
+ * Notion Job Summary 계약의 `techStacks`/`bookmarkCount`는 PR #186 코드리뷰가 남긴 CONTRACT_MISMATCH를
+ * Issue #196에서 반영했다. [techStacks]는 `job.access.JobAiAnalysisAccessor`(AI 분석 결과)에서
+ * GETI 기술스택 마스터와 매칭된 것만 가져온다 -- Job 자체에 확정된 기술스택 Column이 없고, AI 분석은
+ * 참고용이라는 전제를 유지하되 매칭되지 않은 임의 이름은 노출하지 않는다. [bookmarkCount]는
+ * `job.access.JobBookmarkAccessor.countAllByJobIds`(요청자와 무관한 전체 북마크 수)에서 가져온다.
  */
 @Schema(description = "지원 목록 항목에 포함되는 공고 요약 정보")
 data class MyJobApplicationJobSummary(
@@ -78,4 +81,12 @@ data class MyJobApplicationJobSummary(
     val viewCount: Long,
     @param:Schema(description = "요청자(본인) 기준 북마크 여부", example = "false")
     val bookmarked: Boolean,
+    @param:Schema(
+        description =
+            "AI 분석에서 GETI 기술스택 마스터와 매칭된 기술 목록. AI 분석 결과는 참고용이며, 분석이 없거나 " +
+                "매칭된 기술이 없으면 빈 목록이다.",
+    )
+    val techStacks: List<JobAiSkillAccessView>,
+    @param:Schema(description = "전체 회원 기준 북마크 수", example = "12")
+    val bookmarkCount: Long,
 )

@@ -25,6 +25,7 @@ import org.springframework.data.domain.PageRequest
 import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
@@ -83,6 +84,9 @@ class RecommendationServiceImplTest {
     @Mock
     private lateinit var aiAnalysisSearchQueryPort: AiAnalysisSearchQueryPort
 
+    @Mock
+    private lateinit var jobAiAnalysisAccessor: JobAiAnalysisAccessor
+
     @Captor
     private lateinit var preferenceCaptor: ArgumentCaptor<MemberJobPreference>
 
@@ -99,6 +103,7 @@ class RecommendationServiceImplTest {
             "0 0 3 * * *",
             0.6,
             aiAnalysisSearchQueryPort,
+            jobAiAnalysisAccessor,
         )
     }
 
@@ -327,6 +332,7 @@ class RecommendationServiceImplTest {
                 "-",
                 0.6,
                 aiAnalysisSearchQueryPort,
+                jobAiAnalysisAccessor,
             )
         given(recommendationPreferenceRepository.findByMemberId(1L))
             .willReturn(RecommendationPreference(memberId = 1L, enabled = true))

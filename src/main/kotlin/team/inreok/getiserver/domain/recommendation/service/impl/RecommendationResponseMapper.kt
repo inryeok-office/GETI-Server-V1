@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.scheduling.support.CronExpression
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobAiSkillAccessView
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateSnapshot
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobResponse
@@ -29,6 +30,8 @@ internal fun buildRecommendationJobResponse(
     job: JobRecommendationCandidateSnapshot,
     company: CompanySummary?,
     bookmarked: Boolean,
+    techStacks: List<JobAiSkillAccessView> = emptyList(),
+    bookmarkCount: Long = 0L,
 ) = RecommendationJobResponse(
     jobId = job.jobId,
     title = job.title,
@@ -39,6 +42,8 @@ internal fun buildRecommendationJobResponse(
     endDate = job.recruitmentEndedAt,
     viewCount = job.viewCount,
     bookmarked = bookmarked,
+    techStacks = techStacks,
+    bookmarkCount = bookmarkCount,
 )
 
 /**

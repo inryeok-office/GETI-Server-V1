@@ -20,6 +20,17 @@ import java.time.LocalDateTime
 interface JobAiAnalysisAccessor {
     /** 아직 분석이 시작되지 않았으면(예: PUBLISHED 이후 비동기 Trigger가 아직 처리되지 않음) null. */
     fun findSnapshot(jobId: Long): JobAiAnalysisAccessSnapshot?
+
+    /**
+     * Job Summary의 `techStacks` Field(Issue #196)를 위한 Batch 조회다. [jobIds] 각각의
+     * `requiredSkills`/`preferredSkills`를 합쳐 GETI 기술스택 마스터와 매칭된 것(`techStackId`가
+     * 있는 것)만 `techStackId` 기준으로 중복 제거해 돌려준다. 매칭되지 않은 기술 이름(`techStackId`
+     * null)은 포함하지 않는다 -- AI가 자유롭게 추출한 이름을 그대로 노출하면 GETI 기술스택 마스터에
+     * 없는 값이 섞여 Client가 이후 필터·검색에 활용하기 어렵다. 목록 항목마다 [findSnapshot]을
+     * 반복 호출하면 N+1이 발생하므로 별도 Batch Method로 둔다. 분석이 없거나 매칭된 기술이 없는
+     * jobId는 결과 Map에 없거나 빈 목록이다.
+     */
+    fun findMatchedTechStacks(jobIds: Set<Long>): Map<Long, List<JobAiSkillAccessView>>
 }
 
 /**

@@ -39,6 +39,20 @@ class JobAiAnalysisAccessorImpl(
         )
     }
 
+    @Transactional(readOnly = true)
+    override fun findMatchedTechStacks(jobIds: Set<Long>): Map<Long, List<JobAiSkillAccessView>> {
+        if (jobIds.isEmpty()) return emptyMap()
+        return jobAiAnalysisRepository
+            .findAllById(jobIds)
+            .associate { analysis ->
+                val matched =
+                    (parseSkills(analysis.requiredSkills) + parseSkills(analysis.preferredSkills))
+                        .filter { it.techStackId != null }
+                        .distinctBy { it.techStackId }
+                analysis.jobId to matched
+            }
+    }
+
     private fun parseSkills(json: String?): List<JobAiSkillAccessView> {
         if (json.isNullOrBlank()) return emptyList()
         return objectMapper
