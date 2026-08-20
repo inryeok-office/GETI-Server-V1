@@ -16,6 +16,7 @@ enum class NotificationErrorCode(
 ) : ErrorCode {
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 알림을 찾을 수 없습니다."),
     NOTIFICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 알림만 접근할 수 있습니다."),
+    NOTIFICATION_ID_REQUIRED(HttpStatus.BAD_REQUEST, "단일 알림을 읽음 처리하려면 notificationId가 필요합니다."),
     ;
 
     override val code: String get() = name

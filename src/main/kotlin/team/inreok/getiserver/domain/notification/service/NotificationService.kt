@@ -3,40 +3,52 @@ package team.inreok.getiserver.domain.notification.service
 import org.springframework.data.domain.Pageable
 import team.inreok.getiserver.domain.notification.dto.NotificationCreateCommand
 import team.inreok.getiserver.domain.notification.dto.NotificationListResponse
-import team.inreok.getiserver.domain.notification.dto.NotificationReadAllResponse
+import team.inreok.getiserver.domain.notification.dto.NotificationReadRequest
 import team.inreok.getiserver.domain.notification.dto.NotificationReadResponse
 import team.inreok.getiserver.domain.notification.dto.UnreadNotificationCountResponse
 import team.inreok.getiserver.domain.notification.entity.type.NotificationType
 
 interface NotificationService {
     /**
-     * 내 알림 목록이다. `isRead`/`type`이 null이면 해당 조건을 적용하지 않는다. 정렬은
-     * 최신순으로 고정이라 `pageable`의 Sort는 사용하지 않는다.
+     * 내 알림 목록이다. `unreadOnly=true`면 읽지 않은 알림만, `notificationType`이 null이면 종류
+     * 조건을 적용하지 않는다. 정렬은 최신순으로 고정이라 `pageable`의 Sort는 사용하지 않는다.
+     *
+     * 응답의 `unreadCount`는 Filter와 무관한 전체 미읽음 수다(Header Badge 용도).
      */
     fun list(
         memberId: Long,
-        isRead: Boolean?,
-        type: NotificationType?,
+        unreadOnly: Boolean,
+        notificationType: NotificationType?,
         pageable: Pageable,
     ): NotificationListResponse
 
     fun countUnread(memberId: Long): UnreadNotificationCountResponse
 
     /**
-     * 단일 알림을 읽음 처리한다. 이미 읽은 알림이면 아무것도 바꾸지 않고 기존 값을 그대로
-     * 반환한다(멱등).
+     * 알림을 읽음 처리한다. `scope=SINGLE`이면 한 건, `scope=ALL`이면 본인의 읽지 않은 알림
+     * 전체가 대상이다. 이미 읽은 알림은 아무것도 바꾸지 않고 `updatedCount`에도 세지 않는다(멱등).
      *
-     * 알림이 없으면 [team.inreok.getiserver.domain.notification.exception.NotificationNotFoundException](404),
+     * `scope=SINGLE`인데 `notificationId`가 없으면
+     * [team.inreok.getiserver.domain.notification.exception.NotificationIdRequiredException](400),
+     * 알림이 없거나 이미 삭제됐으면
+     * [team.inreok.getiserver.domain.notification.exception.NotificationNotFoundException](404),
      * 다른 사용자의 알림이면
      * [team.inreok.getiserver.domain.notification.exception.NotificationAccessDeniedException](403).
      */
-    fun markAsRead(
+    fun read(
         memberId: Long,
-        notificationId: Long,
+        request: NotificationReadRequest,
     ): NotificationReadResponse
 
-    /** 읽지 않은 알림을 모두 읽음 처리한다. 이미 모두 읽었어도 정상 처리하고 `updatedCount=0`을 반환한다. */
-    fun markAllAsRead(memberId: Long): NotificationReadAllResponse
+    /**
+     * 알림 한 건을 Soft Delete한다. 삭제된 알림은 목록·읽지 않은 개수·읽음 처리 대상에서 모두
+     * 빠진다. 없거나 이미 삭제된 알림은 404, 다른 사용자의 알림은 403이다(멱등하지 않다 --
+     * 저장소의 다른 DELETE API와 같은 정책).
+     */
+    fun delete(
+        memberId: Long,
+        notificationId: Long,
+    )
 
     /**
      * 인앱 알림을 생성하고 생성된 알림 ID를 반환한다. **REST로 노출되지 않는 Module 내부

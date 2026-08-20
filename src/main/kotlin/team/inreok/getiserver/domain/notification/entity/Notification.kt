@@ -60,9 +60,9 @@ class Notification(
     @Column(name = "read_at")
     var readAt: LocalDateTime? = null
 
-    // 알림 삭제 API는 요구사항에 없어(원본 요구사항 문서 4절) 이 Column을 채우는 코드는 아직
-    // 없다. V2 Schema에 이미 있으므로 Mapping만 유지하고, 조회 Query는 방어적으로
-    // deletedAt IS NULL을 건다.
+    // 삭제 시각. null이 아니면 목록·읽지 않은 개수·읽음 처리 대상에서 모두 제외된다
+    // (Issue #187에서 DELETE API가 이 Column을 채우기 시작했다 -- V16의 "이번 범위에서는
+    // 사용하지 않는다"라는 설명은 그 시점 기준이고, 이미 병합된 Migration이라 수정하지 않는다).
     @Column(name = "deleted_at")
     var deletedAt: LocalDateTime? = null
 
@@ -74,5 +74,14 @@ class Notification(
         if (isRead) return
         isRead = true
         this.readAt = readAt
+    }
+
+    /**
+     * 알림을 Soft Delete한다. 읽음 여부는 건드리지 않는다 -- 읽지 않은 알림을 삭제하면 조회
+     * Query가 `deletedAt IS NULL`을 걸고 있어 읽지 않은 개수에서 자연히 빠지므로, 상태를 함께
+     * 바꿔 "읽었다"라는 사실을 지어낼 필요가 없다.
+     */
+    fun softDelete(deletedAt: LocalDateTime) {
+        this.deletedAt = deletedAt
     }
 }
