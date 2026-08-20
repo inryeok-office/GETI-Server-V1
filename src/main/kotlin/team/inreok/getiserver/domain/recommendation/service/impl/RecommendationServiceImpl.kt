@@ -122,20 +122,28 @@ class RecommendationServiceImpl(
         query: JobBookmarkQuery,
         pageable: Pageable,
     ): RecommendationJobListResponse {
-        val page = jobRecommendationCandidateQueryPort.findBookmarkedByMemberId(memberId, query, pageable)
+        val bookmarkedJobIdsPage =
+            memberJobPreferenceRepository.findBookmarkedJobIdsByMemberIdAndQuery(memberId, query, pageable)
+        val jobsById = jobRecommendationCandidateQueryPort.findAllByIds(bookmarkedJobIdsPage.content.toSet())
         val companies =
             companyQuery.findActiveSummaries(
-                page.content.map { it.companyId }.toSet(),
+                jobsById.values.map { it.companyId }.toSet(),
                 memberId,
             )
         return RecommendationJobListResponse.of(
-            page.map { job ->
-                buildRecommendationJobResponse(
-                    job = job,
-                    company = companies[job.companyId],
-                    bookmarked = true,
-                )
-            },
+            PageImpl(
+                bookmarkedJobIdsPage.content.mapNotNull { jobId ->
+                    jobsById[jobId]?.let { job ->
+                        buildRecommendationJobResponse(
+                            job = job,
+                            company = companies[job.companyId],
+                            bookmarked = true,
+                        )
+                    }
+                },
+                pageable,
+                bookmarkedJobIdsPage.totalElements,
+            ),
         )
     }
 

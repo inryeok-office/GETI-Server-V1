@@ -1,12 +1,9 @@
 package team.inreok.getiserver.domain.job.service.impl
 
-import org.springframework.data.domain.Page
-import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
-import team.inreok.getiserver.domain.job.query.JobBookmarkQuery
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateQueryPort
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateSnapshot
 import team.inreok.getiserver.domain.job.repository.JobRepository
@@ -16,14 +13,6 @@ import team.inreok.getiserver.domain.job.repository.JobRepository
 class JobRecommendationCandidateQueryPortImpl(
     private val jobRepository: JobRepository,
 ) : JobRecommendationCandidateQueryPort {
-    @Transactional(readOnly = true)
-    override fun findBookmarkedByMemberId(
-        memberId: Long,
-        query: JobBookmarkQuery,
-        pageable: Pageable,
-    ): Page<JobRecommendationCandidateSnapshot> =
-        jobRepository.findBookmarkedByMemberId(memberId, query, pageable).map { it.toSnapshot() }
-
     @Transactional(readOnly = true)
     override fun findAllPublished(): List<JobRecommendationCandidateSnapshot> =
         jobRepository

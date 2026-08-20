@@ -592,8 +592,9 @@ class RecommendationServiceImplTest {
     @Test
     fun `북마크 목록은 Job 필터를 전달하고 결과를 실제 북마크 상태로 반환한다`() {
         val query = JobBookmarkQuery("백엔드", PostingType.GENERAL, "GENERAL", JobBookmarkSort.DEADLINE)
-        given(jobRecommendationCandidateQueryPort.findBookmarkedByMemberId(1L, query, firstPage))
-            .willReturn(PageImpl(listOf(jobOf()), firstPage, 1))
+        given(memberJobPreferenceRepository.findBookmarkedJobIdsByMemberIdAndQuery(1L, query, firstPage))
+            .willReturn(PageImpl(listOf(1L), firstPage, 1))
+        given(jobRecommendationCandidateQueryPort.findAllByIds(setOf(1L))).willReturn(mapOf(1L to jobOf()))
         given(companyQuery.findActiveSummaries(setOf(100L), 1L)).willReturn(emptyMap())
 
         val result = service.listBookmarkedJobs(1L, query, firstPage)
@@ -602,7 +603,8 @@ class RecommendationServiceImplTest {
         assertThat(result.content.single().jobId).isEqualTo(1L)
         assertThat(result.content.single().bookmarked).isTrue()
         assertThat(result.totalElements).isEqualTo(1)
-        verify(jobRecommendationCandidateQueryPort).findBookmarkedByMemberId(1L, query, firstPage)
+        verify(memberJobPreferenceRepository).findBookmarkedJobIdsByMemberIdAndQuery(1L, query, firstPage)
+        verify(jobRecommendationCandidateQueryPort).findAllByIds(setOf(1L))
         verify(companyQuery).findActiveSummaries(setOf(100L), 1L)
     }
 

@@ -86,21 +86,21 @@ class JobBookmarkQueryIntegrationTest
             bookmark(otherMemberJob.id!!, otherMemberId)
 
             val firstPage =
-                jobRepository.findBookmarkedByMemberId(
+                memberJobPreferenceRepository.findBookmarkedJobIdsByMemberIdAndQuery(
                     memberId,
                     JobBookmarkQuery(null, null, null, JobBookmarkSort.LATEST),
                     pageable,
                 )
             val secondPage =
-                jobRepository.findBookmarkedByMemberId(
+                memberJobPreferenceRepository.findBookmarkedJobIdsByMemberIdAndQuery(
                     memberId,
                     JobBookmarkQuery(null, null, null, JobBookmarkSort.LATEST),
                     PageRequest.of(1, 1),
                 )
 
             assertThat(firstPage.totalElements).isEqualTo(2)
-            assertThat(firstPage.content.single().id).isEqualTo(first.id)
-            assertThat(secondPage.content.single().id).isEqualTo(second.id)
+            assertThat(firstPage.content.single()).isEqualTo(first.id)
+            assertThat(secondPage.content.single()).isEqualTo(second.id)
         }
 
         @Test
@@ -116,13 +116,13 @@ class JobBookmarkQueryIntegrationTest
             bookmark(wrongType.id!!, memberId)
 
             val result =
-                jobRepository.findBookmarkedByMemberId(
+                memberJobPreferenceRepository.findBookmarkedJobIdsByMemberIdAndQuery(
                     memberId,
                     JobBookmarkQuery("백엔드", PostingType.GENERAL, CompanyType.GENERAL.name, JobBookmarkSort.LATEST),
                     PageRequest.of(0, 20),
                 )
 
-            assertThat(result.content.map { it.id }).containsExactly(matching.id)
+            assertThat(result.content).containsExactly(matching.id)
             assertThat(result.totalElements).isEqualTo(1)
         }
 
