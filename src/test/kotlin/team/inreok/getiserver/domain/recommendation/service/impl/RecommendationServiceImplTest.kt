@@ -26,6 +26,7 @@ import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
+import team.inreok.getiserver.domain.job.access.JobAiSkillAccessView
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
@@ -48,6 +49,7 @@ import team.inreok.getiserver.domain.recommendation.exception.RecommendationExcl
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationJobNotFoundException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationNotEnrolledException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationPreferenceWriteConflictException
+import team.inreok.getiserver.domain.recommendation.repository.JobBookmarkCount
 import team.inreok.getiserver.domain.recommendation.repository.MemberJobPreferenceRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationGenerationStateRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationPreferenceRepository
@@ -125,6 +127,15 @@ class RecommendationServiceImplTest {
         applicationMethod = ApplicationMethod.INTERNAL,
         viewCount = 10,
     )
+
+    // countBookmarksByJobIds가 반환하는 Interface Projection(JobBookmarkCount)의 최소 Test 구현이다.
+    private fun jobBookmarkCountOf(
+        jobId: Long,
+        bookmarkCount: Long,
+    ) = object : JobBookmarkCount {
+        override val jobId: Long = jobId
+        override val bookmarkCount: Long = bookmarkCount
+    }
 
     private fun recommendationOf(
         jobId: Long = 1L,
@@ -602,12 +613,19 @@ class RecommendationServiceImplTest {
             .willReturn(PageImpl(listOf(1L), firstPage, 1))
         given(jobRecommendationCandidateQueryPort.findAllByIds(setOf(1L))).willReturn(mapOf(1L to jobOf()))
         given(companyQuery.findActiveSummaries(setOf(100L), 1L)).willReturn(emptyMap())
+        given(jobAiAnalysisAccessor.findMatchedTechStacks(setOf(1L)))
+            .willReturn(mapOf(1L to listOf(JobAiSkillAccessView(techStackId = 3L, name = "Kotlin"))))
+        given(memberJobPreferenceRepository.countBookmarksByJobIds(setOf(1L)))
+            .willReturn(listOf(jobBookmarkCountOf(1L, 9L)))
 
         val result = service.listBookmarkedJobs(1L, query, firstPage)
 
         assertThat(result.content).hasSize(1)
         assertThat(result.content.single().jobId).isEqualTo(1L)
         assertThat(result.content.single().bookmarked).isTrue()
+        assertThat(result.content.single().techStacks)
+            .containsExactly(JobAiSkillAccessView(techStackId = 3L, name = "Kotlin"))
+        assertThat(result.content.single().bookmarkCount).isEqualTo(9L)
         assertThat(result.totalElements).isEqualTo(1)
         verify(memberJobPreferenceRepository).findBookmarkedJobIdsByMemberIdAndQuery(1L, query, firstPage)
         verify(jobRecommendationCandidateQueryPort).findAllByIds(setOf(1L))

@@ -137,6 +137,8 @@ class RecommendationServiceImpl(
                 jobsById.values.map { it.companyId }.toSet(),
                 memberId,
             )
+        val techStacks = techStacksOf(jobsById.keys)
+        val bookmarkCounts = bookmarkCountsOf(jobsById.keys)
         return RecommendationJobListResponse.of(
             PageImpl(
                 bookmarkedJobIdsPage.content.mapNotNull { jobId ->
@@ -145,6 +147,8 @@ class RecommendationServiceImpl(
                             job = job,
                             company = companies[job.companyId],
                             bookmarked = true,
+                            techStacks = techStacks[job.jobId] ?: emptyList(),
+                            bookmarkCount = bookmarkCounts[job.jobId] ?: 0L,
                         )
                     }
                 },
