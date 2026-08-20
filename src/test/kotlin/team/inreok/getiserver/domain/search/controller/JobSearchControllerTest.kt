@@ -75,6 +75,7 @@ class JobSearchControllerTest
                     any(),
                     any(),
                     any(),
+                    any(),
                     anyBoolean(),
                     anySort(),
                     any(),
@@ -116,6 +117,7 @@ class JobSearchControllerTest
                     any(),
                     any(),
                     any(),
+                    any(),
                     anyBoolean(),
                     anySort(),
                     any(),
@@ -132,6 +134,7 @@ class JobSearchControllerTest
         fun `size 0과 100은 허용되고 101은 서버가 최대값으로 강제한다`() {
             given(
                 jobSearchService.search(
+                    any(),
                     any(),
                     any(),
                     any(),
@@ -213,20 +216,21 @@ class JobSearchControllerTest
         fun `AI 분석 필터를 Service에 올바른 순서로 전달하면 200을 반환한다`() {
             given(
                 jobSearchService.search(
-                    any(),
-                    any(),
-                    any(),
-                    any(),
-                    any(),
-                    any(),
-                    eq(AiFitLevel.SUITABLE),
-                    eq(AiFitLevel.CONDITIONAL),
-                    eq(AiDifficulty.EASY),
-                    anyBoolean(),
-                    anySort(),
-                    any(),
-                    anyPageable(),
-                    anyLong(),
+                    query = any(),
+                    postingType = any(),
+                    applicationMethod = eq(ApplicationMethod.EXTERNAL),
+                    status = any(),
+                    companyType = any(),
+                    sourceName = any(),
+                    targetGrade = any(),
+                    highSchoolGraduateFit = eq(AiFitLevel.SUITABLE),
+                    entryLevelFit = eq(AiFitLevel.CONDITIONAL),
+                    difficulty = eq(AiDifficulty.EASY),
+                    openOnly = anyBoolean(),
+                    sort = anySort(),
+                    direction = any(),
+                    pageable = anyPageable(),
+                    requesterId = anyLong(),
                 ),
             ).willReturn(searchResponse())
 
@@ -236,8 +240,17 @@ class JobSearchControllerTest
                         .param("highSchoolGraduateFit", "SUITABLE")
                         .param("entryLevelFit", "CONDITIONAL")
                         .param("difficulty", "EASY")
+                        .param("applicationMethod", "EXTERNAL")
                         .with(authOf(1L, "STUDENT")),
                 ).andExpect(status().isOk)
+        }
+
+        @Test
+        fun `잘못된 지원 방식 필터 값은 400과 TYPE_MISMATCH를 반환한다`() {
+            mockMvc
+                .perform(get("/api/v1/jobs").param("applicationMethod", "BOGUS").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.error.code").value("TYPE_MISMATCH"))
         }
 
         // --- Fixture ---
