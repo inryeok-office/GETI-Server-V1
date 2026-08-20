@@ -35,6 +35,8 @@ import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
+import team.inreok.getiserver.domain.job.access.JobAiSkillAccessView
 import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
@@ -138,6 +140,9 @@ class JobApplicationServiceImpl(
     // 소비하는 job.access.JobBookmarkAccessor(Issue #171 SPI)의 새 소비자다.
     private val companyQuery: CompanyQuery,
     private val jobBookmarkAccessor: JobBookmarkAccessor,
+    // list() 응답의 techStacks/bookmarkCount(Issue #196)를 채우기 위해 쓴다. jobBookmarkAccessor와
+    // 같은 이유로 job이 소유하고 각각 ai/recommendation이 구현하는 SPI의 새 소비자다.
+    private val jobAiAnalysisAccessor: JobAiAnalysisAccessor,
     private val objectMapper: ObjectMapper,
 ) : JobApplicationService {
     private val log = LoggerFactory.getLogger(JobApplicationServiceImpl::class.java)
@@ -330,9 +335,21 @@ class JobApplicationServiceImpl(
             if (companyIds.isEmpty()) emptyMap() else companyQuery.findActiveSummaries(companyIds, studentMemberId)
         val bookmarkedJobIds =
             if (jobIds.isEmpty()) emptySet() else jobBookmarkAccessor.findAllByJobIds(jobIds, studentMemberId)
+        val bookmarkCounts = if (jobIds.isEmpty()) emptyMap() else jobBookmarkAccessor.countAllByJobIds(jobIds)
+        val techStacks = if (jobIds.isEmpty()) emptyMap() else jobAiAnalysisAccessor.findMatchedTechStacks(jobIds)
 
         return MyJobApplicationListResponse(
-            content = page.content.map { toMyListItem(it, jobs, companies, bookmarkedJobIds) },
+            content =
+                page.content.map {
+                    toMyListItem(
+                        it,
+                        jobs,
+                        companies,
+                        bookmarkedJobIds,
+                        bookmarkCounts,
+                        techStacks,
+                    )
+                },
             page = page.number,
             size = page.size,
             totalElements = page.totalElements,
@@ -411,6 +428,8 @@ private fun toMyListItem(
     jobs: Map<Long, JobApplicationJobSnapshot>,
     companies: Map<Long, CompanySummary>,
     bookmarkedJobIds: Set<Long>,
+    bookmarkCounts: Map<Long, Long>,
+    techStacks: Map<Long, List<JobAiSkillAccessView>>,
 ): MyJobApplicationListItemResponse {
     val job = jobs[application.jobId]
     return MyJobApplicationListItemResponse(
@@ -427,6 +446,8 @@ private fun toMyListItem(
                     endDate = it.recruitmentEndedAt,
                     viewCount = it.viewCount,
                     bookmarked = it.jobId in bookmarkedJobIds,
+                    techStacks = techStacks[it.jobId] ?: emptyList(),
+                    bookmarkCount = bookmarkCounts[it.jobId] ?: 0L,
                 )
             },
         status = application.status,

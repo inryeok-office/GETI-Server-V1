@@ -26,6 +26,7 @@ import team.inreok.getiserver.domain.application.dto.MyJobApplicationListRespons
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.service.JobApplicationService
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobAiSkillAccessView
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
@@ -76,6 +77,8 @@ class MyJobApplicationControllerTest
                                     endDate = null,
                                     viewCount = 10,
                                     bookmarked = false,
+                                    techStacks = listOf(JobAiSkillAccessView(techStackId = 3L, name = "Kotlin")),
+                                    bookmarkCount = 5,
                                 ),
                             status = JobApplicationStatus.SUBMITTED,
                             submittedAt = fixedTime,
@@ -100,6 +103,8 @@ class MyJobApplicationControllerTest
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.data.content[0].applicationId").value(1))
                 .andExpect(jsonPath("$.data.content[0].job.title").value("인턴 채용"))
+                .andExpect(jsonPath("$.data.content[0].job.techStacks[0].name").value("Kotlin"))
+                .andExpect(jsonPath("$.data.content[0].job.bookmarkCount").value(5))
                 .andExpect(jsonPath("$.data.content[0].status").value("SUBMITTED"))
         }
 

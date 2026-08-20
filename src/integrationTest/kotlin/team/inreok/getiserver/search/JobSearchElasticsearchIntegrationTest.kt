@@ -576,12 +576,14 @@ class JobSearchElasticsearchIntegrationTest {
             }
     }
 
-    /** 항상 빈 Set을 돌려주는 최소 구현이다. 이 Test는 Query 정확성만 다루고 북마크 여부는 다루지 않는다. */
+    /** 항상 빈 값을 돌려주는 최소 구현이다. 이 Test는 Query 정확성만 다루고 북마크 여부·수는 다루지 않는다. */
     private object NoOpJobBookmarkAccessor : JobBookmarkAccessor {
         override fun findAllByJobIds(
             jobIds: Set<Long>,
             requesterMemberId: Long,
         ): Set<Long> = emptySet()
+
+        override fun countAllByJobIds(jobIds: Set<Long>): Map<Long, Long> = emptyMap()
     }
 
     companion object {

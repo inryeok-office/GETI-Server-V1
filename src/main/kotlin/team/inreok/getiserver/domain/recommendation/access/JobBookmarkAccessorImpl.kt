@@ -28,4 +28,12 @@ class JobBookmarkAccessorImpl(
             .findBookmarkedJobIdsByMemberIdAndJobIdIn(requesterMemberId, jobIds)
             .toSet()
     }
+
+    @Transactional(readOnly = true)
+    override fun countAllByJobIds(jobIds: Set<Long>): Map<Long, Long> {
+        if (jobIds.isEmpty()) return emptyMap()
+        return memberJobPreferenceRepository
+            .countBookmarksByJobIds(jobIds)
+            .associate { it.jobId to it.bookmarkCount }
+    }
 }

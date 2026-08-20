@@ -24,6 +24,8 @@ import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
+import team.inreok.getiserver.domain.job.access.JobAiSkillAccessView
 import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
@@ -72,6 +74,9 @@ class JobApplicationServiceImplQueryTest {
     @Mock
     private lateinit var jobBookmarkAccessor: JobBookmarkAccessor
 
+    @Mock
+    private lateinit var jobAiAnalysisAccessor: JobAiAnalysisAccessor
+
     private val service: JobApplicationService by lazy {
         JobApplicationServiceImpl(
             jobApplicationRepository,
@@ -85,6 +90,7 @@ class JobApplicationServiceImplQueryTest {
             fileLinkPort,
             companyQuery,
             jobBookmarkAccessor,
+            jobAiAnalysisAccessor,
             JsonMapper(),
         )
     }
@@ -133,6 +139,9 @@ class JobApplicationServiceImplQueryTest {
         given(companyQuery.findActiveSummaries(setOf(1L), 1L))
             .willReturn(mapOf(1L to CompanySummary(companyId = 1L, name = "인력개발원")))
         given(jobBookmarkAccessor.findAllByJobIds(setOf(1L), 1L)).willReturn(setOf(1L))
+        given(jobBookmarkAccessor.countAllByJobIds(setOf(1L))).willReturn(mapOf(1L to 7L))
+        given(jobAiAnalysisAccessor.findMatchedTechStacks(setOf(1L)))
+            .willReturn(mapOf(1L to listOf(JobAiSkillAccessView(techStackId = 3L, name = "Kotlin"))))
 
         val result = service.list(1L, null, PageRequest.of(0, 20))
 
@@ -144,6 +153,8 @@ class JobApplicationServiceImplQueryTest {
         assertThat(job.title).isEqualTo("인턴 채용")
         assertThat(job.company?.name).isEqualTo("인력개발원")
         assertThat(job.bookmarked).isTrue()
+        assertThat(job.bookmarkCount).isEqualTo(7L)
+        assertThat(job.techStacks).containsExactly(JobAiSkillAccessView(techStackId = 3L, name = "Kotlin"))
     }
 
     @Test

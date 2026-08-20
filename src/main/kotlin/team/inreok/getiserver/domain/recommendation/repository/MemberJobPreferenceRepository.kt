@@ -105,4 +105,26 @@ interface MemberJobPreferenceRepository :
         @Param("exclusionType") exclusionType: ExclusionType?,
         pageable: Pageable,
     ): Page<MemberJobPreference>
+
+    /** Job Summary의 `bookmarkCount` Field(Issue #196)를 위한 Batch 집계다. Job별로 개별 COUNT
+     * Query를 날리면 목록 항목 수만큼 Query가 늘어나(N+1) `jobIds`를 한 번에 묶어 GROUP BY로
+     * 가져온다(`ProgramApplicationRepository.countActiveApplicantsByProgramIds`와 같은 관례).
+     * 북마크가 하나도 없는 jobId는 결과에 없으므로 호출 측이 0으로 취급해야 한다. */
+    @Query(
+        """
+        SELECT p.jobId AS jobId, COUNT(p) AS bookmarkCount FROM MemberJobPreference p
+        WHERE p.jobId IN :jobIds AND p.bookmarked = true
+        GROUP BY p.jobId
+        """,
+    )
+    fun countBookmarksByJobIds(
+        @Param("jobIds") jobIds: Collection<Long>,
+    ): List<JobBookmarkCount>
+}
+
+// countBookmarksByJobIds 전용 Interface Projection이다(ProgramApplicantCount와 같은 관례). Kotlin
+// Property는 Getter(getJobId/getBookmarkCount)로 컴파일되어 JPQL Alias와 이름으로 매칭된다.
+interface JobBookmarkCount {
+    val jobId: Long
+    val bookmarkCount: Long
 }

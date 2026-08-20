@@ -249,6 +249,8 @@ Application Phase 8(Issue #136)이 `job.access` 역방향 SPI의 세 번째 사�
 
 Search AI Filter(Issue #173)는 `search`가 `ai.entity.type`의 `AiFitLevel`/`AiDifficulty`를 Controller·Service API 계약에 사용해야 하므로 두 Enum에 `@NamedInterface`를 직접 선언해 공개한 사례다. `search`는 이미 `ai.query.AiAnalysisSearchQueryPort`를 통해 `ai`에 의존하고 있어 이 공개 Type 참조가 새 순환을 만들지 않는다. Elasticsearch Read Model에는 이 Enum의 `name`을 문자열로 저장하고, Search Filter는 같은 값에 대한 Keyword 정확 일치를 사용한다. 목록 응답의 내부 AI Metadata는 공개하지 않는다.
 
+Job Summary `techStacks`/`bookmarkCount` 반영(Issue #196, PR #186 코드리뷰 DECISION_REQUIRED 후속)은 기존 `job.access.JobAiAnalysisAccessor`/`JobBookmarkAccessor` SPI를 확장한 사례다. `JobAiAnalysisAccessor`는 지금까지 `job`(`JobServiceImpl`)만 단건 `findSnapshot`으로 소비했는데, `application`(`JobApplicationServiceImpl.list`)과 `recommendation`(`RecommendationServiceImpl`)이 목록 응답의 `techStacks`를 채우려고 새 Batch Method `findMatchedTechStacks`를 추가로 소비한다 -- 두 Domain 모두 이미 `job.access`의 다른 SPI(`JobBookmarkAccessor` 등) 때문에 `job`에 의존하므로 새 순환이 생기지 않는다. `requiredSkills`/`preferredSkills`를 합쳐 GETI 기술스택 마스터와 매칭된 것(`techStackId`가 있는 것)만 돌려주는 이유는 AI가 자유롭게 추출한 미매칭 이름을 그대로 노출하면 Client가 이후 필터·검색에 활용하기 어렵기 때문이다(AI 분석 결과는 여전히 참고용이라는 전제는 유지한다). `JobBookmarkAccessor`는 특정 회원 기준 조회(`findAllByJobIds`)만 있었는데, 전체 회원 기준 집계 `countAllByJobIds`를 추가했다 -- `recommendation`은 이미 `MemberJobPreference`를 직접 소유하므로 이 SPI를 거치지 않고 `MemberJobPreferenceRepository.countBookmarksByJobIds`를 그대로 쓰고, `application`만 새 SPI Method의 소비자다.
+
 새로운 Domain 간 의존이 필요해지면 이 방식(Named Interface로 필요한 Package/타입만 명시적으로 공개)을 그대로 따른다.
 
 ## 만들지 않는 Package

@@ -48,6 +48,7 @@ import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.entity.type.FilePurpose
 import team.inreok.getiserver.domain.file.link.FileLinkPort
 import team.inreok.getiserver.domain.file.link.FileSnapshot
+import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
 import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
@@ -92,6 +93,9 @@ class JobApplicationServiceImplTest {
     @Mock
     private lateinit var jobBookmarkAccessor: JobBookmarkAccessor
 
+    @Mock
+    private lateinit var jobAiAnalysisAccessor: JobAiAnalysisAccessor
+
     @Captor
     private lateinit var jobApplicationCaptor: ArgumentCaptor<JobApplication>
 
@@ -110,6 +114,7 @@ class JobApplicationServiceImplTest {
             fileLinkPort,
             companyQuery,
             jobBookmarkAccessor,
+            jobAiAnalysisAccessor,
             jsonMapper,
         )
     }

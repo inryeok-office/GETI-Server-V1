@@ -106,6 +106,8 @@ class RecommendationControllerTest
                 endDate = null,
                 viewCount = 10,
                 bookmarked = false,
+                techStacks = emptyList(),
+                bookmarkCount = 0,
             )
 
         private fun recommendationItemOf() =
