@@ -10,6 +10,7 @@ import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.ArgumentMatchers.isNull
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
@@ -20,11 +21,14 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import team.inreok.getiserver.domain.notification.dto.NotificationCreateCommand
+import team.inreok.getiserver.domain.notification.dto.NotificationReadRequest
+import team.inreok.getiserver.domain.notification.dto.NotificationReadScope
 import team.inreok.getiserver.domain.notification.entity.Notification
 import team.inreok.getiserver.domain.notification.entity.type.NotificationTargetType
 import team.inreok.getiserver.domain.notification.entity.type.NotificationTargetUnavailableReason
 import team.inreok.getiserver.domain.notification.entity.type.NotificationType
 import team.inreok.getiserver.domain.notification.exception.NotificationAccessDeniedException
+import team.inreok.getiserver.domain.notification.exception.NotificationIdRequiredException
 import team.inreok.getiserver.domain.notification.exception.NotificationNotFoundException
 import team.inreok.getiserver.domain.notification.repository.NotificationRepository
 import team.inreok.getiserver.domain.notification.service.NotificationTargetAvailability
@@ -75,6 +79,8 @@ class NotificationServiceImplTest {
     private fun anyPageable(): Pageable = any(Pageable::class.java) ?: Pageable.unpaged()
 
     private fun anyDateTime(): LocalDateTime = any(LocalDateTime::class.java) ?: LocalDateTime.now()
+
+    private fun anyTargetRefs(): Set<NotificationTargetRef> = any() ?: emptySet()
 
     private val availableTarget =
         NotificationTargetAvailability(available = true, reason = null, deepLink = "/programs/100")
@@ -140,7 +146,7 @@ class NotificationServiceImplTest {
         given(notificationTargetResolver.resolveAll(setOf(target), ownerMemberId))
             .willReturn(mapOf(target to availableTarget))
 
-        val response = service().list(ownerMemberId, null, null, PageRequest.of(0, 20))
+        val response = service().list(ownerMemberId, false, null, PageRequest.of(0, 20))
 
         assertThat(response.content).hasSize(1)
         with(response.content.first()) {
@@ -172,7 +178,7 @@ class NotificationServiceImplTest {
                 ),
             )
 
-        val response = service().list(ownerMemberId, null, null, PageRequest.of(0, 20))
+        val response = service().list(ownerMemberId, false, null, PageRequest.of(0, 20))
 
         assertThat(response.content).hasSize(1)
         with(response.content.first()) {
@@ -187,7 +193,7 @@ class NotificationServiceImplTest {
         givenPage(listOf(notification(1L, targetType = null, targetId = null)))
         given(notificationTargetResolver.resolveAll(emptySet(), ownerMemberId)).willReturn(emptyMap())
 
-        val response = service().list(ownerMemberId, null, null, PageRequest.of(0, 20))
+        val response = service().list(ownerMemberId, false, null, PageRequest.of(0, 20))
 
         with(response.content.first()) {
             assertThat(targetType).isNull()
@@ -199,11 +205,11 @@ class NotificationServiceImplTest {
     }
 
     @Test
-    fun `읽음 여부와 종류 필터를 Repository에 그대로 전달한다`() {
+    fun `unreadOnly가 true면 읽지 않은 알림만 조회하고 종류 필터도 그대로 전달한다`() {
         givenPage(emptyList())
         given(notificationTargetResolver.resolveAll(emptySet(), ownerMemberId)).willReturn(emptyMap())
 
-        service().list(ownerMemberId, false, NotificationType.JOB_PUBLISHED, PageRequest.of(1, 50))
+        service().list(ownerMemberId, true, NotificationType.JOB_PUBLISHED, PageRequest.of(1, 50))
 
         verify(notificationRepository).findMyNotifications(
             memberId = ownerMemberId,
@@ -214,11 +220,40 @@ class NotificationServiceImplTest {
     }
 
     @Test
+    fun `unreadOnly가 false면 읽음 여부 조건을 걸지 않는다`() {
+        givenPage(emptyList())
+        given(notificationTargetResolver.resolveAll(emptySet(), ownerMemberId)).willReturn(emptyMap())
+
+        // false는 "읽은 것만"이 아니라 "필터 없음"이다(Notion 계약이 Boolean Flag이기 때문).
+        service().list(ownerMemberId, false, null, PageRequest.of(0, 20))
+
+        verify(notificationRepository).findMyNotifications(
+            memberId = ownerMemberId,
+            isRead = null,
+            type = null,
+            pageable = PageRequest.of(0, 20),
+        )
+    }
+
+    @Test
+    fun `목록의 unreadCount는 필터와 무관한 전체 미읽음 수다`() {
+        givenPage(listOf(notification(1L, isRead = true, readAt = LocalDateTime.of(2026, 8, 1, 9, 0))))
+        given(notificationTargetResolver.resolveAll(anyTargetRefs(), anyLong())).willReturn(emptyMap())
+        given(notificationRepository.countByRecipientMemberIdAndIsReadFalseAndDeletedAtIsNull(ownerMemberId))
+            .willReturn(7L)
+
+        // 읽은 알림만 담긴 Page를 받아도 Badge용 전체 미읽음 수는 그대로 내려간다.
+        val response = service().list(ownerMemberId, true, NotificationType.JOB_PUBLISHED, PageRequest.of(0, 20))
+
+        assertThat(response.unreadCount).isEqualTo(7L)
+    }
+
+    @Test
     fun `클라이언트가 보낸 정렬은 무시한다`() {
         givenPage(emptyList())
         given(notificationTargetResolver.resolveAll(emptySet(), ownerMemberId)).willReturn(emptyMap())
 
-        service().list(ownerMemberId, null, null, PageRequest.of(0, 20, Sort.by("title").ascending()))
+        service().list(ownerMemberId, false, null, PageRequest.of(0, 20, Sort.by("title").ascending()))
 
         // Sort를 그대로 넘기면 JPQL의 ORDER BY(createdAt DESC, id DESC)와 충돌하므로 제거해야 한다.
         val captor = ArgumentCaptor.forClass(Pageable::class.java)
@@ -257,33 +292,45 @@ class NotificationServiceImplTest {
     fun `읽지 않은 알림을 읽음 처리한다`() {
         val target = notification(1L)
         given(notificationRepository.findById(1L)).willReturn(Optional.of(target))
+        given(notificationRepository.countByRecipientMemberIdAndIsReadFalseAndDeletedAtIsNull(ownerMemberId))
+            .willReturn(2L)
 
-        val response = service().markAsRead(ownerMemberId, 1L)
+        val response = service().read(ownerMemberId, single(1L))
 
-        assertThat(response.notificationId).isEqualTo(1L)
-        assertThat(response.isRead).isTrue
+        assertThat(response.updatedCount).isEqualTo(1L)
+        assertThat(response.unreadCount).isEqualTo(2L)
+        assertThat(response.readAt).isNotNull
         assertThat(target.isRead).isTrue
         assertThat(target.readAt).isNotNull
     }
 
     @Test
-    fun `이미 읽은 알림을 다시 읽음 처리해도 처음 읽은 시각이 유지된다`() {
+    fun `이미 읽은 알림을 다시 읽음 처리하면 갱신 0건이고 처음 읽은 시각이 유지된다`() {
         val firstReadAt = LocalDateTime.of(2026, 8, 1, 9, 0)
         val target = notification(1L, isRead = true, readAt = firstReadAt)
         given(notificationRepository.findById(1L)).willReturn(Optional.of(target))
 
-        val response = service().markAsRead(ownerMemberId, 1L)
+        val response = service().read(ownerMemberId, single(1L))
 
-        assertThat(response.isRead).isTrue
+        assertThat(response.updatedCount).isZero
         assertThat(response.readAt).isEqualTo(firstReadAt)
         assertThat(target.readAt).isEqualTo(firstReadAt)
+    }
+
+    @Test
+    fun `scope가 SINGLE인데 notificationId가 없으면 NOTIFICATION_ID_REQUIRED다`() {
+        assertThatThrownBy {
+            service().read(ownerMemberId, NotificationReadRequest(NotificationReadScope.SINGLE, null))
+        }.isInstanceOf(NotificationIdRequiredException::class.java)
+
+        verifyNoInteractions(notificationRepository)
     }
 
     @Test
     fun `없는 알림을 읽음 처리하면 NOTIFICATION_NOT_FOUND다`() {
         given(notificationRepository.findById(99L)).willReturn(Optional.empty())
 
-        assertThatThrownBy { service().markAsRead(ownerMemberId, 99L) }
+        assertThatThrownBy { service().read(ownerMemberId, single(99L)) }
             .isInstanceOf(NotificationNotFoundException::class.java)
     }
 
@@ -292,7 +339,7 @@ class NotificationServiceImplTest {
         val target = notification(1L, deletedAt = LocalDateTime.of(2026, 8, 5, 9, 0))
         given(notificationRepository.findById(1L)).willReturn(Optional.of(target))
 
-        assertThatThrownBy { service().markAsRead(ownerMemberId, 1L) }
+        assertThatThrownBy { service().read(ownerMemberId, single(1L)) }
             .isInstanceOf(NotificationNotFoundException::class.java)
 
         // 삭제된 알림은 목록에도 나오지 않으므로 읽음 상태를 바꾸지 않는다.
@@ -311,7 +358,7 @@ class NotificationServiceImplTest {
             )
         given(notificationRepository.findById(1L)).willReturn(Optional.of(target))
 
-        assertThatThrownBy { service().markAsRead(ownerMemberId, 1L) }
+        assertThatThrownBy { service().read(ownerMemberId, single(1L)) }
             .isInstanceOf(NotificationNotFoundException::class.java)
     }
 
@@ -320,7 +367,7 @@ class NotificationServiceImplTest {
         val target = notification(1L, recipientMemberId = otherMemberId)
         given(notificationRepository.findById(1L)).willReturn(Optional.of(target))
 
-        assertThatThrownBy { service().markAsRead(ownerMemberId, 1L) }
+        assertThatThrownBy { service().read(ownerMemberId, single(1L)) }
             .isInstanceOf(NotificationAccessDeniedException::class.java)
 
         // 남의 알림 상태를 바꾸지 않는다.
@@ -333,7 +380,7 @@ class NotificationServiceImplTest {
         val target = notification(1L, recipientMemberId = otherMemberId)
         given(notificationRepository.findById(1L)).willReturn(Optional.of(target))
 
-        assertThatThrownBy { service().markAsRead(ownerMemberId, 1L) }
+        assertThatThrownBy { service().read(ownerMemberId, single(1L)) }
             .hasMessage("본인의 알림만 접근할 수 있습니다.")
             .hasMessageNotContaining(otherMemberId.toString())
     }
@@ -344,28 +391,90 @@ class NotificationServiceImplTest {
     fun `읽지 않은 알림을 한 번의 UPDATE로 모두 읽음 처리한다`() {
         given(notificationRepository.markAllAsRead(anyLong(), anyDateTime())).willReturn(3)
 
-        val response = service().markAllAsRead(ownerMemberId)
+        val response = service().read(ownerMemberId, NotificationReadRequest(NotificationReadScope.ALL))
 
         assertThat(response.updatedCount).isEqualTo(3L)
         assertThat(response.readAt).isNotNull
-        verify(notificationRepository).markAllAsRead(ownerMemberId, response.readAt)
+        verify(notificationRepository).markAllAsRead(ownerMemberId, requireNotNull(response.readAt))
     }
 
     @Test
-    fun `이미 모두 읽은 상태에서도 오류 없이 0건으로 응답한다`() {
+    fun `이미 모두 읽은 상태에서도 오류 없이 0건으로 응답하고 readAt은 내려주지 않는다`() {
         given(notificationRepository.markAllAsRead(anyLong(), anyDateTime())).willReturn(0)
 
-        assertThat(service().markAllAsRead(ownerMemberId).updatedCount).isZero
+        val response = service().read(ownerMemberId, NotificationReadRequest(NotificationReadScope.ALL))
+
+        assertThat(response.updatedCount).isZero
+        assertThat(response.readAt).isNull()
+    }
+
+    @Test
+    fun `scope가 ALL이면 notificationId를 함께 보내도 무시한다`() {
+        given(notificationRepository.markAllAsRead(anyLong(), anyDateTime())).willReturn(2)
+
+        val response = service().read(ownerMemberId, NotificationReadRequest(NotificationReadScope.ALL, 1L))
+
+        assertThat(response.updatedCount).isEqualTo(2L)
+        // 단건 조회 경로를 타지 않았다는 뜻이다.
+        verify(notificationRepository, never()).findById(anyLong())
     }
 
     @Test
     fun `전체 읽음 처리는 대상 해석을 하지 않는다`() {
         given(notificationRepository.markAllAsRead(anyLong(), anyDateTime())).willReturn(1)
 
-        service().markAllAsRead(ownerMemberId)
+        service().read(ownerMemberId, NotificationReadRequest(NotificationReadScope.ALL))
 
         verifyNoInteractions(notificationTargetResolver)
     }
+
+    // ---------- 삭제 ----------
+
+    @Test
+    fun `본인 알림을 삭제하면 deletedAt이 채워진다`() {
+        val target = notification(1L)
+        given(notificationRepository.findById(1L)).willReturn(Optional.of(target))
+
+        service().delete(ownerMemberId, 1L)
+
+        assertThat(target.deletedAt).isNotNull
+        // 삭제는 읽음 여부를 건드리지 않는다(조회 Query가 deletedAt으로 이미 걸러낸다).
+        assertThat(target.isRead).isFalse
+    }
+
+    @Test
+    fun `다른 사용자의 알림은 삭제할 수 없다`() {
+        val target = notification(1L, recipientMemberId = otherMemberId)
+        given(notificationRepository.findById(1L)).willReturn(Optional.of(target))
+
+        assertThatThrownBy { service().delete(ownerMemberId, 1L) }
+            .isInstanceOf(NotificationAccessDeniedException::class.java)
+
+        assertThat(target.deletedAt).isNull()
+    }
+
+    @Test
+    fun `없는 알림을 삭제하면 NOTIFICATION_NOT_FOUND다`() {
+        given(notificationRepository.findById(99L)).willReturn(Optional.empty())
+
+        assertThatThrownBy { service().delete(ownerMemberId, 99L) }
+            .isInstanceOf(NotificationNotFoundException::class.java)
+    }
+
+    @Test
+    fun `이미 삭제한 알림을 다시 삭제하면 NOTIFICATION_NOT_FOUND다`() {
+        val deletedAt = LocalDateTime.of(2026, 8, 5, 9, 0)
+        val target = notification(1L, deletedAt = deletedAt)
+        given(notificationRepository.findById(1L)).willReturn(Optional.of(target))
+
+        assertThatThrownBy { service().delete(ownerMemberId, 1L) }
+            .isInstanceOf(NotificationNotFoundException::class.java)
+
+        // 삭제 시각을 덮어쓰지 않는다.
+        assertThat(target.deletedAt).isEqualTo(deletedAt)
+    }
+
+    private fun single(notificationId: Long) = NotificationReadRequest(NotificationReadScope.SINGLE, notificationId)
 
     private fun givenPage(content: List<Notification>) {
         given(

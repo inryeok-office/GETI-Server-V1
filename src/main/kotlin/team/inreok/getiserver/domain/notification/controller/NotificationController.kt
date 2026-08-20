@@ -5,16 +5,21 @@ import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
 import org.springframework.data.domain.Pageable
+import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import team.inreok.getiserver.domain.notification.dto.NotificationListResponse
-import team.inreok.getiserver.domain.notification.dto.NotificationReadAllResponse
+import team.inreok.getiserver.domain.notification.dto.NotificationReadRequest
 import team.inreok.getiserver.domain.notification.dto.NotificationReadResponse
 import team.inreok.getiserver.domain.notification.dto.UnreadNotificationCountResponse
 import team.inreok.getiserver.domain.notification.entity.type.NotificationType
@@ -25,7 +30,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 
 @Tag(
     name = "Notification - 인앱 알림",
-    description = "내 인앱 알림을 조회하고 읽음 처리한다. 필요 권한: 인증된 사용자(학생, 교사, 개발자).",
+    description = "내 인앱 알림을 조회하고 읽음 처리하거나 삭제한다. 필요 권한: 인증된 사용자(학생, 교사, 개발자).",
 )
 @SecurityRequirement(name = BEARER_AUTH_SCHEME)
 // SecurityConfig가 /api/v1/notifications 이하를 인증 필수로 두므로, 여기 도달했다는 것은 인증을
@@ -39,42 +44,50 @@ class NotificationController(
     @Operation(
         summary = "내 알림 목록 조회",
         description = """
-            요청한 사용자 본인의 알림만 조회한다. `isRead`, `type`으로 필터링할 수 있고 정렬은
-            최신순(createdAt DESC, 같은 시각이면 id DESC)으로 고정이라 `sort` 파라미터는 무시한다.
-            목록 기본값은 page=0, size=20이며 최대 size=100이다.
+            요청한 사용자 본인의 알림만 조회한다. `unreadOnly`, `notificationType`으로 필터링할 수
+            있고 정렬은 최신순(createdAt DESC, 같은 시각이면 id DESC)으로 고정이라 `sort` 파라미터는
+            무시한다. 목록 기본값은 page=0, size=20이며 최대 size=100이다.
+
+            응답의 `unreadCount`는 Header Badge용 값이라 `unreadOnly`/`notificationType` 필터나
+            현재 Page와 무관하게 **요청자 본인의 읽지 않은 알림 전체 개수**다.
 
             각 항목의 `targetAvailable`/`targetUnavailableReason`/`deepLink`는 저장된 값이 아니라
-            원본 리소스(공고·프로그램)의 삭제·공개 상태를 서버가 확인해 계산한 값이다 — 클라이언트가
-            원본 상태를 직접 판단하지 않게 하기 위함이다. 원본이 삭제돼도 알림 자체는 사라지지 않고
+            원본 리소스의 삭제·공개·소유 상태를 서버가 확인해 계산한 값이다 — 클라이언트가 원본
+            상태를 직접 판단하지 않게 하기 위함이다. 원본이 삭제돼도 알림 자체는 사라지지 않고
             `targetAvailable=false`, `targetUnavailableReason=DELETED`로 내려간다. 접근 가능 여부를
-            아직 판정하지 않는 대상(공고·프로그램 외)은 `targetAvailable=false`, 이유는 null이다.
+            아직 판정하지 않는 대상(회원 승인 결과, 포트폴리오 요청)은 `targetAvailable=false`,
+            이유는 null이다.
         """,
     )
     @ApiResponses(
         SwaggerApiResponse(responseCode = "200", description = "조회 성공(결과가 없으면 빈 목록)"),
-        SwaggerApiResponse(responseCode = "400", description = "type 값이 올바르지 않음 (TYPE_MISMATCH)"),
+        SwaggerApiResponse(responseCode = "400", description = "notificationType 값이 올바르지 않음 (TYPE_MISMATCH)"),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @GetMapping
     fun listNotifications(
         authentication: Authentication,
-        @Parameter(description = "읽음 여부 필터(선택). 생략하면 읽음·읽지 않음을 모두 조회한다.")
-        @RequestParam(required = false)
-        isRead: Boolean?,
+        @Parameter(description = "true면 읽지 않은 알림만 조회한다. 생략하거나 false면 읽음·읽지 않음을 모두 조회한다.")
+        @RequestParam(required = false, defaultValue = "false")
+        unreadOnly: Boolean,
         @Parameter(description = "알림 종류 필터(선택)")
         @RequestParam(required = false)
-        type: NotificationType?,
+        notificationType: NotificationType?,
         @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20, 최대 100). sort는 무시된다.")
         pageable: Pageable,
     ): ApiResponse<NotificationListResponse> {
         val memberId = authentication.principal as Long
-        return ApiResponse.of(notificationService.list(memberId, isRead, type, pageable))
+        return ApiResponse.of(notificationService.list(memberId, unreadOnly, notificationType, pageable))
     }
 
     @Operation(
         summary = "읽지 않은 알림 개수 조회",
-        description = "요청한 사용자 본인의 읽지 않은 알림 개수를 반환한다. 알림이 없으면 0이다.",
+        description = """
+            요청한 사용자 본인의 읽지 않은 알림 개수를 반환한다. 알림이 없으면 0이다. 목록 응답의
+            `unreadCount`와 같은 값이며, Badge만 갱신할 때 목록 한 Page를 통째로 받지 않아도 되도록
+            분리해 둔 Endpoint다.
+        """,
     )
     @ApiResponses(
         SwaggerApiResponse(responseCode = "200", description = "조회 성공"),
@@ -88,44 +101,65 @@ class NotificationController(
     }
 
     @Operation(
-        summary = "단일 알림 읽음 처리",
+        summary = "알림 읽음 처리",
         description = """
-            본인의 알림 한 건을 읽음 처리한다. 이미 읽은 알림을 다시 호출해도 오류가 아니며,
-            처음 읽은 시각(`readAt`)이 그대로 유지된다(멱등). 다른 사용자의 알림이면 403이다.
+            `scope=SINGLE`이면 `notificationId`가 가리키는 알림 한 건을, `scope=ALL`이면 요청자
+            본인의 읽지 않은 알림 전체를 읽음 처리한다.
+
+            - `scope=SINGLE`인데 `notificationId`가 없으면 400이다.
+            - `scope=ALL`에서는 `notificationId`를 함께 보내도 무시한다.
+            - 이미 읽은 알림을 다시 처리해도 오류가 아니며, 처음 읽은 시각(`readAt`)이 그대로
+              유지되고 `updatedCount`에 세지 않는다(멱등).
+            - `updatedCount`는 이번 요청으로 실제 상태가 바뀐 알림 수, `unreadCount`는 처리 후 남은
+              읽지 않은 알림 수다.
+            - `readAt`은 `scope=SINGLE`이면 대상 알림의 읽은 시각, `scope=ALL`이면 이번 요청으로
+              갱신한 시각이다. `scope=ALL`인데 갱신 대상이 없었으면 null이다.
         """,
     )
     @ApiResponses(
         SwaggerApiResponse(responseCode = "200", description = "읽음 처리 성공(이미 읽은 알림 포함)"),
+        SwaggerApiResponse(
+            responseCode = "400",
+            description = "scope=SINGLE인데 notificationId가 없음 (NOTIFICATION_ID_REQUIRED)",
+        ),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "403", description = "다른 사용자의 알림 (NOTIFICATION_ACCESS_DENIED)"),
-        SwaggerApiResponse(responseCode = "404", description = "알림이 없음 (NOTIFICATION_NOT_FOUND)"),
+        SwaggerApiResponse(responseCode = "404", description = "알림이 없거나 이미 삭제됨 (NOTIFICATION_NOT_FOUND)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
-    @PatchMapping("/{notificationId}/read")
-    fun markAsRead(
+    @PatchMapping("/read")
+    fun read(
         authentication: Authentication,
-        @Parameter(description = "읽음 처리할 알림 ID") @PathVariable notificationId: Long,
+        @Valid @RequestBody request: NotificationReadRequest,
     ): ApiResponse<NotificationReadResponse> {
         val memberId = authentication.principal as Long
-        return ApiResponse.of(notificationService.markAsRead(memberId, notificationId))
+        return ApiResponse.of(notificationService.read(memberId, request))
     }
 
     @Operation(
-        summary = "전체 알림 읽음 처리",
+        summary = "알림 삭제",
         description = """
-            요청한 사용자 본인의 읽지 않은 알림을 모두 읽음 처리한다. 이미 모두 읽은 상태여도
-            오류가 아니며 `updatedCount=0`으로 정상 응답한다. 이번 요청으로 갱신된 알림은 모두
-            같은 `readAt` 값을 갖는다.
+            요청자 본인의 알림 한 건을 삭제한다. 삭제한 알림은 목록·읽지 않은 개수·읽음 처리
+            대상에서 모두 빠진다. 읽지 않은 알림을 삭제하면 읽지 않은 개수도 함께 줄어든다.
+
+            없거나 이미 삭제한 알림을 다시 삭제하면 404다(멱등하지 않다). 다른 사용자의 알림이면
+            403이다.
         """,
     )
     @ApiResponses(
-        SwaggerApiResponse(responseCode = "200", description = "읽음 처리 성공(갱신 대상이 없으면 updatedCount=0)"),
+        SwaggerApiResponse(responseCode = "204", description = "삭제 성공(응답 본문 없음)"),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
+        SwaggerApiResponse(responseCode = "403", description = "다른 사용자의 알림 (NOTIFICATION_ACCESS_DENIED)"),
+        SwaggerApiResponse(responseCode = "404", description = "알림이 없거나 이미 삭제됨 (NOTIFICATION_NOT_FOUND)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
-    @PatchMapping("/read-all")
-    fun markAllAsRead(authentication: Authentication): ApiResponse<NotificationReadAllResponse> {
+    @DeleteMapping("/{notificationId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun delete(
+        authentication: Authentication,
+        @Parameter(description = "삭제할 알림 ID", example = "1") @PathVariable notificationId: Long,
+    ) {
         val memberId = authentication.principal as Long
-        return ApiResponse.of(notificationService.markAllAsRead(memberId))
+        notificationService.delete(memberId, notificationId)
     }
 }
