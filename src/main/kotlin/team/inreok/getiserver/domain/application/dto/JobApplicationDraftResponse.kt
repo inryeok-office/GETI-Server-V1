@@ -10,6 +10,18 @@ data class JobApplicationDraftResponse(
     val applicationId: Long,
     @param:Schema(description = "공고 ID", example = "1")
     val jobId: Long,
+    // 아래 네 Field는 교사·개발자용 조회(JobApplicationAdminServiceImpl, Issue #172)에서만 값을
+    // 채운다. 학생용 초안·Action 결과(JobApplicationServiceImpl)는 이 DTO를 그대로 재사용하되
+    // 기본값 null을 그대로 둔다(toJobApplicationDraftResponse KDoc 참고) -- 기존 학생용 생성
+    // 호출부와 Test가 이 Field들을 몰라도 되도록 기본값을 둔다.
+    @param:Schema(description = "공고명. 교사·개발자용 조회에서만 채워지고, 공고를 조회할 수 없으면 null.", nullable = true)
+    val jobTitle: String? = null,
+    @param:Schema(description = "기업명. 교사·개발자용 조회에서만 채워지고, 조회할 수 없으면 null.", nullable = true)
+    val companyName: String? = null,
+    @param:Schema(description = "담당 교사 회원 ID. 교사·개발자용 조회에서만 채워지고, 담당자가 없으면 null.", nullable = true)
+    val managerMemberId: Long? = null,
+    @param:Schema(description = "담당 교사 이름. 교사·개발자용 조회에서만 채워지고, 담당자가 없거나 조회할 수 없으면 null.", nullable = true)
+    val managerName: String? = null,
     // Phase 2에서는 AVAILABLE 판정(활성 양식 연결 필수, §6.5 8번)을 통과해야만 지원서가 생성되므로
     // 이 Endpoint 응답에서 formId는 항상 값을 가진다. nullable로 둔 것은 Phase 3 이후 양식 연결
     // 해제 등으로 null이 될 수 있는 경로가 생길 가능성을 열어두기 위함이다(PR #79 Review 반영).

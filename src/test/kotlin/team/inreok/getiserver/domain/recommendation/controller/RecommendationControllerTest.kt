@@ -41,6 +41,8 @@ import team.inreok.getiserver.domain.recommendation.dto.RecommendationSettingRes
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationStatus
 import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
 import team.inreok.getiserver.domain.recommendation.entity.type.SuitabilityLevel
+import team.inreok.getiserver.domain.recommendation.exception.RecommendationBookmarkAlreadyExistsException
+import team.inreok.getiserver.domain.recommendation.exception.RecommendationBookmarkNotFoundException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationExclusionAlreadyExistsException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationExclusionNotFoundException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationJobNotFoundException
@@ -515,6 +517,132 @@ class RecommendationControllerTest
         fun `학생이 아니면 관심 없음을 해제할 수 없다`() {
             mockMvc
                 .perform(delete("/api/v1/me/recommendation-exclusions/10").with(teacherAuth()))
+                .andExpect(status().isForbidden)
+        }
+
+        // ---------- 북마크 등록 ----------
+
+        @Test
+        fun `공고를 북마크하면 201과 Job Card를 반환한다`() {
+            given(
+                recommendationService.registerBookmark(memberId, 1L),
+            ).willReturn(jobResponseOf().copy(bookmarked = true))
+
+            mockMvc
+                .perform(
+                    post("/api/v1/me/bookmarks")
+                        .with(studentAuth())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "jobId": 1 }"""),
+                ).andExpect(status().isCreated)
+                .andExpect(jsonPath("$.data.jobId").value(1))
+                .andExpect(jsonPath("$.data.bookmarked").value(true))
+        }
+
+        @Test
+        fun `북마크 대상 공고가 없으면 404다`() {
+            willThrow(RecommendationJobNotFoundException(999L))
+                .given(recommendationService)
+                .registerBookmark(memberId, 999L)
+
+            mockMvc
+                .perform(
+                    post("/api/v1/me/bookmarks")
+                        .with(studentAuth())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "jobId": 999 }"""),
+                ).andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.error.code").value("JOB_NOT_FOUND"))
+        }
+
+        @Test
+        fun `이미 북마크한 공고를 다시 등록하면 409다`() {
+            willThrow(RecommendationBookmarkAlreadyExistsException(1L))
+                .given(recommendationService)
+                .registerBookmark(memberId, 1L)
+
+            mockMvc
+                .perform(
+                    post("/api/v1/me/bookmarks")
+                        .with(studentAuth())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "jobId": 1 }"""),
+                ).andExpect(status().isConflict)
+                .andExpect(jsonPath("$.error.code").value("BOOKMARK_ALREADY_EXISTS"))
+        }
+
+        @Test
+        fun `필수 값이 없으면 북마크 등록도 400이다`() {
+            mockMvc
+                .perform(
+                    post("/api/v1/me/bookmarks")
+                        .with(studentAuth())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ }"""),
+                ).andExpect(status().isBadRequest)
+
+            verify(recommendationService, never()).registerBookmark(anyLong(), anyLong())
+        }
+
+        @Test
+        fun `인증 없이 북마크를 등록하면 401이다`() {
+            mockMvc
+                .perform(
+                    post("/api/v1/me/bookmarks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "jobId": 1 }"""),
+                ).andExpect(status().isUnauthorized)
+
+            verify(recommendationService, never()).registerBookmark(anyLong(), anyLong())
+        }
+
+        @Test
+        fun `학생이 아니면 북마크를 등록할 수 없다`() {
+            mockMvc
+                .perform(
+                    post("/api/v1/me/bookmarks")
+                        .with(teacherAuth())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "jobId": 1 }"""),
+                ).andExpect(status().isForbidden)
+        }
+
+        // ---------- 북마크 해제 ----------
+
+        @Test
+        fun `북마크를 해제하면 204다`() {
+            mockMvc
+                .perform(delete("/api/v1/me/bookmarks/1").with(studentAuth()))
+                .andExpect(status().isNoContent)
+
+            verify(recommendationService).removeBookmark(memberId, 1L)
+        }
+
+        @Test
+        fun `북마크하지 않은 공고를 해제하면 404다`() {
+            willThrow(RecommendationBookmarkNotFoundException(999L))
+                .given(recommendationService)
+                .removeBookmark(memberId, 999L)
+
+            mockMvc
+                .perform(delete("/api/v1/me/bookmarks/999").with(studentAuth()))
+                .andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.error.code").value("BOOKMARK_NOT_FOUND"))
+        }
+
+        @Test
+        fun `인증 없이 북마크를 해제하면 401이다`() {
+            mockMvc
+                .perform(delete("/api/v1/me/bookmarks/1"))
+                .andExpect(status().isUnauthorized)
+
+            verify(recommendationService, never()).removeBookmark(anyLong(), anyLong())
+        }
+
+        @Test
+        fun `학생이 아니면 북마크를 해제할 수 없다`() {
+            mockMvc
+                .perform(delete("/api/v1/me/bookmarks/1").with(teacherAuth()))
                 .andExpect(status().isForbidden)
         }
     }

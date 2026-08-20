@@ -17,9 +17,14 @@ import team.inreok.getiserver.domain.application.exception.ApplicationReviewForb
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
+import team.inreok.getiserver.domain.company.query.CompanyQuery
+import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
+import team.inreok.getiserver.domain.member.query.InquiryMemberSnapshot
+import team.inreok.getiserver.domain.member.query.InquiryMemberSnapshotQueryPort
 import tools.jackson.databind.ObjectMapper
 
 @Service
@@ -28,6 +33,11 @@ class JobApplicationAdminServiceImpl(
     private val jobApplicationSnapshotQueryPort: JobApplicationSnapshotQueryPort,
     private val jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository,
     private val fileLinkPort: FileLinkPort,
+    private val companyQuery: CompanyQuery,
+    // 담당 교사 이름 조회는 email/phone 등 민감한 Field 없이 이름만 노출하는 기존 계약을
+    // 재사용한다(Issue #172, `InquiryMemberSnapshotQueryPort` KDoc의 "inquiry 담당자" 재사용 판단과
+    // 같은 이유 -- 새로 Named Interface를 만들지 않는다).
+    private val inquiryMemberSnapshotQueryPort: InquiryMemberSnapshotQueryPort,
     private val eventPublisher: ApplicationEventPublisher,
     private val objectMapper: ObjectMapper,
 ) : JobApplicationAdminService {
@@ -38,8 +48,19 @@ class JobApplicationAdminServiceImpl(
         pageable: Pageable,
     ): JobApplicationAdminListResponse {
         val page = jobApplicationRepository.search(jobId, status, pageable)
+
+        // 항목마다 공고·기업·담당자를 개별 조회하면 Page 항목 수만큼 Query가 늘어난다(N+1).
+        // 이번 Page에 등장하는 공고/기업/담당자 id를 모아 한 번에 배치 조회한다
+        // (InquiryServiceImpl.searchForAdmin의 memberIds 배치 조회와 동일한 원칙).
+        val jobIds = page.content.map { it.jobId }.toSet()
+        val jobs = if (jobIds.isEmpty()) emptyMap() else jobApplicationSnapshotQueryPort.findAllByIds(jobIds)
+        val companyIds = jobs.values.map { it.companyId }.toSet()
+        val companies = if (companyIds.isEmpty()) emptyMap() else companyQuery.findActiveSummaries(companyIds)
+        val managerIds = jobs.values.mapNotNull { it.managerMemberId }.toSet()
+        val managers = if (managerIds.isEmpty()) emptyMap() else inquiryMemberSnapshotQueryPort.findAllByIds(managerIds)
+
         return JobApplicationAdminListResponse(
-            content = page.content.map(::toListItem),
+            content = page.content.map { toListItem(it, jobs, companies, managers) },
             page = page.number,
             size = page.size,
             totalElements = page.totalElements,
@@ -52,7 +73,16 @@ class JobApplicationAdminServiceImpl(
     @Transactional(readOnly = true)
     override fun getDetail(applicationId: Long): JobApplicationDraftResponse {
         val application = findApplication(applicationId)
-        return toJobApplicationDraftResponse(objectMapper, application, currentFiles(application))
+        val job = jobApplicationSnapshotQueryPort.findById(application.jobId)
+        return toJobApplicationDraftResponse(
+            objectMapper,
+            application,
+            currentFiles(application),
+            jobTitle = job?.title,
+            companyName = job?.let { companyNameOf(it.companyId) },
+            managerMemberId = job?.managerMemberId,
+            managerName = job?.managerMemberId?.let { managerNameOf(it) },
+        )
     }
 
     @Transactional
@@ -68,7 +98,10 @@ class JobApplicationAdminServiceImpl(
         val application =
             jobApplicationRepository.findByIdForUpdate(applicationId)
                 ?: throw ApplicationNotFoundException(applicationId)
-        requireManagerOrDeveloper(application, requesterMemberId, isDeveloper)
+        // 응답 조립(공고명·기업명·담당자, Issue #172)에도 그대로 재사용하도록 권한 판정 이전에
+        // 한 번만 조회한다(개발자 여부와 무관하게 필요, 기존에는 개발자면 조회 자체를 생략했다).
+        val job = jobApplicationSnapshotQueryPort.findById(application.jobId)
+        requireManagerOrDeveloper(job, requesterMemberId, isDeveloper)
 
         val fromStatus = application.status
         requireAllowedAdminTransition(fromStatus, request.action)
@@ -96,7 +129,15 @@ class JobApplicationAdminServiceImpl(
                 reason = request.reason,
             ),
         )
-        return toJobApplicationDraftResponse(objectMapper, application, currentFiles(application))
+        return toJobApplicationDraftResponse(
+            objectMapper,
+            application,
+            currentFiles(application),
+            jobTitle = job?.title,
+            companyName = job?.let { companyNameOf(it.companyId) },
+            managerMemberId = job?.managerMemberId,
+            managerName = job?.managerMemberId?.let { managerNameOf(it) },
+        )
     }
 
     @Transactional(readOnly = true)
@@ -121,12 +162,11 @@ class JobApplicationAdminServiceImpl(
     // (요구사항 "권한" 절). 공고가 이미 삭제되어 Snapshot을 찾을 수 없으면 개발자가 아닌 한 담당자
     // 여부를 확인할 수 없으므로 거부한다.
     private fun requireManagerOrDeveloper(
-        application: JobApplication,
+        job: JobApplicationJobSnapshot?,
         requesterMemberId: Long,
         isDeveloper: Boolean,
     ) {
         if (isDeveloper) return
-        val job = jobApplicationSnapshotQueryPort.findById(application.jobId)
         val isManager =
             job != null && (requesterMemberId == job.createdByMemberId || requesterMemberId == job.managerMemberId)
         if (!isManager) throw ApplicationReviewForbiddenException()
@@ -137,14 +177,36 @@ class JobApplicationAdminServiceImpl(
     private fun currentFiles(application: JobApplication) =
         fileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, requireNotNull(application.id))
 
-    private fun toListItem(application: JobApplication): JobApplicationAdminListItemResponse =
-        JobApplicationAdminListItemResponse(
+    // getDetail/executeAction(단건)에서 쓰는 기업명 단건 조회다. list()는 N+1을 피하기 위해
+    // companyQuery.findActiveSummaries로 별도 배치 조회한다.
+    private fun companyNameOf(companyId: Long): String? = companyQuery.findActiveSummary(companyId)?.name
+
+    // getDetail/executeAction(단건)에서 쓰는 담당자 이름 단건 조회다. InquiryMemberSnapshotQueryPort는
+    // 배치 Method만 공개하므로(요구사항 목록 응답 배치 조회 관례) 단건 호출도 Set 하나로 부른다.
+    private fun managerNameOf(managerMemberId: Long): String? =
+        inquiryMemberSnapshotQueryPort.findAllByIds(setOf(managerMemberId))[managerMemberId]?.name
+
+    private fun toListItem(
+        application: JobApplication,
+        jobs: Map<Long, JobApplicationJobSnapshot>,
+        companies: Map<Long, CompanySummary>,
+        managers: Map<Long, InquiryMemberSnapshot>,
+    ): JobApplicationAdminListItemResponse {
+        val job = jobs[application.jobId]
+        return JobApplicationAdminListItemResponse(
             applicationId = requireNotNull(application.id),
             jobId = application.jobId,
             applicantMemberId = application.applicantMemberId,
             applicantName = application.applicantName,
+            applicantCohort = application.applicantCohort,
+            applicantDepartment = application.applicantDepartment,
+            jobTitle = job?.title,
+            companyName = job?.let { companies[it.companyId]?.name },
+            managerMemberId = job?.managerMemberId,
+            managerName = job?.managerMemberId?.let { managers[it]?.name },
             status = application.status,
             submittedAt = application.submittedAt,
             createdAt = requireNotNull(application.createdAt),
         )
+    }
 }

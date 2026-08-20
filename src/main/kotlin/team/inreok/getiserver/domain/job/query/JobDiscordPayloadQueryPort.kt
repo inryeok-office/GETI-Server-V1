@@ -34,8 +34,13 @@ interface JobDiscordPayloadQueryPort {
  * GETI-Bot-V1의 Job Template `data` Schema가 받는 필드에 대응한다. Bot Schema는 `.strict()`라
  * 여기 없는 값을 넘길 수 없고, 넘기면 `400 INVALID_REQUEST`(재시도 불가)로 거절된다.
  *
- * `jobs`에는 근무지·고용형태 Column이 없어(V19 시점 실측) Bot Schema의 선택 필드 `location`과
- * `employmentType`에 채울 값이 없다. 두 필드 모두 optional이므로 보내지 않는다.
+ * Bot Schema의 선택 필드 `location`과 `employmentType`은 아직 보내지 않는다. `jobs`에 해당
+ * Column이 아예 없어서 채울 값이 없었으나(V19 시점 실측), Issue #169에서 `jobs.location`과
+ * `jobs.employment_type`을 추가해 이제는 값이 존재한다. 그래도 이번 범위에서 보내지 않는
+ * 이유는 Bot의 `jobPublishedDataSchema`가 이 두 필드를 실제로 받는지 이 저장소에서 확인할 수
+ * 없기 때문이다 — Schema는 `.strict()`라 받지 않는 필드를 보내면 `400 INVALID_REQUEST`
+ * (`retryable=false`)로 즉시 FAILED가 되어 게시 알림이 영구히 누락된다. Bot Schema를 실측한
+ * 뒤 별도 작업에서 추가한다.
  */
 @NamedInterface
 data class JobDiscordPayloadSnapshot(

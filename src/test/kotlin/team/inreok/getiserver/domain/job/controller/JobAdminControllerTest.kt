@@ -157,6 +157,50 @@ class JobAdminControllerTest
             verify(jobService, never()).create(anyCreateRequest(), anyLong())
         }
 
+        @Test
+        fun `등록 응답에 근무지역과 고용형태가 포함된다`() {
+            given(jobService.create(anyCreateRequest(), anyLong())).willReturn(detailResponse())
+
+            mockMvc
+                .perform(
+                    post("/api/v1/admin/jobs")
+                        .with(authOf(7L, "TEACHER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody()),
+                ).andExpect(status().isCreated)
+                .andExpect(jsonPath("$.data.location").value("서울특별시 중구"))
+                .andExpect(jsonPath("$.data.employmentType").value("인턴"))
+        }
+
+        // 사용자가 직접 입력하는 경로는 잘라 저장하지 않고 거절한다. 외부 수집 경로만
+        // 잘라 저장하며(CollectedJobUpsertUseCaseImpl.normalizeShortText), 그쪽은 값을 고칠 수 있는
+        // 주체가 없어 공고 전체를 잃지 않는 쪽을 택한 것이다(Issue #169).
+        @Test
+        fun `근무지역이 255자를 넘으면 400과 VALIDATION_FAILED를 반환한다`() {
+            val body =
+                """
+                {
+                  "companyId": 1,
+                  "postingType": "MOU",
+                  "applicationMethod": "EXTERNAL",
+                  "title": "2026 상반기 백엔드 채용",
+                  "status": "DRAFT",
+                  "location": "${"가".repeat(256)}"
+                }
+                """.trimIndent()
+
+            mockMvc
+                .perform(
+                    post("/api/v1/admin/jobs")
+                        .with(authOf(7L, "TEACHER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+
+            verify(jobService, never()).create(anyCreateRequest(), anyLong())
+        }
+
         // --- 권한 ---
 
         @Test
@@ -212,6 +256,20 @@ class JobAdminControllerTest
                 .andExpect(
                     jsonPath("$.data.company.logoUrl").value("https://storage.example/company-logo?signature=test"),
                 )
+        }
+
+        @Test
+        fun `수정 요청의 고용형태가 255자를 넘으면 400과 VALIDATION_FAILED를 반환한다`() {
+            mockMvc
+                .perform(
+                    patch("/api/v1/admin/jobs/1")
+                        .with(authOf(7L, "TEACHER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"employmentType":"${"가".repeat(256)}"}"""),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+
+            verify(jobService, never()).update(anyLong(), anyUpdateRequest(), anyLong())
         }
 
         @Test
@@ -333,6 +391,8 @@ class JobAdminControllerTest
             endDate = null,
             targetGrade = 3,
             capacity = 2,
+            location = "서울특별시 중구",
+            employmentType = "인턴",
             firstComeServed = false,
             viewCount = 0,
             publishedAt = null,
@@ -349,5 +409,6 @@ class JobAdminControllerTest
                     applicationStatus = null,
                     availableActions = emptyList(),
                 ),
+            bookmarked = false,
         )
     }

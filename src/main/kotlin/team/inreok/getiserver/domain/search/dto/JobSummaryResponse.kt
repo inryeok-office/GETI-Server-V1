@@ -34,6 +34,18 @@ data class JobSummaryResponse(
     val targetGrade: Int?,
     @param:Schema(description = "모집 인원", example = "2", nullable = true)
     val capacity: Int?,
+    @param:Schema(
+        description = "근무지역. 정해진 값 집합이 없는 표시 전용 문자열이다. 입력되지 않았으면 null.",
+        example = "서울특별시 중구",
+        nullable = true,
+    )
+    val location: String?,
+    @param:Schema(
+        description = "고용형태. 정해진 값 집합이 없는 표시 전용 문자열이다. 입력되지 않았으면 null.",
+        example = "인턴",
+        nullable = true,
+    )
+    val employmentType: String?,
     @param:Schema(description = "선착순 모집 여부", example = "false")
     val firstComeServed: Boolean,
     @param:Schema(description = "조회수", example = "128")
@@ -41,6 +53,8 @@ data class JobSummaryResponse(
     @param:Schema(description = "게시 시각", example = "2026-07-25T09:00:00", nullable = true)
     val publishedAt: LocalDateTime?,
     val application: JobApplicationEligibilityAccessSnapshot,
+    @param:Schema(description = "요청자 기준 북마크 여부", example = "false")
+    val bookmarked: Boolean,
 ) {
     companion object {
         /**
@@ -48,16 +62,18 @@ data class JobSummaryResponse(
          * 않는다(Issue #69 — Elasticsearch가 검색 전용 Read Model이라는 원칙, 완료 보고 참고).
          *
          * [logoUrls]는 `companyLogoFileId -> Presigned URL` Map이다(Issue #92). [application]은
-         * 요청자 기준 학생 지원 가능 여부·지원 현황이다(Issue #136). 둘 다 목록 항목마다 단건
-         * 조회하면 N+1이 되므로, 호출 측(`JobSearchServiceImpl`)이 검색 결과 전체를 모아 한 번에
-         * 조회한 배치 결과를 그대로 전달한다. Elasticsearch에는 만료되는 URL이나 요청자별로 달라지는
-         * 값을 저장하지 않으므로(`JobSearchDocument.companyLogoFileId` 참고) 둘 다 이 변환
-         * 시점에만 존재한다.
+         * 요청자 기준 학생 지원 가능 여부·지원 현황이다(Issue #136). [bookmarked]는 요청자 기준
+         * 북마크 여부다(Issue #171, `recommendation.access.JobBookmarkAccessorImpl` 참고). 셋 다
+         * 목록 항목마다 단건 조회하면 N+1이 되므로, 호출 측(`JobSearchServiceImpl`)이 검색 결과
+         * 전체를 모아 한 번에 조회한 배치 결과를 그대로 전달한다. Elasticsearch에는 만료되는 URL이나
+         * 요청자별로 달라지는 값을 저장하지 않으므로(`JobSearchDocument.companyLogoFileId` 참고)
+         * 셋 다 이 변환 시점에만 존재한다.
          */
         fun from(
             document: JobSearchDocument,
             logoUrls: Map<Long, String> = emptyMap(),
             application: JobApplicationEligibilityAccessSnapshot,
+            bookmarked: Boolean,
         ): JobSummaryResponse =
             JobSummaryResponse(
                 jobId = document.jobId,
@@ -77,10 +93,13 @@ data class JobSummaryResponse(
                 endDate = document.endDate,
                 targetGrade = document.targetGrade,
                 capacity = document.capacity,
+                location = document.location,
+                employmentType = document.employmentType,
                 firstComeServed = document.firstComeServed,
                 viewCount = document.viewCount,
                 publishedAt = document.publishedAt,
                 application = application,
+                bookmarked = bookmarked,
             )
     }
 }

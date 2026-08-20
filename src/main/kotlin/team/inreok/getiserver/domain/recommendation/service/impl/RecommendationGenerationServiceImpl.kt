@@ -1,5 +1,6 @@
 package team.inreok.getiserver.domain.recommendation.service.impl
 
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
@@ -7,6 +8,7 @@ import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccesso
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateQueryPort
 import team.inreok.getiserver.domain.member.query.RecommendationMemberProfileQueryPort
 import team.inreok.getiserver.domain.recommendation.entity.Recommendation
+import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
 import team.inreok.getiserver.domain.recommendation.repository.MemberJobPreferenceRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationRepository
 import team.inreok.getiserver.domain.recommendation.service.RankedRecommendation
@@ -18,7 +20,7 @@ import java.time.LocalDateTime
 
 /**
  * [RecommendationGenerationService]의 구현이다(Recommendation R2 Issue #148, Application 지원
- * 가능 여부 연동 R5 Issue #165).
+ * 가능 여부 연동 R5 Issue #165, SIMILAR_JOBS 유사 공고 확장 R6 Issue #167).
  *
  * Hard Filter(`computeExclusionReason`)와 Score Engine(`calculateScore`)은 순수 함수라 여기서는
  * Query Port 호출 -> 순수 계산 조립 -> Ranking -> Persistence만 담당한다. Candidate/AI/Application
@@ -36,6 +38,10 @@ class RecommendationGenerationServiceImpl(
     private val memberJobPreferenceRepository: MemberJobPreferenceRepository,
     private val recommendationRepository: RecommendationRepository,
     private val objectMapper: ObjectMapper,
+    // SIMILAR_JOBS 유사 판정 Threshold다(R6, Issue #167 DECISION_REQUIRED 확정 -- Jaccard
+    // Similarity 0.6 이상을 SIMILAR로 본다). `RecommendationSimilarityEvaluator`가 이 값을
+    // Magic Number로 갖지 않도록 Configuration으로 분리했다(R4 Top-N/Cron과 같은 관례).
+    @param:Value("\${app.recommendation.similarity.tech-stack-threshold:0.6}") private val similarityThreshold: Double,
 ) : RecommendationGenerationService {
     @Transactional
     override fun generateForMember(
@@ -47,8 +53,20 @@ class RecommendationGenerationServiceImpl(
         val candidateJobIds = candidates.map { it.jobId }.toSet()
         val excludedJobIds = memberJobPreferenceRepository.findExcludedJobIdsByMemberId(memberId).toSet()
         val bookmarkedJobIds = memberJobPreferenceRepository.findBookmarkedJobIdsByMemberId(memberId).toSet()
-        val aiSnapshots = aiAnalysisSearchQueryPort.findCompletedByJobIds(candidateJobIds.toList())
+        // SIMILAR_JOBS로 관심 없음 처리한 기준(Source) Job이다(R6, Issue #167) -- THIS_JOB은
+        // 이미 excludedJobIds가 그 Job 자체를 걸러내므로 여기서는 SIMILAR_JOBS만 좁혀 조회한다.
+        val similarJobsSourceIds =
+            memberJobPreferenceRepository
+                .findJobIdsByMemberIdAndExclusionType(memberId, ExclusionType.SIMILAR_JOBS)
+                .toSet()
+        // Candidate와 SIMILAR_JOBS 기준 Job(현재 후보 Pool 밖의 CLOSED Job일 수 있음)의 AI 분석을
+        // 한 번의 Batch 호출로 함께 조회한다 -- 두 번 나눠 부르지 않는다(N+1 방지).
+        val aiSnapshots =
+            aiAnalysisSearchQueryPort.findCompletedByJobIds((candidateJobIds + similarJobsSourceIds).toList())
         val eligibilityByJobId = jobApplicationEligibilityAccessor.findAllByJobIds(candidateJobIds, memberId)
+        // 기준 Job의 AI 분석이 없거나 COMPLETED가 아니면(aiSnapshots에 없음) 유사 공고 확장을
+        // 하지 않는다(보수적 Fallback, Issue #167 §4) -- 그런 기준 Job은 여기서 자연히 빠진다.
+        val similarJobsSourceTechStackSets = similarJobsSourceIds.mapNotNull { aiSnapshots[it]?.let(::techStackSetOf) }
         val now = LocalDateTime.now()
 
         val scored =
@@ -62,6 +80,10 @@ class RecommendationGenerationServiceImpl(
                 // 유무만으로 채워지므로(JobApplicationEligibilityAccessorImpl 참고) 더 안전한
                 // 신호다.
                 val hasActiveApplication = eligibilityByJobId[job.jobId]?.applicationId != null
+                // 여러 SIMILAR_JOBS 기준 Job 중 하나라도 이 후보와 유사하면 제외한다(Issue #167
+                // §5). 비교는 Memory에서만 수행하고 추가 DB 조회는 없다.
+                val isSimilarToExcludedJob =
+                    isSimilarToAnySource(aiSnapshot, similarJobsSourceTechStackSets, similarityThreshold)
                 val exclusionReason =
                     computeExclusionReason(
                         job,
@@ -70,6 +92,7 @@ class RecommendationGenerationServiceImpl(
                         bookmarkedJobIds,
                         aiSnapshot,
                         hasActiveApplication,
+                        isSimilarToExcludedJob,
                         now,
                     )
                 if (exclusionReason != null) return@mapNotNull null
