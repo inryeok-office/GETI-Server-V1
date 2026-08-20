@@ -87,6 +87,39 @@ class JobControllerTest
         }
 
         @Test
+        fun `공개 상세 응답에 근무지역과 고용형태가 포함된다`() {
+            given(jobService.getPublicDetail(1L, 1L)).willReturn(detailResponse(viewCount = 11))
+
+            mockMvc
+                .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.location").value("서울특별시 중구"))
+                .andExpect(jsonPath("$.data.employmentType").value("인턴"))
+        }
+
+        @Test
+        fun `공개 상세 응답에 요청자 기준 북마크 여부가 포함된다`() {
+            given(jobService.getPublicDetail(1L, 1L)).willReturn(detailResponse(viewCount = 11, bookmarked = true))
+
+            mockMvc
+                .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.bookmarked").value(true))
+        }
+
+        @Test
+        fun `근무지역과 고용형태가 없는 공고는 두 Field가 null이다`() {
+            given(jobService.getPublicDetail(1L, 1L))
+                .willReturn(detailResponse(viewCount = 11, location = null, employmentType = null))
+
+            mockMvc
+                .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.location").doesNotExist())
+                .andExpect(jsonPath("$.data.employmentType").doesNotExist())
+        }
+
+        @Test
         fun `없거나 삭제된 공고를 조회하면 404를 반환한다`() {
             willThrow(JobNotFoundException(1L)).given(jobService).getPublicDetail(anyLong(), anyLong())
 
@@ -118,6 +151,9 @@ class JobControllerTest
         private fun detailResponse(
             viewCount: Long,
             company: CompanySummary? = CompanySummary(1L, "인력개발원", logoUrl = LOGO_URL),
+            location: String? = "서울특별시 중구",
+            employmentType: String? = "인턴",
+            bookmarked: Boolean = false,
         ) = JobDetailResponse(
             jobId = 1L,
             title = "2026 상반기 백엔드 채용",
@@ -131,6 +167,8 @@ class JobControllerTest
             endDate = null,
             targetGrade = 3,
             capacity = 2,
+            location = location,
+            employmentType = employmentType,
             firstComeServed = false,
             viewCount = viewCount,
             publishedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
@@ -147,6 +185,7 @@ class JobControllerTest
                     applicationStatus = null,
                     availableActions = listOf("CREATE_DRAFT"),
                 ),
+            bookmarked = bookmarked,
         )
 
         private companion object {

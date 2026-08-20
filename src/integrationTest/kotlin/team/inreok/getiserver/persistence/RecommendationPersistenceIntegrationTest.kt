@@ -256,6 +256,46 @@ class RecommendationPersistenceIntegrationTest
             ).containsExactly(jobId)
         }
 
+        // ---------- 북마크 등록·해제(Issue #170) ----------
+
+        @Test
+        fun `bookmarked와 exclusion을 같은 Row에 함께 저장하고 그대로 조회한다`() {
+            val saved =
+                memberJobPreferenceRepository.saveAndFlush(
+                    MemberJobPreference(memberId = memberId, jobId = jobId, bookmarked = true).apply {
+                        exclusion = ExclusionType.THIS_JOB
+                        exclusionCreatedAt = LocalDateTime.now()
+                    },
+                )
+
+            val found = requireNotNull(memberJobPreferenceRepository.findByMemberIdAndJobId(memberId, jobId))
+            assertThat(found.id).isEqualTo(saved.id)
+            assertThat(found.bookmarked).isTrue()
+            assertThat(found.exclusion).isEqualTo(ExclusionType.THIS_JOB)
+            assertThat(memberJobPreferenceRepository.findBookmarkedJobIdsByMemberId(memberId)).containsExactly(jobId)
+            assertThat(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(memberId)).containsExactly(jobId)
+        }
+
+        @Test
+        fun `북마크를 해제해도 exclusion이 남아 있으면 Row는 유지된다`() {
+            val saved =
+                memberJobPreferenceRepository.saveAndFlush(
+                    MemberJobPreference(memberId = memberId, jobId = jobId, bookmarked = true).apply {
+                        exclusion = ExclusionType.SIMILAR_JOBS
+                        exclusionCreatedAt = LocalDateTime.now()
+                    },
+                )
+
+            val preference =
+                requireNotNull(memberJobPreferenceRepository.findById(requireNotNull(saved.id)).orElse(null))
+            preference.bookmarked = false
+            memberJobPreferenceRepository.saveAndFlush(preference)
+
+            val found = requireNotNull(memberJobPreferenceRepository.findByMemberIdAndJobId(memberId, jobId))
+            assertThat(found.bookmarked).isFalse()
+            assertThat(found.exclusion).isEqualTo(ExclusionType.SIMILAR_JOBS)
+        }
+
         // ---------- R3: recommendation_preferences (Issue #152, V23 Migration) ----------
 
         @Test
@@ -645,6 +685,158 @@ class RecommendationPersistenceIntegrationTest
         @Test
         fun `설정한 적 없는 회원은 Generation State 조회 결과가 없다`() {
             assertThat(recommendationGenerationStateRepository.findByMemberId(memberId)).isNull()
+        }
+
+        // ---------- R6: SIMILAR_JOBS 유사 공고 확장(Issue #167) ----------
+
+        @Test
+        fun `findJobIdsByMemberIdAndExclusionType은 SIMILAR_JOBS만 좁혀 조회한다`() {
+            val otherJob =
+                jobRepository.saveAndFlush(
+                    Job(
+                        companyId = jobRepository.findById(jobId).get().companyId,
+                        type = PostingType.GENERAL,
+                        applicationMethod = ApplicationMethod.INTERNAL,
+                        title = "다른 공고",
+                        status = JobStatus.PUBLISHED,
+                    ),
+                )
+            memberJobPreferenceRepository.saveAndFlush(
+                MemberJobPreference(memberId = memberId, jobId = jobId).apply { exclusion = ExclusionType.THIS_JOB },
+            )
+            memberJobPreferenceRepository.saveAndFlush(
+                MemberJobPreference(memberId = memberId, jobId = requireNotNull(otherJob.id)).apply {
+                    exclusion = ExclusionType.SIMILAR_JOBS
+                },
+            )
+
+            val similarJobsSourceIds =
+                memberJobPreferenceRepository.findJobIdsByMemberIdAndExclusionType(memberId, ExclusionType.SIMILAR_JOBS)
+
+            assertThat(similarJobsSourceIds).containsExactly(otherJob.id)
+        }
+
+        @Test
+        fun `findJobIdsByMemberIdAndRecommendationDate는 그 회원의 오늘자 Recommendation jobId를 반환한다`() {
+            val otherJob =
+                jobRepository.saveAndFlush(
+                    Job(
+                        companyId = jobRepository.findById(jobId).get().companyId,
+                        type = PostingType.GENERAL,
+                        applicationMethod = ApplicationMethod.INTERNAL,
+                        title = "다른 공고",
+                        status = JobStatus.PUBLISHED,
+                    ),
+                )
+            recommendationRepository.saveAndFlush(recommendationOf())
+            recommendationRepository.saveAndFlush(
+                Recommendation(
+                    memberId = memberId,
+                    jobId = requireNotNull(otherJob.id),
+                    recommendationDate = today,
+                    score = BigDecimal(50),
+                    suitability = SuitabilityLevel.NORMAL,
+                    rank = 2,
+                    algorithmVersion = 1,
+                ),
+            )
+            // 어제자 결과는 대상이 아니다.
+            recommendationRepository.saveAndFlush(
+                Recommendation(
+                    memberId = memberId,
+                    jobId = jobId,
+                    recommendationDate = today.minusDays(1),
+                    score = BigDecimal(50),
+                    suitability = SuitabilityLevel.NORMAL,
+                    rank = 1,
+                    algorithmVersion = 1,
+                ),
+            )
+
+            val jobIds = recommendationRepository.findJobIdsByMemberIdAndRecommendationDate(memberId, today)
+
+            assertThat(jobIds).containsExactlyInAnyOrder(jobId, otherJob.id)
+        }
+
+        @Test
+        fun `deleteAllByMemberIdAndJobIdIn은 지정된 여러 Job의 그 회원 Recommendation만 지운다`() {
+            val similarJob =
+                jobRepository.saveAndFlush(
+                    Job(
+                        companyId = jobRepository.findById(jobId).get().companyId,
+                        type = PostingType.GENERAL,
+                        applicationMethod = ApplicationMethod.INTERNAL,
+                        title = "유사 공고",
+                        status = JobStatus.PUBLISHED,
+                    ),
+                )
+            val keptJob =
+                jobRepository.saveAndFlush(
+                    Job(
+                        companyId = jobRepository.findById(jobId).get().companyId,
+                        type = PostingType.GENERAL,
+                        applicationMethod = ApplicationMethod.INTERNAL,
+                        title = "유지되는 공고",
+                        status = JobStatus.PUBLISHED,
+                    ),
+                )
+            val otherMember =
+                memberRepository.saveAndFlush(
+                    Member(
+                        oauthProvider = OAuthProvider.DG,
+                        oauthSubject = "subject-similar-jobs-delete",
+                        email = "similar-jobs-delete@example.com",
+                        status = MemberStatus.ACTIVE,
+                        profilePublic = true,
+                    ),
+                )
+            val otherMemberId = requireNotNull(otherMember.id)
+            recommendationRepository.saveAndFlush(recommendationOf()) // memberId, jobId(기준 Job)
+            recommendationRepository.saveAndFlush(
+                Recommendation(
+                    memberId = memberId,
+                    jobId = requireNotNull(similarJob.id),
+                    recommendationDate = today,
+                    score = BigDecimal(50),
+                    suitability = SuitabilityLevel.NORMAL,
+                    rank = 2,
+                    algorithmVersion = 1,
+                ),
+            )
+            recommendationRepository.saveAndFlush(
+                Recommendation(
+                    memberId = memberId,
+                    jobId = requireNotNull(keptJob.id),
+                    recommendationDate = today,
+                    score = BigDecimal(50),
+                    suitability = SuitabilityLevel.NORMAL,
+                    rank = 3,
+                    algorithmVersion = 1,
+                ),
+            )
+            // 다른 회원의 같은 similarJob Recommendation은 영향받지 않아야 한다.
+            recommendationRepository.saveAndFlush(
+                Recommendation(
+                    memberId = otherMemberId,
+                    jobId = requireNotNull(similarJob.id),
+                    recommendationDate = today,
+                    score = BigDecimal(50),
+                    suitability = SuitabilityLevel.NORMAL,
+                    rank = 1,
+                    algorithmVersion = 1,
+                ),
+            )
+
+            recommendationRepository.deleteAllByMemberIdAndJobIdIn(
+                memberId,
+                setOf(jobId, requireNotNull(similarJob.id)),
+            )
+            recommendationRepository.flush()
+
+            assertThat(recommendationRepository.findJobIdsByMemberIdAndRecommendationDate(memberId, today))
+                .containsExactly(keptJob.id)
+            assertThat(recommendationRepository.findJobIdsByMemberIdAndRecommendationDate(otherMemberId, today))
+                .containsExactly(similarJob.id)
         }
 
         companion object {

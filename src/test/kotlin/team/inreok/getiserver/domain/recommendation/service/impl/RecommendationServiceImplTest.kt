@@ -22,6 +22,7 @@ import org.mockito.quality.Strictness
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
+import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
@@ -43,6 +44,7 @@ import team.inreok.getiserver.domain.recommendation.exception.RecommendationExcl
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationExclusionNotFoundException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationJobNotFoundException
 import team.inreok.getiserver.domain.recommendation.exception.RecommendationNotEnrolledException
+import team.inreok.getiserver.domain.recommendation.exception.RecommendationPreferenceWriteConflictException
 import team.inreok.getiserver.domain.recommendation.repository.MemberJobPreferenceRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationGenerationStateRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationPreferenceRepository
@@ -76,6 +78,9 @@ class RecommendationServiceImplTest {
     @Mock
     private lateinit var memberApplicantSnapshotQueryPort: MemberApplicantSnapshotQueryPort
 
+    @Mock
+    private lateinit var aiAnalysisSearchQueryPort: AiAnalysisSearchQueryPort
+
     @Captor
     private lateinit var preferenceCaptor: ArgumentCaptor<MemberJobPreference>
 
@@ -90,6 +95,8 @@ class RecommendationServiceImplTest {
             memberApplicantSnapshotQueryPort,
             JsonMapper(),
             "0 0 3 * * *",
+            0.6,
+            aiAnalysisSearchQueryPort,
         )
     }
 
@@ -316,6 +323,8 @@ class RecommendationServiceImplTest {
                 memberApplicantSnapshotQueryPort,
                 JsonMapper(),
                 "-",
+                0.6,
+                aiAnalysisSearchQueryPort,
             )
         given(recommendationPreferenceRepository.findByMemberId(1L))
             .willReturn(RecommendationPreference(memberId = 1L, enabled = true))
@@ -536,6 +545,10 @@ class RecommendationServiceImplTest {
         // TOCTOU를 재현한다 -- 사전 확인은 false(관심 없음 없음)를 통과했지만, 그 사이 동시
         // 요청이 먼저 Row를 만들어 uk_member_job_preferences_member_job UNIQUE 제약을 위반한
         // 상황을 Mock으로 흉내낸다.
+        //
+        // 경합 상대가 관심 없음 등록인지 북마크 등록인지 이 시점에는 알 수 없어(PR #178 코드리뷰
+        // 반영) EXCLUSION_ALREADY_EXISTS로 단정하지 않고 공통 PREFERENCE_WRITE_CONFLICT(재시도
+        // 가능)로 변환한다 -- saveNewPreferenceRow KDoc 참고.
         given(jobRecommendationCandidateQueryPort.findAllByIds(setOf(1L))).willReturn(mapOf(1L to jobOf(1L)))
         given(memberJobPreferenceRepository.existsByMemberIdAndJobIdAndExclusionIsNotNull(1L, 1L)).willReturn(false)
         given(memberJobPreferenceRepository.findByMemberIdAndJobId(1L, 1L)).willReturn(null)
@@ -543,7 +556,7 @@ class RecommendationServiceImplTest {
             .willThrow(DataIntegrityViolationException("uk_member_job_preferences_member_job"))
 
         assertThatThrownBy { service.registerExclusion(1L, 1L, ExclusionType.THIS_JOB) }
-            .isInstanceOf(RecommendationExclusionAlreadyExistsException::class.java)
+            .isInstanceOf(RecommendationPreferenceWriteConflictException::class.java)
         verify(recommendationRepository, never()).deleteAllByMemberIdAndJobId(1L, 1L)
     }
 

@@ -74,6 +74,15 @@ class Job(
 
     var capacity: Int? = null
 
+    // 근무지역과 고용형태는 Enum이 아니라 자유 문자열이다(Issue #169). 값 집합이 명세로 확정되지
+    // 않았고, 외부 수집 공고가 실제로 받아오는 값도 Provider마다 축이 달라(근무형태, 채용유형
+    // 등) 지금 Enum으로 좁히면 표시할 값을 잃는다. 표시 전용이라 검색어 매칭 대상도 아니다.
+    @Column(length = 255)
+    var location: String? = null
+
+    @Column(name = "employment_type", length = 255)
+    var employmentType: String? = null
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "required_skills", columnDefinition = "jsonb")
     var requiredSkills: String? = null

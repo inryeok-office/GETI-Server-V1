@@ -13,6 +13,7 @@ import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationEx
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.JOB_NOT_PUBLISHED
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.NOT_INTERESTED
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.RECRUITMENT_ENDED
+import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.SIMILAR_JOB_EXCLUDED
 import team.inreok.getiserver.domain.recommendation.entity.type.RecommendationExclusionReason.TARGET_GRADE_MISMATCH
 import java.time.LocalDateTime
 
@@ -65,6 +66,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 hasActiveApplication = false,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
@@ -81,6 +83,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 hasActiveApplication = false,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
@@ -97,6 +100,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 hasActiveApplication = false,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
@@ -113,6 +117,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 hasActiveApplication = false,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
@@ -129,6 +134,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 hasActiveApplication = false,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
@@ -145,6 +151,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 hasActiveApplication = false,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
@@ -161,6 +168,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 hasActiveApplication = true,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
@@ -177,6 +185,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = setOf(1L),
                 aiSnapshot = aiSnapshotOf(),
                 hasActiveApplication = true,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
@@ -193,6 +202,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 hasActiveApplication = false,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
@@ -209,6 +219,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = setOf(1L),
                 aiSnapshot = aiSnapshotOf(),
                 hasActiveApplication = false,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
@@ -225,10 +236,62 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = setOf(1L),
                 aiSnapshot = aiSnapshotOf(),
                 hasActiveApplication = false,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
         assertThat(reason).isEqualTo(NOT_INTERESTED)
+    }
+
+    @Test
+    fun `SIMILAR_JOBS로 유사 판정된 공고는 SIMILAR_JOB_EXCLUDED로 제외한다`() {
+        val reason =
+            computeExclusionReason(
+                job = jobOf(),
+                member = memberOf(),
+                excludedJobIds = emptySet(),
+                bookmarkedJobIds = emptySet(),
+                aiSnapshot = aiSnapshotOf(),
+                hasActiveApplication = false,
+                isSimilarToExcludedJob = true,
+                now = now,
+            )
+
+        assertThat(reason).isEqualTo(SIMILAR_JOB_EXCLUDED)
+    }
+
+    @Test
+    fun `관심 없음(자기 자신)이 유사 판정보다 우선한다`() {
+        val reason =
+            computeExclusionReason(
+                job = jobOf(),
+                member = memberOf(),
+                excludedJobIds = setOf(1L),
+                bookmarkedJobIds = emptySet(),
+                aiSnapshot = aiSnapshotOf(),
+                hasActiveApplication = false,
+                isSimilarToExcludedJob = true,
+                now = now,
+            )
+
+        assertThat(reason).isEqualTo(NOT_INTERESTED)
+    }
+
+    @Test
+    fun `유사 판정이 북마크보다 우선한다`() {
+        val reason =
+            computeExclusionReason(
+                job = jobOf(),
+                member = memberOf(),
+                excludedJobIds = emptySet(),
+                bookmarkedJobIds = setOf(1L),
+                aiSnapshot = aiSnapshotOf(),
+                hasActiveApplication = false,
+                isSimilarToExcludedJob = true,
+                now = now,
+            )
+
+        assertThat(reason).isEqualTo(SIMILAR_JOB_EXCLUDED)
     }
 
     @Test
@@ -241,6 +304,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(highSchoolGraduateFit = "UNSUITABLE"),
                 hasActiveApplication = false,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
@@ -257,6 +321,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = emptySet(),
                 aiSnapshot = null,
                 hasActiveApplication = false,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 
@@ -273,6 +338,7 @@ class RecommendationCandidateFilterTest {
                 bookmarkedJobIds = emptySet(),
                 aiSnapshot = aiSnapshotOf(),
                 hasActiveApplication = false,
+                isSimilarToExcludedJob = false,
                 now = now,
             )
 

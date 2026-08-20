@@ -20,6 +20,7 @@ import org.springframework.data.elasticsearch.core.query.Query
 import team.inreok.getiserver.domain.file.link.FileUrlPort
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
+import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
 import team.inreok.getiserver.domain.search.document.JobSearchDocument
 import team.inreok.getiserver.domain.search.dto.JobSort
 import team.inreok.getiserver.domain.search.dto.PublicJobStatus
@@ -45,9 +46,13 @@ class JobSearchServiceImplTest {
     @Mock
     private lateinit var jobApplicationEligibilityAccessor: JobApplicationEligibilityAccessor
 
+    @Mock
+    private lateinit var jobBookmarkAccessor: JobBookmarkAccessor
+
     private val service: JobSearchServiceImpl by lazy {
-        // 이 Test의 관심사는 logoUrl 배치 발급(Issue #92)이지 지원 가능 여부 계산(Issue #136)이
-        // 아니므로, 요청된 jobId 전체에 기본값을 채워주는 Stub 하나를 모든 Test가 공유한다.
+        // 이 Test의 관심사는 logoUrl 배치 발급(Issue #92)이지 지원 가능 여부 계산(Issue #136)이나
+        // 북마크 여부 계산(Issue #171)이 아니므로, 요청된 jobId 전체에 기본값을 채워주는 Stub
+        // 하나를 모든 Test가 공유한다.
         given(
             jobApplicationEligibilityAccessor.findAllByJobIds(any() ?: emptySet(), anyLong()),
         ).willAnswer { invocation ->
@@ -55,7 +60,8 @@ class JobSearchServiceImplTest {
             val jobIds = invocation.arguments[0] as Set<Long>
             jobIds.associateWith { defaultApplicationEligibility() }
         }
-        JobSearchServiceImpl(indexManager, fileUrlPort, jobApplicationEligibilityAccessor)
+        given(jobBookmarkAccessor.findAllByJobIds(any() ?: emptySet(), anyLong())).willReturn(emptySet())
+        JobSearchServiceImpl(indexManager, fileUrlPort, jobApplicationEligibilityAccessor, jobBookmarkAccessor)
     }
 
     private fun defaultApplicationEligibility() =
@@ -128,6 +134,43 @@ class JobSearchServiceImplTest {
     }
 
     @Test
+    fun `목록 항목마다 요청자 기준 북마크 여부를 한 번의 배치 호출로 채운다`() {
+        val hits =
+            listOf(
+                hitOf(documentOf(jobId = 1L, companyLogoFileId = null)),
+                hitOf(documentOf(jobId = 2L, companyLogoFileId = null)),
+            )
+        given(searchHits.searchHits).willReturn(hits)
+        given(searchHits.totalHits).willReturn(2L)
+        given(indexManager.search(anyQuery())).willReturn(searchHits)
+        // service를 먼저 참조해 기본 Stub을 등록시킨 뒤 이 Test만의 값으로 재정의한다
+        // (위 지원 가능 여부 Test와 같은 이유).
+        service
+        given(jobBookmarkAccessor.findAllByJobIds(setOf(1L, 2L), REQUESTER_ID)).willReturn(setOf(2L))
+
+        val response = search()
+
+        assertThat(response.content[0].bookmarked).isFalse()
+        assertThat(response.content[1].bookmarked).isTrue()
+        // 공고마다 단건 조회하면 목록 크기만큼 반복된다(N+1). 정확히 한 번이어야 한다.
+        verify(jobBookmarkAccessor, times(1)).findAllByJobIds(setOf(1L, 2L), REQUESTER_ID)
+    }
+
+    // Elasticsearch Document의 근무지역·고용형태는 PostgreSQL을 다시 조회하지 않고 그대로
+    // 응답으로 옮긴다(Issue #69의 Read Model 원칙, Issue #169).
+    @Test
+    fun `검색 결과의 근무지역과 고용형태를 목록 응답에 그대로 옮긴다`() {
+        given(searchHits.searchHits).willReturn(listOf(hitOf(documentOf(jobId = 1L, companyLogoFileId = null))))
+        given(searchHits.totalHits).willReturn(1L)
+        given(indexManager.search(anyQuery())).willReturn(searchHits)
+
+        val response = search()
+
+        assertThat(response.content[0].location).isEqualTo("서울특별시 중구")
+        assertThat(response.content[0].employmentType).isEqualTo("인턴")
+    }
+
+    @Test
     fun `기업에 로고가 없으면 logoUrl은 null이고 File Port를 호출하지 않는다`() {
         given(searchHits.searchHits).willReturn(listOf(hitOf(documentOf(jobId = 1L, companyLogoFileId = null))))
         given(searchHits.totalHits).willReturn(1L)
@@ -165,6 +208,9 @@ class JobSearchServiceImplTest {
             companyType = null,
             sourceName = null,
             targetGrade = null,
+            highSchoolGraduateFit = null,
+            entryLevelFit = null,
+            difficulty = null,
             openOnly = false,
             sort = JobSort.LATEST,
             direction = null,
@@ -211,6 +257,8 @@ class JobSearchServiceImplTest {
         publishedAt = LocalDateTime.now(),
         startDate = null,
         endDate = null,
+        location = "서울특별시 중구",
+        employmentType = "인턴",
     )
 
     private companion object {

@@ -27,6 +27,7 @@ import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateSnapsho
 import team.inreok.getiserver.domain.member.query.RecommendationMemberProfileQueryPort
 import team.inreok.getiserver.domain.member.query.RecommendationMemberProfileSnapshot
 import team.inreok.getiserver.domain.recommendation.entity.Recommendation
+import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
 import team.inreok.getiserver.domain.recommendation.repository.MemberJobPreferenceRepository
 import team.inreok.getiserver.domain.recommendation.repository.RecommendationRepository
 import tools.jackson.databind.ObjectMapper
@@ -67,6 +68,7 @@ class RecommendationGenerationServiceImplTest {
             memberJobPreferenceRepository,
             recommendationRepository,
             objectMapper,
+            0.6,
         )
     }
 
@@ -266,5 +268,123 @@ class RecommendationGenerationServiceImplTest {
         val result = service.generateForMember(1L, limit = 10)
 
         assertThat(result).hasSize(1)
+    }
+
+    // ---------- SIMILAR_JOBS 유사 공고 확장 (R6, Issue #167) ----------
+
+    @Test
+    fun `SIMILAR_JOBS 기준 Job과 유사한 후보는 제외되고 유사하지 않은 후보는 유지된다`() {
+        val jobs = listOf(jobOf(1L), jobOf(2L))
+        given(memberProfileQueryPort.findById(1L)).willReturn(memberOf())
+        given(jobCandidateQueryPort.findAllPublished()).willReturn(jobs)
+        given(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(1L)).willReturn(emptyList())
+        given(memberJobPreferenceRepository.findJobIdsByMemberIdAndExclusionType(1L, ExclusionType.SIMILAR_JOBS))
+            .willReturn(listOf(99L))
+        given(aiAnalysisSearchQueryPort.findCompletedByJobIds(listOf(1L, 2L, 99L))).willReturn(
+            mapOf(
+                // job 1은 기준 Job(99)과 완전히 같은 기술 스택 -> 유사도 1.0, 제외
+                1L to aiSnapshotOf(requiredTechStackIds = listOf(1L, 2L, 3L)),
+                // job 2는 기준 Job과 겹치는 기술이 없음 -> 유사도 0.0, 유지
+                2L to aiSnapshotOf(requiredTechStackIds = listOf(100L, 101L)),
+                99L to aiSnapshotOf(requiredTechStackIds = listOf(1L, 2L, 3L)),
+            ),
+        )
+        given(jobApplicationEligibilityAccessor.findAllByJobIds(jobs.map { it.jobId }.toSet(), 1L)).willReturn(
+            mapOf(1L to eligibilityOf(), 2L to eligibilityOf()),
+        )
+
+        val result = service.generateForMember(1L, limit = 10)
+
+        assertThat(result.map { it.jobId }).containsExactly(2L)
+    }
+
+    @Test
+    fun `여러 SIMILAR_JOBS 기준 Job 중 하나라도 유사하면 후보를 제외한다`() {
+        val jobs = listOf(jobOf(1L))
+        given(memberProfileQueryPort.findById(1L)).willReturn(memberOf())
+        given(jobCandidateQueryPort.findAllPublished()).willReturn(jobs)
+        given(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(1L)).willReturn(emptyList())
+        given(memberJobPreferenceRepository.findJobIdsByMemberIdAndExclusionType(1L, ExclusionType.SIMILAR_JOBS))
+            .willReturn(listOf(98L, 99L))
+        given(aiAnalysisSearchQueryPort.findCompletedByJobIds(listOf(1L, 98L, 99L))).willReturn(
+            mapOf(
+                1L to aiSnapshotOf(requiredTechStackIds = listOf(1L, 2L, 3L)),
+                // 98은 겹치지 않지만 99는 완전히 겹친다 -> 하나라도 유사하면 제외
+                98L to aiSnapshotOf(requiredTechStackIds = listOf(200L)),
+                99L to aiSnapshotOf(requiredTechStackIds = listOf(1L, 2L, 3L)),
+            ),
+        )
+        given(jobApplicationEligibilityAccessor.findAllByJobIds(jobs.map { it.jobId }.toSet(), 1L)).willReturn(
+            mapOf(1L to eligibilityOf()),
+        )
+
+        val result = service.generateForMember(1L, limit = 10)
+
+        assertThat(result).isEmpty()
+    }
+
+    @Test
+    fun `SIMILAR_JOBS 기준 Job의 AI 분석이 없으면 다른 Job으로 확장하지 않는다`() {
+        val jobs = listOf(jobOf(1L))
+        given(memberProfileQueryPort.findById(1L)).willReturn(memberOf())
+        given(jobCandidateQueryPort.findAllPublished()).willReturn(jobs)
+        given(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(1L)).willReturn(emptyList())
+        given(memberJobPreferenceRepository.findJobIdsByMemberIdAndExclusionType(1L, ExclusionType.SIMILAR_JOBS))
+            .willReturn(listOf(99L))
+        // 99(기준 Job)의 AI 분석이 COMPLETED가 아니라 결과 Map에 없다 -- 보수적 Fallback으로
+        // 확장하지 않는다(Issue #167 §4).
+        given(aiAnalysisSearchQueryPort.findCompletedByJobIds(listOf(1L, 99L))).willReturn(
+            mapOf(1L to aiSnapshotOf(requiredTechStackIds = listOf(1L, 2L, 3L))),
+        )
+        given(jobApplicationEligibilityAccessor.findAllByJobIds(jobs.map { it.jobId }.toSet(), 1L)).willReturn(
+            mapOf(1L to eligibilityOf()),
+        )
+
+        val result = service.generateForMember(1L, limit = 10)
+
+        assertThat(result.map { it.jobId }).containsExactly(1L)
+    }
+
+    @Test
+    fun `SIMILAR_JOBS 기준 Job이 있어도 AI Query는 한 번만 호출한다(Batch, N+1 방지)`() {
+        val jobs = listOf(jobOf(1L), jobOf(2L))
+        given(memberProfileQueryPort.findById(1L)).willReturn(memberOf())
+        given(jobCandidateQueryPort.findAllPublished()).willReturn(jobs)
+        given(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(1L)).willReturn(emptyList())
+        given(memberJobPreferenceRepository.findJobIdsByMemberIdAndExclusionType(1L, ExclusionType.SIMILAR_JOBS))
+            .willReturn(listOf(99L))
+        given(aiAnalysisSearchQueryPort.findCompletedByJobIds(anyCollection())).willReturn(
+            mapOf(1L to aiSnapshotOf(), 2L to aiSnapshotOf(), 99L to aiSnapshotOf()),
+        )
+        given(jobApplicationEligibilityAccessor.findAllByJobIds(jobs.map { it.jobId }.toSet(), 1L)).willReturn(
+            mapOf(1L to eligibilityOf(), 2L to eligibilityOf()),
+        )
+
+        service.generateForMember(1L, limit = 10)
+
+        verify(aiAnalysisSearchQueryPort, times(1)).findCompletedByJobIds(anyCollection())
+    }
+
+    @Test
+    fun `THIS_JOB 기준 Job은 SIMILAR_JOBS 확장 대상이 아니다(기존 NOT_INTERESTED 동작만 유지)`() {
+        val jobs = listOf(jobOf(1L), jobOf(2L))
+        given(memberProfileQueryPort.findById(1L)).willReturn(memberOf())
+        given(jobCandidateQueryPort.findAllPublished()).willReturn(jobs)
+        // job 1은 THIS_JOB으로 관심 없음 처리됐다 -- SIMILAR_JOBS 기준 Job 목록에는 포함되지 않는다.
+        given(memberJobPreferenceRepository.findExcludedJobIdsByMemberId(1L)).willReturn(listOf(1L))
+        given(memberJobPreferenceRepository.findJobIdsByMemberIdAndExclusionType(1L, ExclusionType.SIMILAR_JOBS))
+            .willReturn(emptyList())
+        given(aiAnalysisSearchQueryPort.findCompletedByJobIds(listOf(1L, 2L))).willReturn(
+            mapOf(1L to aiSnapshotOf(), 2L to aiSnapshotOf()),
+        )
+        given(jobApplicationEligibilityAccessor.findAllByJobIds(jobs.map { it.jobId }.toSet(), 1L)).willReturn(
+            mapOf(1L to eligibilityOf(), 2L to eligibilityOf()),
+        )
+
+        val result = service.generateForMember(1L, limit = 10)
+
+        // job 1은 NOT_INTERESTED로 제외되지만, job 2는 job 1과 기술 스택이 같아도(techStackIds
+        // 동일) THIS_JOB 확장 대상이 아니므로 제외되지 않는다.
+        assertThat(result.map { it.jobId }).containsExactly(2L)
     }
 }

@@ -35,6 +35,18 @@ data class JobApplicationAdminListItemResponse(
     val applicantMemberId: Long,
     @param:Schema(description = "지원자 이름 스냅샷", nullable = true)
     val applicantName: String?,
+    @param:Schema(description = "지원자 기수 스냅샷", nullable = true)
+    val applicantCohort: Int?,
+    @param:Schema(description = "지원자 학과 스냅샷", nullable = true)
+    val applicantDepartment: String?,
+    @param:Schema(description = "공고명. 공고가 삭제되어 조회할 수 없으면 null.", nullable = true)
+    val jobTitle: String?,
+    @param:Schema(description = "기업명. 공고 또는 기업을 조회할 수 없으면 null.", nullable = true)
+    val companyName: String?,
+    @param:Schema(description = "담당 교사 회원 ID. 공고에 담당자가 지정되지 않았으면 null.", nullable = true)
+    val managerMemberId: Long?,
+    @param:Schema(description = "담당 교사 이름. 담당자가 없거나 조회할 수 없으면 null.", nullable = true)
+    val managerName: String?,
     @param:Schema(description = "지원 상태", example = "SUBMITTED")
     val status: JobApplicationStatus,
     @param:Schema(description = "제출 일시. 아직 제출 전(DRAFT)이면 null.", nullable = true)

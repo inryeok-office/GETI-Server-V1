@@ -293,6 +293,11 @@ class CollectorExecutionServiceImpl(
                         startDate = job.startDate,
                         endDate = job.endDate,
                         publish = job.dataQualityStatus == JobDataQualityStatus.COMPLETE,
+                        // Provider가 준 근무지·고용형태를 Job Entity에도 반영한다(Issue #169). 이전에는
+                        // Discord 알림 표시와 적합성 판정에만 썼는데, 그러면 외부 수집 공고의 공고
+                        // 카드에는 두 값이 영원히 비어 있었다. 길이 초과 처리는 Job Module이 한다.
+                        location = job.workRegion,
+                        employmentType = job.employmentType,
                     ),
                 )
             if (result.outcome == JobImportOutcome.CREATED) {

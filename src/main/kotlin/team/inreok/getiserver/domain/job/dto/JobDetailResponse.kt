@@ -14,9 +14,9 @@ import java.time.LocalDateTime
  * 공고 상세 응답이다. 공개 상세와 관리자 상세가 같은 구조를 사용하고, 관리자만 볼 수 있는
  * `DRAFT`/`DELETED` 여부는 [status]로 구분한다. `deletedAt`은 노출하지 않는다.
  *
- * `files`, `formId`, `aiRequestAccepted`, `bookmarked`, `bookmarkCount`는 각각 File/Recommendation
- * Domain이 준비된 뒤 추가한다. 가짜 값이나 빈 목록을 지금 내보내면 Client가 없는 기능을 있는
- * 것으로 오해하므로 Field 자체를 넣지 않았다.
+ * `files`, `formId`, `aiRequestAccepted`, `bookmarkCount`는 각각 File/Recommendation Domain이
+ * 준비된 뒤 추가한다. 가짜 값이나 빈 목록을 지금 내보내면 Client가 없는 기능을 있는 것으로
+ * 오해하므로 Field 자체를 넣지 않았다.
  *
  * [aiAnalysis]는 AI Analysis Phase 1(Issue #132)에서 추가했다. 아직 분석이 시작되지 않은(예:
  * PUBLISHED 이후 비동기 Trigger가 아직 처리되지 않은) 공고는 null이다.
@@ -24,6 +24,10 @@ import java.time.LocalDateTime
  * [application]은 Application Phase 8(Issue #136)에서 추가했다. 요청자(학생 기준) 지원 가능
  * 여부·지원 현황을 서버가 계산해 그대로 노출한다 -- Frontend가 별도로
  * `GET /api/v1/jobs/{jobId}/application-eligibility`를 다시 호출하지 않아도 된다.
+ *
+ * [bookmarked]는 Issue #171에서 추가했다. 요청자(학생 기준) 북마크 여부를 서버가 계산해 그대로
+ * 노출한다(`job.access.JobBookmarkAccessor`, `recommendation`이 구현). PR #178의 북마크
+ * 등록·해제 API(Write Path)를 이어받는 Read Integration이다.
  */
 @Schema(description = "공고 상세 정보")
 data class JobDetailResponse(
@@ -54,6 +58,18 @@ data class JobDetailResponse(
     val targetGrade: Int?,
     @param:Schema(description = "모집 인원", example = "2", nullable = true)
     val capacity: Int?,
+    @param:Schema(
+        description = "근무지역. 정해진 값 집합이 없는 표시 전용 문자열이다. 입력되지 않았으면 null.",
+        example = "서울특별시 중구",
+        nullable = true,
+    )
+    val location: String?,
+    @param:Schema(
+        description = "고용형태. 정해진 값 집합이 없는 표시 전용 문자열이다. 입력되지 않았으면 null.",
+        example = "인턴",
+        nullable = true,
+    )
+    val employmentType: String?,
     @param:Schema(description = "선착순 모집 여부", example = "false")
     val firstComeServed: Boolean,
     @param:Schema(description = "조회수. 공개 상세 조회 응답에는 이번 조회분이 반영된 값이 담긴다.", example = "129")
@@ -72,6 +88,8 @@ data class JobDetailResponse(
     )
     val aiAnalysis: JobAiAnalysisAccessSnapshot?,
     val application: JobApplicationEligibilityAccessSnapshot,
+    @param:Schema(description = "요청자 기준 북마크 여부", example = "false")
+    val bookmarked: Boolean,
 ) {
     companion object {
         /**
@@ -85,6 +103,7 @@ data class JobDetailResponse(
             viewCount: Long = job.viewCount,
             aiAnalysis: JobAiAnalysisAccessSnapshot? = null,
             application: JobApplicationEligibilityAccessSnapshot,
+            bookmarked: Boolean,
         ): JobDetailResponse =
             JobDetailResponse(
                 jobId = requireNotNull(job.id) { "저장된 Job은 id를 가져야 합니다." },
@@ -99,6 +118,8 @@ data class JobDetailResponse(
                 endDate = job.recruitmentEndedAt,
                 targetGrade = job.targetGrade,
                 capacity = job.capacity,
+                location = job.location,
+                employmentType = job.employmentType,
                 firstComeServed = job.firstComeServed,
                 viewCount = viewCount,
                 publishedAt = job.publishedAt,
@@ -107,6 +128,7 @@ data class JobDetailResponse(
                 updatedAt = job.updatedAt,
                 aiAnalysis = aiAnalysis,
                 application = application,
+                bookmarked = bookmarked,
             )
     }
 }

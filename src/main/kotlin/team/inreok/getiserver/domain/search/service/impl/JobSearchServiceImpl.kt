@@ -6,10 +6,13 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query
 import org.springframework.data.domain.Pageable
 import org.springframework.data.elasticsearch.client.elc.NativeQuery
 import org.springframework.stereotype.Service
+import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
+import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.file.link.FileUrlPort
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
+import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
 import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.search.document.JobSearchDocument
 import team.inreok.getiserver.domain.search.dto.JobSearchResponse
@@ -28,6 +31,7 @@ class JobSearchServiceImpl(
     private val indexManager: JobSearchIndexManager,
     private val fileUrlPort: FileUrlPort,
     private val jobApplicationEligibilityAccessor: JobApplicationEligibilityAccessor,
+    private val jobBookmarkAccessor: JobBookmarkAccessor,
 ) : JobSearchService {
     @Suppress("LongParameterList")
     override fun search(
@@ -37,6 +41,9 @@ class JobSearchServiceImpl(
         companyType: CompanyType?,
         sourceName: String?,
         targetGrade: Int?,
+        highSchoolGraduateFit: AiFitLevel?,
+        entryLevelFit: AiFitLevel?,
+        difficulty: AiDifficulty?,
         openOnly: Boolean,
         sort: JobSort,
         direction: SortDirection?,
@@ -60,6 +67,9 @@ class JobSearchServiceImpl(
                         companyType,
                         trimmedSourceName,
                         targetGrade,
+                        highSchoolGraduateFit,
+                        entryLevelFit,
+                        difficulty,
                         openOnly,
                         now,
                     ),
@@ -81,9 +91,18 @@ class JobSearchServiceImpl(
         val documents = hits.searchHits.map { it.content }
         val logoUrls = resolveLogoUrls(documents, requesterId)
         val eligibilities = resolveEligibilities(documents, requesterId)
+        val bookmarkedJobIds = resolveBookmarkedJobIds(documents, requesterId)
 
         return JobSearchResponse(
-            content = documents.map { JobSummaryResponse.from(it, logoUrls, eligibilities.getValue(it.jobId)) },
+            content =
+                documents.map {
+                    JobSummaryResponse.from(
+                        it,
+                        logoUrls,
+                        eligibilities.getValue(it.jobId),
+                        bookmarked = it.jobId in bookmarkedJobIds,
+                    )
+                },
             page = page,
             size = size,
             totalElements = totalElements,
@@ -122,6 +141,21 @@ class JobSearchServiceImpl(
         return jobApplicationEligibilityAccessor.findAllByJobIds(jobIds, requesterId)
     }
 
+    /**
+     * 이번 Page에 담긴 공고 전체의 요청자 기준 북마크 여부를 한 번에 계산한다(Issue #171,
+     * [resolveEligibilities]와 같은 이유 -- N+1 방지). [JobBookmarkAccessor]는 `job`이 소유하지만
+     * `search`도 그대로 소비한다(Interface Class 주석 참고). 북마크는 요청자별로 달라지는 값이라
+     * Elasticsearch Document(`JobSearchDocument`)에는 저장하지 않고, 이 변환 시점에만 조회한다.
+     */
+    private fun resolveBookmarkedJobIds(
+        documents: List<JobSearchDocument>,
+        requesterId: Long,
+    ): Set<Long> {
+        val jobIds = documents.map { it.jobId }.toSet()
+        if (jobIds.isEmpty()) return emptySet()
+        return jobBookmarkAccessor.findAllByJobIds(jobIds, requesterId)
+    }
+
     @Suppress("LongParameterList")
     private fun buildQuery(
         keyword: String?,
@@ -130,6 +164,9 @@ class JobSearchServiceImpl(
         companyType: CompanyType?,
         sourceName: String?,
         targetGrade: Int?,
+        highSchoolGraduateFit: AiFitLevel?,
+        entryLevelFit: AiFitLevel?,
+        difficulty: AiDifficulty?,
         openOnly: Boolean,
         now: LocalDateTime,
     ): Query =
@@ -142,6 +179,13 @@ class JobSearchServiceImpl(
                 companyType?.let { b.filter { f -> f.term { t -> t.field("companyType").value(it.name) } } }
                 sourceName?.let { b.filter { f -> f.term { t -> t.field("sourceName").value(it) } } }
                 targetGrade?.let { b.filter { f -> f.term { t -> t.field("targetGrade").value(it.toLong()) } } }
+                highSchoolGraduateFit?.let {
+                    b.filter { f -> f.term { t -> t.field("highSchoolGraduateFit").value(it.name) } }
+                }
+                entryLevelFit?.let {
+                    b.filter { f -> f.term { t -> t.field("entryLevelFit").value(it.name) } }
+                }
+                difficulty?.let { b.filter { f -> f.term { t -> t.field("difficulty").value(it.name) } } }
                 if (openOnly) {
                     b.filter { f -> f.term { t -> t.field("status").value(PublicJobStatus.PUBLISHED.jobStatus.name) } }
                     b.filter { f ->
