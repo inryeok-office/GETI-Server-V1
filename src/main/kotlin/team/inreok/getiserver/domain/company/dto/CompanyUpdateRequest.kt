@@ -48,4 +48,6 @@ data class CompanyUpdateRequest(
         nullable = true,
     )
     val logoFileId: Long? = null,
+    @param:Schema(description = "관리자 전용 기업 메모", nullable = true)
+    val memo: String? = null,
 )
