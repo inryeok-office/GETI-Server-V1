@@ -43,4 +43,10 @@ data class JobApplicationJobSnapshot(
     val recruitmentEndedAt: LocalDateTime?,
     val createdByMemberId: Long?,
     val managerMemberId: Long?,
+    /**
+     * 조회수(Issue #184, 학생 내 지원 목록의 Job Summary). 기존 호출부(Eligibility 판정 등)는
+     * 이 값을 쓰지 않으므로 기본값 0을 두어 기존 호출부·Test를 건드리지 않는다
+     * (`JobApplicationDraftResponse.jobTitle` 등 기존 선택적 Field와 같은 관례).
+     */
+    val viewCount: Long = 0,
 )

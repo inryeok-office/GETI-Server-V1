@@ -24,8 +24,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 @Tag(
     name = "Application - 지원서 제출·수정요청·재제출·철회",
     description =
-        "학생 본인의 지원서에 SUBMIT/REQUEST_EDIT/RESUBMIT/WITHDRAW Action을 수행한다(Issue " +
-            "#124). 필요 권한: 인증된 사용자(본인 소유 지원서만).",
+        "학생 본인의 지원서에 SUBMIT/REQUEST_EDIT/RESUBMIT/WITHDRAW Action을 수행하고(Issue " +
+            "#124), 본인 지원서 상세와 상태 변경 이력을 조회한다(Issue #133, #184). 필요 권한: " +
+            "인증된 사용자(본인 소유 지원서만).",
 )
 @SecurityRequirement(name = BEARER_AUTH_SCHEME)
 // SecurityConfig가 /api/v1/job-applications/**를 인증 필수로 지정하므로, 여기 도달했다는 것은
@@ -36,6 +37,31 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 class JobApplicationActionController(
     private val jobApplicationService: JobApplicationService,
 ) {
+    @Operation(
+        summary = "본인 지원서 상세 조회",
+        description = """
+            본인 지원서 1건의 전체 내용(공고명·기업명·양식·답변·첨부파일 포함)을 조회한다. admin용
+            상세(GET /api/v1/admin/job-applications/{applicationId})와 달리 DRAFT(임시저장 중)
+            상태도 조회할 수 있다(본인의 임시저장 확인·이어쓰기 용도). availableActions는 현재
+            상태에서 본인이 수행할 수 있는 Action(JobApplicationAction) 목록이다.
+        """,
+    )
+    @ApiResponses(
+        SwaggerApiResponse(responseCode = "200", description = "조회 성공"),
+        SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
+        SwaggerApiResponse(responseCode = "403", description = "본인의 지원서가 아님 (APPLICATION_ACCESS_FORBIDDEN)"),
+        SwaggerApiResponse(responseCode = "404", description = "지원서가 없음 (APPLICATION_NOT_FOUND)"),
+        SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
+    )
+    @GetMapping("/{applicationId}")
+    fun getApplication(
+        authentication: Authentication,
+        @Parameter(description = "조회할 지원서 ID", example = "1") @PathVariable applicationId: Long,
+    ): ApiResponse<JobApplicationDraftResponse> {
+        val studentMemberId = authentication.principal as Long
+        return ApiResponse.of(jobApplicationService.getDetail(applicationId, studentMemberId))
+    }
+
     @Operation(
         summary = "지원서 Action 수행",
         description = """

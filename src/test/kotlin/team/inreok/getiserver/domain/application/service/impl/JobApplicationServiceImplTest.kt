@@ -43,10 +43,12 @@ import team.inreok.getiserver.domain.application.repository.JobApplicationReposi
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationSubmissionRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationService
+import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.entity.type.FilePurpose
 import team.inreok.getiserver.domain.file.link.FileLinkPort
 import team.inreok.getiserver.domain.file.link.FileSnapshot
+import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshot
@@ -84,6 +86,12 @@ class JobApplicationServiceImplTest {
     @Mock
     private lateinit var fileLinkPort: FileLinkPort
 
+    @Mock
+    private lateinit var companyQuery: CompanyQuery
+
+    @Mock
+    private lateinit var jobBookmarkAccessor: JobBookmarkAccessor
+
     @Captor
     private lateinit var jobApplicationCaptor: ArgumentCaptor<JobApplication>
 
@@ -100,6 +108,8 @@ class JobApplicationServiceImplTest {
             jobApplicationStatusHistoryRepository,
             jobApplicationSubmissionRepository,
             fileLinkPort,
+            companyQuery,
+            jobBookmarkAccessor,
             jsonMapper,
         )
     }
@@ -773,4 +783,7 @@ class JobApplicationServiceImplTest {
 
         assertThatThrownBy { service.getHistory(999L, 1L) }.isInstanceOf(ApplicationNotFoundException::class.java)
     }
+
+    // list(Issue #184)/getDetail(Issue #184) Test는 별도 Class(JobApplicationServiceImplQueryTest)로
+    // 분리했다(detekt LargeClass 회피 목적, JobApplicationFileSyncTest 분리와 같은 이유).
 }
