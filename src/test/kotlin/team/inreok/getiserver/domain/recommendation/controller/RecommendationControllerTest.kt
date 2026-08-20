@@ -32,9 +32,12 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
+import team.inreok.getiserver.domain.job.query.JobBookmarkQuery
+import team.inreok.getiserver.domain.job.query.JobBookmarkSort
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationItemResponse
+import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationSettingResponse
@@ -75,6 +78,9 @@ class RecommendationControllerTest
         // null을 채우면 "any(...) must not be null"을 던진다 -- NotificationControllerTest와
         // 동일한 관례로 우회한다.
         private fun anyPageable(): Pageable = any(Pageable::class.java) ?: Pageable.unpaged()
+
+        private fun anyJobBookmarkQuery(): JobBookmarkQuery =
+            any(JobBookmarkQuery::class.java) ?: JobBookmarkQuery(null, null, null, JobBookmarkSort.LATEST)
 
         // registerExclusion의 exclusionType은 Kotlin 비Null Type이라 위와 같은 이유로 우회한다.
         private fun anyExclusionType(): ExclusionType = any(ExclusionType::class.java) ?: ExclusionType.THIS_JOB
@@ -223,6 +229,49 @@ class RecommendationControllerTest
             val captor = ArgumentCaptor.forClass(Long::class.javaObjectType)
             verify(recommendationService).getMyRecommendations(captor.capture() ?: 0L, any(), anyPageable())
             assertThat(captor.value).isEqualTo(memberId)
+        }
+
+        @Test
+        fun `인증된 사용자는 본인 북마크 공고를 필터와 함께 조회할 수 있다`() {
+            val query = JobBookmarkQuery("백엔드", PostingType.GENERAL, "GENERAL", JobBookmarkSort.DEADLINE)
+            val response =
+                RecommendationJobListResponse.of(
+                    PageImpl(listOf(jobResponseOf().copy(bookmarked = true)), firstPage, 1),
+                )
+            given(
+                recommendationService.listBookmarkedJobs(anyLong(), anyJobBookmarkQuery(), anyPageable()),
+            ).willReturn(response)
+
+            mockMvc
+                .perform(
+                    get("/api/v1/me/job-bookmarks")
+                        .param("query", "백엔드")
+                        .param("postingType", "GENERAL")
+                        .param("companyType", "GENERAL")
+                        .param("sort", "DEADLINE")
+                        .with(studentAuth()),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.content[0].jobId").value(1))
+                .andExpect(jsonPath("$.data.content[0].bookmarked").value(true))
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+
+            verify(recommendationService).listBookmarkedJobs(anyLong(), anyJobBookmarkQuery(), anyPageable())
+        }
+
+        @Test
+        fun `교사도 Notion 권한 계약에 따라 본인 북마크 공고를 조회할 수 있다`() {
+            given(
+                recommendationService.listBookmarkedJobs(
+                    100L,
+                    JobBookmarkQuery(null, null, null, JobBookmarkSort.LATEST),
+                    firstPage,
+                ),
+            ).willReturn(RecommendationJobListResponse.of(PageImpl(emptyList(), firstPage, 0)))
+
+            mockMvc
+                .perform(get("/api/v1/me/job-bookmarks").with(teacherAuth()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.content").isEmpty())
         }
 
         // ---------- ON/OFF ----------

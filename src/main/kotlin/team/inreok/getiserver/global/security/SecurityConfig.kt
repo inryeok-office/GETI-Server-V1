@@ -47,8 +47,9 @@ import tools.jackson.databind.ObjectMapper
  * Role로 알 수 없어 InquiryService가 별도로 수행한다. `/api/v1/me/job-recommendations`,
  * `/api/v1/me/recommendation-exclusions**`, `/api/v1/recommendations/settings`(맞춤 공고 추천
  * 조회·설정·관심 없음, Recommendation R3 Issue #152, Notion 계약 정합성 Issue #155),
- * `/api/v1/me/bookmarks**`(공고 북마크 등록·해제, Issue #170)는 학생 전용 기능이라 STUDENT
- * Role까지 요구한다.
+ * `/api/v1/me/job-bookmarks`(내 북마크 목록 조회, Issue #170)는 학생·교사·개발자 모두 인증만
+ * 요구한다. 북마크 등록·해제(`/api/v1/me/bookmarks**`)는 기존 계약대로 STUDENT Role까지
+ * 요구한다.
  * 전공/기술스택 메타데이터 조회 등 다른
  * Domain은 아직 Spring Security와 연동되지 않아
  * ([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport] 참고)
@@ -187,6 +188,9 @@ private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     authorize("/api/v1/me/job-recommendations", hasRole("STUDENT"))
     authorize("/api/v1/me/recommendation-exclusions", hasRole("STUDENT"))
     authorize("/api/v1/me/recommendation-exclusions/**", hasRole("STUDENT"))
+    // 북마크 목록 조회는 Notion 계약상 학생·교사·개발자 모두 인증만 요구한다. 쓰기 경로의
+    // STUDENT Role 제한과 분리해 읽기/쓰기 권한 정책을 명시적으로 유지한다.
+    authorize("/api/v1/me/job-bookmarks", authenticated)
     // 공고 북마크 등록·해제(Issue #170)도 관심 없음과 같은 Entity를 쓰는 학생 전용 기능이라
     // STUDENT Role을 요구한다. 같은 이유로 아래 "/api/v1/me/**" 규칙보다 먼저 선언한다.
     authorize("/api/v1/me/bookmarks", hasRole("STUDENT"))

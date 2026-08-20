@@ -91,6 +91,7 @@ class JobSearchControllerTest
                 .andExpect(jsonPath("$.data.content[0].company.name").value("인력개발원"))
                 .andExpect(jsonPath("$.data.content[0].location").value("서울특별시 중구"))
                 .andExpect(jsonPath("$.data.content[0].employmentType").value("인턴"))
+                .andExpect(jsonPath("$.data.content[0].bookmarked").value(true))
                 .andExpect(
                     jsonPath("$.data.content[0].company.logoUrl")
                         .value("https://storage.example/company-logo?signature=test"),
@@ -282,5 +283,6 @@ class JobSearchControllerTest
                         applicationStatus = null,
                         availableActions = listOf("CREATE_DRAFT"),
                     ),
+                bookmarked = true,
             )
     }

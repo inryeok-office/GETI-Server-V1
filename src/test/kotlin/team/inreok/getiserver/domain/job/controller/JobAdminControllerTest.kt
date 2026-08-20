@@ -409,5 +409,6 @@ class JobAdminControllerTest
                     applicationStatus = null,
                     availableActions = emptyList(),
                 ),
+            bookmarked = false,
         )
     }

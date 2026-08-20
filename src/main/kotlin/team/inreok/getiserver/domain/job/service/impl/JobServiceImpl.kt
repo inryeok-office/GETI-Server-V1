@@ -8,6 +8,7 @@ import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
+import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
@@ -39,6 +40,7 @@ class JobServiceImpl(
     private val discordChannelResolver: DiscordChannelResolver,
     private val jobAiAnalysisAccessor: JobAiAnalysisAccessor,
     private val jobApplicationEligibilityAccessor: JobApplicationEligibilityAccessor,
+    private val jobBookmarkAccessor: JobBookmarkAccessor,
 ) : JobService {
     @Transactional
     override fun create(
@@ -99,6 +101,7 @@ class JobServiceImpl(
                     requireNotNull(saved.id),
                     createdByMemberId,
                 ),
+            bookmarked = bookmarkedOf(jobBookmarkAccessor, requireNotNull(saved.id), createdByMemberId),
         )
     }
 
@@ -133,6 +136,7 @@ class JobServiceImpl(
             findCompanySummary(job.companyId, requesterId),
             aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
             application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
+            bookmarked = bookmarkedOf(jobBookmarkAccessor, jobId, requesterId),
         )
     }
 
@@ -180,6 +184,7 @@ class JobServiceImpl(
             findCompanySummary(job.companyId, requesterId),
             aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
             application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
+            bookmarked = bookmarkedOf(jobBookmarkAccessor, jobId, requesterId),
         )
     }
 
@@ -215,6 +220,7 @@ class JobServiceImpl(
             findCompanySummary(job.companyId, requesterId),
             aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
             application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
+            bookmarked = bookmarkedOf(jobBookmarkAccessor, jobId, requesterId),
         )
     }
 
@@ -236,6 +242,7 @@ class JobServiceImpl(
                 viewCount = job.viewCount + 1,
                 aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
                 application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
+                bookmarked = bookmarkedOf(jobBookmarkAccessor, jobId, requesterId),
             )
         jobRepository.incrementViewCount(jobId)
         return response
@@ -291,6 +298,15 @@ private fun applicationEligibilityOf(
     jobId: Long,
     requesterId: Long,
 ): JobApplicationEligibilityAccessSnapshot = accessor.findAllByJobIds(setOf(jobId), requesterId).getValue(jobId)
+
+// JobServiceImpl의 Method 개수를 detekt TooManyFunctions 한도 안에서 유지하기 위해 순수 함수로
+// 분리했다(위 applicationEligibilityOf와 같은 이유, Issue #171). [JobBookmarkAccessor]는 북마크한
+// jobId만 돌려주므로(Interface 주석) 결과 Set에 jobId가 있는지로 판정한다.
+private fun bookmarkedOf(
+    accessor: JobBookmarkAccessor,
+    jobId: Long,
+    requesterId: Long,
+): Boolean = jobId in accessor.findAllByJobIds(setOf(jobId), requesterId)
 
 // JobServiceImpl의 Method 개수를 detekt TooManyFunctions 한도 안에서 유지하기 위해 분리했다
 // (위 applicationEligibilityOf와 같은 이유). 전달하지 않았거나 null인 Field는 여기서 아무 일도
