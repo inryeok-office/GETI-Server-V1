@@ -426,6 +426,67 @@ class JobSearchElasticsearchIntegrationTest {
         assertThat(result.totalElements).isEqualTo(5)
     }
 
+    @Test
+    fun `applicationMethod omitted returns all and each enum filters exact documents`() {
+        indexDocument(jobId = 1L, title = "A", applicationMethod = ApplicationMethod.INTERNAL)
+        indexDocument(jobId = 2L, title = "B", applicationMethod = ApplicationMethod.EXTERNAL)
+        refresh()
+
+        assertThat(search().content.map { it.jobId }).containsExactly(2L, 1L)
+        assertThat(search(applicationMethod = ApplicationMethod.EXTERNAL).content.map { it.jobId })
+            .containsExactly(2L)
+        assertThat(search(applicationMethod = ApplicationMethod.INTERNAL).content.map { it.jobId })
+            .containsExactly(1L)
+    }
+
+    @Test
+    fun `applicationMethod combines with postingType and companyType using AND`() {
+        indexDocument(
+            jobId = 1L,
+            title = "A",
+            applicationMethod = ApplicationMethod.INTERNAL,
+            postingType = PostingType.MOU,
+            companyType = CompanyType.GENERAL,
+            sourceName = "MMA",
+        )
+        indexDocument(
+            jobId = 2L,
+            title = "B",
+            applicationMethod = ApplicationMethod.INTERNAL,
+            postingType = PostingType.MOU,
+            companyType = CompanyType.FOREIGN,
+            sourceName = "JOB_ALIO",
+        )
+        indexDocument(
+            jobId = 3L,
+            title = "C",
+            applicationMethod = ApplicationMethod.EXTERNAL,
+            postingType = PostingType.MOU,
+            companyType = CompanyType.GENERAL,
+            sourceName = "MMA",
+        )
+        indexDocument(
+            jobId = 4L,
+            title = "D",
+            applicationMethod = ApplicationMethod.INTERNAL,
+            postingType = PostingType.GENERAL,
+            companyType = CompanyType.GENERAL,
+            sourceName = "MMA",
+        )
+        refresh()
+
+        val result =
+            search(
+                applicationMethod = ApplicationMethod.INTERNAL,
+                postingType = PostingType.MOU,
+                companyType = CompanyType.GENERAL,
+                status = PublicJobStatus.PUBLISHED,
+                sourceName = "MMA",
+            )
+
+        assertThat(result.content.map { it.jobId }).containsExactly(1L)
+    }
+
     private fun refresh() {
         elasticsearchOperations.indexOps(IndexCoordinates.of(TEST_INDEX)).refresh()
     }
@@ -434,6 +495,7 @@ class JobSearchElasticsearchIntegrationTest {
     private fun search(
         query: String? = null,
         postingType: PostingType? = null,
+        applicationMethod: ApplicationMethod? = null,
         status: PublicJobStatus? = null,
         companyType: CompanyType? = null,
         sourceName: String? = null,
@@ -448,6 +510,7 @@ class JobSearchElasticsearchIntegrationTest {
     ) = searchService.search(
         query,
         postingType,
+        applicationMethod,
         status,
         companyType,
         sourceName,
@@ -468,6 +531,7 @@ class JobSearchElasticsearchIntegrationTest {
         title: String,
         content: String? = null,
         postingType: PostingType = PostingType.MOU,
+        applicationMethod: ApplicationMethod = ApplicationMethod.EXTERNAL,
         companyName: String? = "인력개발원",
         companyType: CompanyType = CompanyType.GENERAL,
         sourceName: String? = null,
@@ -488,6 +552,7 @@ class JobSearchElasticsearchIntegrationTest {
                 title = title,
                 content = content,
                 postingType = postingType,
+                applicationMethod = applicationMethod,
                 companyName = companyName,
                 companyType = companyType,
                 sourceName = sourceName,
@@ -511,6 +576,7 @@ class JobSearchElasticsearchIntegrationTest {
         title: String,
         content: String? = null,
         postingType: PostingType = PostingType.MOU,
+        applicationMethod: ApplicationMethod = ApplicationMethod.EXTERNAL,
         companyName: String? = "인력개발원",
         companyType: CompanyType = CompanyType.GENERAL,
         sourceName: String? = null,
@@ -530,7 +596,7 @@ class JobSearchElasticsearchIntegrationTest {
         title = title,
         content = content,
         postingType = postingType.name,
-        applicationMethod = ApplicationMethod.EXTERNAL.name,
+        applicationMethod = applicationMethod.name,
         status = status.name,
         companyId = 1L,
         companyName = companyName,

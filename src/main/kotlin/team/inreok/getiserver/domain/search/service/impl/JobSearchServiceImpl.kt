@@ -13,6 +13,7 @@ import team.inreok.getiserver.domain.file.link.FileUrlPort
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
 import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
+import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.search.document.JobSearchDocument
 import team.inreok.getiserver.domain.search.dto.JobSearchResponse
@@ -37,6 +38,7 @@ class JobSearchServiceImpl(
     override fun search(
         query: String?,
         postingType: PostingType?,
+        applicationMethod: ApplicationMethod?,
         status: PublicJobStatus?,
         companyType: CompanyType?,
         sourceName: String?,
@@ -64,6 +66,7 @@ class JobSearchServiceImpl(
                         keyword,
                         statuses,
                         postingType,
+                        applicationMethod,
                         companyType,
                         trimmedSourceName,
                         targetGrade,
@@ -161,6 +164,7 @@ class JobSearchServiceImpl(
         keyword: String?,
         statuses: Collection<String>,
         postingType: PostingType?,
+        applicationMethod: ApplicationMethod?,
         companyType: CompanyType?,
         sourceName: String?,
         targetGrade: Int?,
@@ -176,6 +180,7 @@ class JobSearchServiceImpl(
                     f.terms { t -> t.field("status").terms { v -> v.value(statuses.map(FieldValue::of)) } }
                 }
                 postingType?.let { b.filter { f -> f.term { t -> t.field("postingType").value(it.name) } } }
+                applicationMethod?.let { b.filter { f -> f.term { t -> t.field("applicationMethod").value(it.name) } } }
                 companyType?.let { b.filter { f -> f.term { t -> t.field("companyType").value(it.name) } } }
                 sourceName?.let { b.filter { f -> f.term { t -> t.field("sourceName").value(it) } } }
                 targetGrade?.let { b.filter { f -> f.term { t -> t.field("targetGrade").value(it.toLong()) } } }

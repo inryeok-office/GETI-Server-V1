@@ -4,6 +4,7 @@ import org.springframework.data.domain.Pageable
 import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
 import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
+import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.search.dto.JobSearchResponse
 import team.inreok.getiserver.domain.search.dto.JobSort
@@ -25,6 +26,7 @@ interface JobSearchService {
     fun search(
         query: String?,
         postingType: PostingType?,
+        applicationMethod: ApplicationMethod?,
         status: PublicJobStatus?,
         companyType: CompanyType?,
         sourceName: String?,

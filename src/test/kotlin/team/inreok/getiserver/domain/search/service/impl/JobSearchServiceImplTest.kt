@@ -204,6 +204,7 @@ class JobSearchServiceImplTest {
         service.search(
             query = null,
             postingType = null,
+            applicationMethod = null,
             status = null,
             companyType = null,
             sourceName = null,
