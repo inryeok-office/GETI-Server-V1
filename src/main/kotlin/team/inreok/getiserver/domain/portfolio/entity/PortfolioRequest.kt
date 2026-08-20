@@ -9,12 +9,18 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.hibernate.annotations.CreationTimestamp
-import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.annotations.UpdateTimestamp
-import org.hibernate.type.SqlTypes
 import team.inreok.getiserver.domain.portfolio.entity.type.PortfolioRequestStatus
 import java.time.LocalDateTime
 
+/**
+ * 교사·개발자가 생성하는 포트폴리오 수합 요청 Aggregate다(Portfolio 도메인 요구사항 §4).
+ *
+ * 제출 대상 학생은 이 Entity가 아니라 [PortfolioRequestTarget](구체적 studentId 집합)에 저장한다
+ * (§5/§19). 제출 기간은 `dueAt` 하나만 사용한다(§25/§38). File 첨부(안내/양식 파일)와 제출 필수
+ * 자료 정책(allowFile/allowUrl)은 각각 File Integration(Phase 3)과 Product Decision(§15) 확정
+ * 전까지 이 Entity에 넣지 않는다 — 가짜 값을 미리 만들지 않기 위함이다.
+ */
 @Entity
 @Table(name = "portfolio_requests")
 class PortfolioRequest(
@@ -22,20 +28,11 @@ class PortfolioRequest(
     var createdByMemberId: Long,
     @Column(nullable = false, length = 500)
     var title: String,
+    @Column(name = "due_at", nullable = false)
+    var dueAt: LocalDateTime,
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     var status: PortfolioRequestStatus = PortfolioRequestStatus.DRAFT,
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "target_condition", nullable = false, columnDefinition = "jsonb")
-    var targetCondition: String,
-    @Column(name = "submission_started_at", nullable = false)
-    var submissionStartedAt: LocalDateTime,
-    @Column(name = "submission_ended_at", nullable = false)
-    var submissionEndedAt: LocalDateTime,
-    @Column(name = "allow_file", nullable = false)
-    var allowFile: Boolean = true,
-    @Column(name = "allow_url", nullable = false)
-    var allowUrl: Boolean = true,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
