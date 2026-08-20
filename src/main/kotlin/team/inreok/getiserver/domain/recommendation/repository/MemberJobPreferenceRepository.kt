@@ -8,7 +8,9 @@ import org.springframework.data.repository.query.Param
 import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreference
 import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
 
-interface MemberJobPreferenceRepository : JpaRepository<MemberJobPreference, Long> {
+interface MemberJobPreferenceRepository :
+    JpaRepository<MemberJobPreference, Long>,
+    MemberJobBookmarkQueryRepository {
     fun findByMemberIdAndJobId(
         memberId: Long,
         jobId: Long,

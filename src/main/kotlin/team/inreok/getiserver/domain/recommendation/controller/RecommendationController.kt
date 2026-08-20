@@ -17,10 +17,15 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import team.inreok.getiserver.domain.company.entity.type.CompanyType
+import team.inreok.getiserver.domain.job.entity.type.PostingType
+import team.inreok.getiserver.domain.job.query.JobBookmarkQuery
+import team.inreok.getiserver.domain.job.query.JobBookmarkSort
 import team.inreok.getiserver.domain.recommendation.dto.BookmarkCreateRequest
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionCreateRequest
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionResponse
+import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationSettingRequest
@@ -38,30 +43,82 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
  * 매일 계산해 저장한 결과를 그대로 읽는다 -- 이 API가 호출될 때마다 다시 계산하지 않는다.
  *
  * URL이 여러 갈래(`/api/v1/me/job-recommendations`, `/api/v1/me/recommendation-exclusions`,
- * `/api/v1/recommendations/settings`, `/api/v1/me/bookmarks`)로 나뉘어 있어 Class 단위
+ * `/api/v1/recommendations/settings`, `/api/v1/me/bookmarks`, `/api/v1/me/job-bookmarks`)로
+ * 나뉘어 있어 Class 단위
  * `@RequestMapping` 대신 Method마다 전체 경로를 직접 쓴다(`DiscordDeliveryAdminController`와 같은
  * 관례). `settings`는 Notion API 명세 전체에서 대응하는 별도 Endpoint를 찾지 못해 기존 경로를
  * 그대로 유지했다(PR 본문 CONTRACT_MISMATCH 참고, 근거 없이 새 Path를 만들지 않는다).
  * `/api/v1/me/bookmarks`(Issue #170)는 확정된 Notion Path를 이 저장소에서 확인하지 못해
  * `/api/v1/me/recommendation-exclusions`(같은 Entity를 쓰는 가장 가까운 기존 계약)와 같은
- * `/api/v1/me/{resource}` Naming 관례를 따랐다(PR 본문 DECISION_REQUIRED 참고). 필요 권한: STUDENT.
+ * `/api/v1/me/{resource}` Naming 관례를 따랐다(PR 본문 DECISION_REQUIRED 참고). 등록·해제는
+ * STUDENT 전용이고, `/api/v1/me/job-bookmarks` 목록 조회는 Notion 계약에 따라 인증된
+ * 학생·교사·개발자 모두 사용할 수 있다.
  */
 @Tag(
     name = "Recommendation - 맞춤 공고 추천",
     description =
-        "학생 본인의 맞춤 공고 추천을 조회하고, 추천 기능 ON/OFF와 관심 없음을 관리한다. Recommendation " +
+        "학생 본인의 맞춤 공고 추천과 북마크 목록을 조회하고, 추천 기능 ON/OFF와 관심 없음을 관리한다. " +
+            "Recommendation " +
             "Score 자체는 R2 Core(Issue #148)가 매일 계산해 저장한 결과를 그대로 읽는다 -- 이 API가 호출될 " +
-            "때마다 다시 계산하지 않는다. 필요 권한: STUDENT.",
+            "때마다 다시 계산하지 않는다. 추천·등록·해제는 기존 Role 정책을 따르고, 북마크 목록은 " +
+            "인증된 학생·교사·개발자가 사용할 수 있다.",
 )
 @SecurityRequirement(name = BEARER_AUTH_SCHEME)
-// SecurityConfig가 /api/v1/me/job-recommendations, /api/v1/me/recommendation-exclusions/**,
-// /api/v1/recommendations/** 이하를 STUDENT Role 필수로 지정하므로, 여기 도달했다는 것은 이미
-// 학생으로 인증됐다는 뜻이다. 조회·설정 대상을 항상 요청자 본인으로 한정하는 것은 Role로 알 수
-// 없어 memberId를 Request Body/Path가 아닌 인증 Principal에서만 가져온다.
+// SecurityConfig가 각 Recommendation Endpoint에 필요한 인증/Role 정책을 명시한다. 북마크 목록은
+// 인증된 학생·교사·개발자가 사용할 수 있고, 추천·등록·해제는 기존 Role 정책을 따른다. 모든
+// 조회·설정 대상을 항상 요청자 본인으로 한정하기 위해 memberId는 Request Body/Path가 아닌
+// 인증 Principal에서만 가져온다.
 @RestController
 class RecommendationController(
     private val recommendationService: RecommendationService,
 ) {
+    @Operation(
+        summary = "내 북마크 공고 목록 조회",
+        description =
+            "인증된 요청자 본인이 북마크한 공개 공고를 조회한다. 학생·교사·개발자 모두 사용할 수 있다. " +
+                "query는 제목·기업명·본문을 검색하고, postingType과 companyType으로 필터링한다. sort는 " +
+                "LATEST(최근 게시순), DEADLINE(마감 임박순), VIEWS(조회수순)이며 Pagination은 page=0, size=20 " +
+                "기본값과 최대 size=100을 따른다. 결과가 없으면 200과 빈 content를 반환한다.",
+    )
+    @ApiResponses(
+        SwaggerApiResponse(responseCode = "200", description = "조회 성공(결과가 없으면 빈 목록)"),
+        SwaggerApiResponse(responseCode = "400", description = "Query Enum 또는 Pagination 값이 잘못됨 (TYPE_MISMATCH)"),
+        SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
+        SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
+    )
+    @GetMapping("/api/v1/me/job-bookmarks")
+    fun listBookmarkedJobs(
+        authentication: Authentication,
+        @Parameter(
+            description =
+                "공고 제목·기업명·본문의 부분 문자열 검색어(선택). GET /api/v1/jobs의 Elasticsearch " +
+                    "검색과 토큰 매칭 결과가 다를 수 있다.",
+            example = "백엔드",
+        )
+        @RequestParam(required = false)
+        query: String?,
+        @Parameter(description = "공고 유형 필터(선택)")
+        @RequestParam(required = false)
+        postingType: PostingType?,
+        @Parameter(description = "기업 유형 필터(선택)")
+        @RequestParam(required = false)
+        companyType: CompanyType?,
+        @Parameter(description = "정렬 기준(기본 LATEST): 최근 게시순, 마감 임박순, 조회수순")
+        @RequestParam(defaultValue = "LATEST")
+        sort: JobBookmarkSort,
+        @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20, 최대 100). Pageable의 sort는 무시된다.")
+        pageable: Pageable,
+    ): ApiResponse<RecommendationJobListResponse> {
+        val memberId = authentication.principal as Long
+        return ApiResponse.of(
+            recommendationService.listBookmarkedJobs(
+                memberId,
+                JobBookmarkQuery(query, postingType, companyType?.name, sort),
+                pageable,
+            ),
+        )
+    }
+
     @Operation(
         summary = "오늘의 추천 공고 조회",
         description = """
