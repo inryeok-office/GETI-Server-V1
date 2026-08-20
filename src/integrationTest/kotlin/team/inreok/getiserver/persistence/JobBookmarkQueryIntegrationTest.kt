@@ -126,6 +126,51 @@ class JobBookmarkQueryIntegrationTest
             assertThat(result.totalElements).isEqualTo(1)
         }
 
+        @Test
+        fun `마감일과 조회수 정렬 및 큰 페이지 offset을 DB에서 안전하게 처리한다`() {
+            val companyId = company(CompanyType.GENERAL)
+            val earliestDeadline =
+                job(companyId, title = "마감 임박", publishedAt = LocalDateTime.of(2026, 8, 1, 0, 0)).apply {
+                    recruitmentEndedAt = LocalDateTime.of(2026, 8, 10, 0, 0)
+                    viewCount = 10
+                }
+            val latestDeadline =
+                job(companyId, title = "마감 여유", publishedAt = LocalDateTime.of(2026, 8, 2, 0, 0)).apply {
+                    recruitmentEndedAt = LocalDateTime.of(2026, 8, 20, 0, 0)
+                    viewCount = 100
+                }
+            val noDeadline =
+                job(companyId, title = "상시 채용", publishedAt = LocalDateTime.of(2026, 8, 3, 0, 0)).apply {
+                    viewCount = 50
+                }
+            jobRepository.saveAllAndFlush(listOf(earliestDeadline, latestDeadline, noDeadline))
+            listOf(earliestDeadline, latestDeadline, noDeadline).forEach { bookmark(it.id!!, memberId) }
+
+            val deadlineResult =
+                memberJobPreferenceRepository.findBookmarkedJobIdsByMemberIdAndQuery(
+                    memberId,
+                    JobBookmarkQuery(null, null, null, JobBookmarkSort.DEADLINE),
+                    PageRequest.of(0, 10),
+                )
+            val viewsResult =
+                memberJobPreferenceRepository.findBookmarkedJobIdsByMemberIdAndQuery(
+                    memberId,
+                    JobBookmarkQuery(null, null, null, JobBookmarkSort.VIEWS),
+                    PageRequest.of(0, 10),
+                )
+            val largePageResult =
+                memberJobPreferenceRepository.findBookmarkedJobIdsByMemberIdAndQuery(
+                    memberId,
+                    JobBookmarkQuery(null, null, null, JobBookmarkSort.LATEST),
+                    PageRequest.of(Int.MAX_VALUE, 2),
+                )
+
+            assertThat(deadlineResult.content).containsExactly(earliestDeadline.id, latestDeadline.id, noDeadline.id)
+            assertThat(viewsResult.content).containsExactly(latestDeadline.id, noDeadline.id, earliestDeadline.id)
+            assertThat(largePageResult.content).isEmpty()
+            assertThat(largePageResult.totalElements).isEqualTo(3)
+        }
+
         private fun company(type: CompanyType): Long =
             companyRepository.saveAndFlush(Company(name = "기업 ${type.name}", type = type)).id!!
 

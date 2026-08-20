@@ -52,13 +52,16 @@ class MemberJobBookmarkQueryRepositoryImpl(
         bindParameters(dataQuery, memberId, normalizedQuery, query)
         bindParameters(countQuery, memberId, normalizedQuery, query)
 
+        val total = (countQuery.singleResult as Number).toLong()
+        if (pageable.isPaged && pageable.offset > Int.MAX_VALUE.toLong()) {
+            return PageImpl(emptyList(), pageable, total)
+        }
         if (pageable.isPaged) {
             dataQuery.firstResult = pageable.offset.toInt()
             dataQuery.maxResults = pageable.pageSize
         }
 
         val content = dataQuery.resultList.map { (it as Number).toLong() }
-        val total = (countQuery.singleResult as Number).toLong()
         return PageImpl(content, pageable, total)
     }
 
