@@ -18,6 +18,16 @@ import java.time.LocalDateTime
 @NamedInterface
 interface JobRecommendationCandidateQueryPort {
     /**
+     * 로그인한 회원이 북마크한 공개 공고를 Job 조건과 함께 DB에서 페이지 단위로 조회한다(Issue #170).
+     * Bookmark Preference와 Job 필터를 같은 Query에 적용해 Preference ID 전체를 메모리에 올리지 않는다.
+     */
+    fun findBookmarkedByMemberId(
+        memberId: Long,
+        query: JobBookmarkQuery,
+        pageable: org.springframework.data.domain.Pageable,
+    ): org.springframework.data.domain.Page<JobRecommendationCandidateSnapshot>
+
+    /**
      * 삭제되지 않고 PUBLISHED인 공고를 전부 반환한다(Recommendation 후보 Pool). 현재 규모
      * 기준(GETI R1 설계 문서 §17, 활성 공고 약 1,000건)에서는 Keyset Pagination 없이 한 번에
      * 조회해도 충분하다.

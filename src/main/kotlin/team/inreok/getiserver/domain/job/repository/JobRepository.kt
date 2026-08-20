@@ -10,7 +10,9 @@ import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 
-interface JobRepository : JpaRepository<Job, Long> {
+interface JobRepository :
+    JpaRepository<Job, Long>,
+    JobBookmarkQueryRepository {
     fun findBySourceNameAndExternalJobId(
         sourceName: String,
         externalJobId: String,

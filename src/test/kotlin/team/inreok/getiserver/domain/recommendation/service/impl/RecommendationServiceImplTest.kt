@@ -28,6 +28,8 @@ import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
+import team.inreok.getiserver.domain.job.query.JobBookmarkQuery
+import team.inreok.getiserver.domain.job.query.JobBookmarkSort
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateQueryPort
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateSnapshot
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshot
@@ -586,6 +588,23 @@ class RecommendationServiceImplTest {
     }
 
     // ---------- 관심 없음 목록 ----------
+
+    @Test
+    fun `북마크 목록은 Job 필터를 전달하고 결과를 실제 북마크 상태로 반환한다`() {
+        val query = JobBookmarkQuery("백엔드", PostingType.GENERAL, "GENERAL", JobBookmarkSort.DEADLINE)
+        given(jobRecommendationCandidateQueryPort.findBookmarkedByMemberId(1L, query, firstPage))
+            .willReturn(PageImpl(listOf(jobOf()), firstPage, 1))
+        given(companyQuery.findActiveSummaries(setOf(100L), 1L)).willReturn(emptyMap())
+
+        val result = service.listBookmarkedJobs(1L, query, firstPage)
+
+        assertThat(result.content).hasSize(1)
+        assertThat(result.content.single().jobId).isEqualTo(1L)
+        assertThat(result.content.single().bookmarked).isTrue()
+        assertThat(result.totalElements).isEqualTo(1)
+        verify(jobRecommendationCandidateQueryPort).findBookmarkedByMemberId(1L, query, firstPage)
+        verify(companyQuery).findActiveSummaries(setOf(100L), 1L)
+    }
 
     @Test
     fun `관심 없음 목록을 조회하면 본인 것만 Job 정보와 함께 반환한다`() {

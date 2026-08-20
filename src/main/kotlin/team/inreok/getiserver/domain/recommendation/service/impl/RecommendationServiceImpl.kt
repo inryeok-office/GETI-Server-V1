@@ -12,12 +12,14 @@ import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.query.JobBookmarkQuery
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateQueryPort
 import team.inreok.getiserver.domain.job.query.JobRecommendationCandidateSnapshot
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationItemResponse
+import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationSettingResponse
@@ -112,6 +114,29 @@ class RecommendationServiceImpl(
                 readyOrEmptyRecommendations(memberId, suitabilityLevel, pageable)
             }
         }
+    }
+
+    @Transactional(readOnly = true)
+    override fun listBookmarkedJobs(
+        memberId: Long,
+        query: JobBookmarkQuery,
+        pageable: Pageable,
+    ): RecommendationJobListResponse {
+        val page = jobRecommendationCandidateQueryPort.findBookmarkedByMemberId(memberId, query, pageable)
+        val companies =
+            companyQuery.findActiveSummaries(
+                page.content.map { it.companyId }.toSet(),
+                memberId,
+            )
+        return RecommendationJobListResponse.of(
+            page.map { job ->
+                buildRecommendationJobResponse(
+                    job = job,
+                    company = companies[job.companyId],
+                    bookmarked = true,
+                )
+            },
+        )
     }
 
     private fun readyOrEmptyRecommendations(

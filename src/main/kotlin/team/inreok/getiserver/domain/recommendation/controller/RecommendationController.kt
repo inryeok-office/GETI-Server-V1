@@ -17,10 +17,15 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import team.inreok.getiserver.domain.company.entity.type.CompanyType
+import team.inreok.getiserver.domain.job.entity.type.PostingType
+import team.inreok.getiserver.domain.job.query.JobBookmarkQuery
+import team.inreok.getiserver.domain.job.query.JobBookmarkSort
 import team.inreok.getiserver.domain.recommendation.dto.BookmarkCreateRequest
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionCreateRequest
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionResponse
+import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationSettingRequest
@@ -62,6 +67,48 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 class RecommendationController(
     private val recommendationService: RecommendationService,
 ) {
+    @Operation(
+        summary = "내 북마크 공고 목록 조회",
+        description =
+            "인증된 요청자 본인이 북마크한 공개 공고를 조회한다. 학생·교사·개발자 모두 사용할 수 있다. " +
+                "query는 제목·기업명·본문을 검색하고, postingType과 companyType으로 필터링한다. sort는 " +
+                "LATEST(최근 게시순), DEADLINE(마감 임박순), VIEWS(조회수순)이며 Pagination은 page=0, size=20 " +
+                "기본값과 최대 size=100을 따른다. 결과가 없으면 200과 빈 content를 반환한다.",
+    )
+    @ApiResponses(
+        SwaggerApiResponse(responseCode = "200", description = "조회 성공(결과가 없으면 빈 목록)"),
+        SwaggerApiResponse(responseCode = "400", description = "Query Enum 또는 Pagination 값이 잘못됨 (TYPE_MISMATCH)"),
+        SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
+        SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
+    )
+    @GetMapping("/api/v1/me/job-bookmarks")
+    fun listBookmarkedJobs(
+        authentication: Authentication,
+        @Parameter(description = "공고 제목·기업명·본문 검색어(선택)", example = "백엔드")
+        @RequestParam(required = false)
+        query: String?,
+        @Parameter(description = "공고 유형 필터(선택)")
+        @RequestParam(required = false)
+        postingType: PostingType?,
+        @Parameter(description = "기업 유형 필터(선택)")
+        @RequestParam(required = false)
+        companyType: CompanyType?,
+        @Parameter(description = "정렬 기준(기본 LATEST): 최근 게시순, 마감 임박순, 조회수순")
+        @RequestParam(defaultValue = "LATEST")
+        sort: JobBookmarkSort,
+        @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20, 최대 100). Pageable의 sort는 무시된다.")
+        pageable: Pageable,
+    ): ApiResponse<RecommendationJobListResponse> {
+        val memberId = authentication.principal as Long
+        return ApiResponse.of(
+            recommendationService.listBookmarkedJobs(
+                memberId,
+                JobBookmarkQuery(query, postingType, companyType?.name, sort),
+                pageable,
+            ),
+        )
+    }
+
     @Operation(
         summary = "오늘의 추천 공고 조회",
         description = """
