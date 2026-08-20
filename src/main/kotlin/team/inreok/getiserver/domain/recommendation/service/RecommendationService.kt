@@ -1,8 +1,10 @@
 package team.inreok.getiserver.domain.recommendation.service
 
 import org.springframework.data.domain.Pageable
+import team.inreok.getiserver.domain.job.query.JobBookmarkQuery
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationExclusionResponse
+import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationJobResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationListResponse
 import team.inreok.getiserver.domain.recommendation.dto.RecommendationSettingResponse
@@ -15,6 +17,13 @@ import team.inreok.getiserver.domain.recommendation.entity.type.SuitabilityLevel
  * 만든 결과를 읽고 사용자 설정(ON/OFF, 관심 없음)을 바꿀 뿐 Score를 다시 계산하지 않는다.
  */
 interface RecommendationService {
+    /** 로그인한 회원 본인의 북마크 공고를 Job 조건과 함께 페이지 단위로 조회한다(Issue #170). */
+    fun listBookmarkedJobs(
+        memberId: Long,
+        query: JobBookmarkQuery,
+        pageable: Pageable,
+    ): RecommendationJobListResponse
+
     /**
      * 요청자 본인의 오늘자 추천 결과를 조회한다. 추천 기능이 꺼져 있으면(설정한 적 없는 회원
      * 포함, default=false) 항상 `DISABLED` + 빈 목록을 반환한다. 오류로 취급하지 않는다(200).
