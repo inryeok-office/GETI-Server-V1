@@ -106,18 +106,22 @@ interface MemberRepository : JpaRepository<Member, Long> {
     ): List<Long>
 
     // Portfolio 수합 요청의 제출 대상 검증(PortfolioTargetMemberQueryPortImpl, §26 "Target이 실제
-    // STUDENT인지 검증")에 쓴다. 존재 여부와 Role만 확인하고 재학/졸업 상태(academicStatus)는
+    // STUDENT인지 검증")에 쓴다. :status/:role은 `search`와 같은 관례로 호출 측(Service)이 항상
+    // ACTIVE/STUDENT로 고정해 전달한다 -- 탈퇴·정지·승인 대기(로그인 불가) 회원은 제출할 수 없으므로
+    // 대상에서 제외해 제출/미제출 현황(§19)이 어긋나지 않게 한다. 재학/졸업 상태(academicStatus)는
     // 걸러내지 않는다 -- 졸업생 Target 허용 여부는 아직 확정되지 않은 Product Decision이라(§39-8)
-    // 임의로 배제하지 않는다. :role은 호출 측이 항상 STUDENT로 고정해 전달한다.
+    // 임의로 배제하지 않는다.
     @Query(
         """
         SELECT m.id FROM Member m
         WHERE m.id IN :memberIds
+          AND m.status = :status
           AND EXISTS (SELECT 1 FROM MemberRole mr WHERE mr.id.memberId = m.id AND mr.id.role = :role)
         """,
     )
-    fun findIdsByIdInAndRole(
+    fun findIdsByIdInAndStatusAndRole(
         @Param("memberIds") memberIds: Collection<Long>,
+        @Param("status") status: MemberStatus,
         @Param("role") role: RoleType,
     ): List<Long>
 }

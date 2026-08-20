@@ -15,12 +15,16 @@ import org.springframework.modulith.NamedInterface
 @NamedInterface
 interface PortfolioTargetMemberQueryPort {
     /**
-     * [memberIds] 중 실제로 존재하고 STUDENT 역할을 가진 회원의 id만 돌려준다(N+1 방지를 위해
-     * 배치로 조회한다). 존재하지 않거나 STUDENT가 아닌 id는 결과에서 빠지므로, 호출 측은 요청한
-     * 집합과 결과 집합의 차이로 "잘못된 대상"을 판정할 수 있다.
+     * [memberIds] 중 실제로 존재하고 ACTIVE 상태이며 STUDENT 역할을 가진 회원의 id만 돌려준다(N+1
+     * 방지를 위해 배치로 조회한다). 존재하지 않거나 ACTIVE/STUDENT가 아닌 id는 결과에서 빠지므로,
+     * 호출 측은 요청한 집합과 결과 집합의 차이로 "잘못된 대상"을 판정할 수 있다.
      *
-     * 재학/졸업 여부는 걸러내지 않는다 -- 졸업생을 Target으로 허용할지는 확정되지 않은 Product
-     * Decision이라(§39-8) 여기서 임의로 배제하지 않는다.
+     * ACTIVE만 대상으로 삼는 이유: 탈퇴·정지·승인 대기(로그인 불가) 회원을 대상에 넣으면 제출할 수
+     * 없는 회원이 `targetCount`에 남아 제출/미제출 현황(§19)이 영구히 어긋난다(`MemberRepository`의
+     * 다른 회원 조회 관례와 동일).
+     *
+     * 재학/졸업 여부(academicStatus)는 걸러내지 않는다 -- 졸업생을 Target으로 허용할지는 확정되지
+     * 않은 Product Decision이라(§39-8) 여기서 임의로 배제하지 않는다.
      */
     fun findStudentMemberIds(memberIds: Set<Long>): Set<Long>
 }

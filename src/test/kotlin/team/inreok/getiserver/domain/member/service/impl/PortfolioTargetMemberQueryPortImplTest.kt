@@ -7,6 +7,7 @@ import org.mockito.BDDMockito.given
 import org.mockito.Mock
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
+import team.inreok.getiserver.domain.member.entity.type.MemberStatus
 import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 
@@ -18,8 +19,8 @@ class PortfolioTargetMemberQueryPortImplTest {
     private val port by lazy { PortfolioTargetMemberQueryPortImpl(memberRepository) }
 
     @Test
-    fun `존재하고 STUDENT인 id만 돌려준다`() {
-        given(memberRepository.findIdsByIdInAndRole(setOf(1L, 2L, 3L), RoleType.STUDENT))
+    fun `존재하고 ACTIVE STUDENT인 id만 돌려준다`() {
+        given(memberRepository.findIdsByIdInAndStatusAndRole(setOf(1L, 2L, 3L), MemberStatus.ACTIVE, RoleType.STUDENT))
             .willReturn(listOf(1L, 2L))
 
         val result = port.findStudentMemberIds(setOf(1L, 2L, 3L))

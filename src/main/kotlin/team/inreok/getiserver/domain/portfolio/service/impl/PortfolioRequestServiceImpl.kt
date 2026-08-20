@@ -129,11 +129,13 @@ class PortfolioRequestServiceImpl(
     ): PortfolioRequestResponse {
         val entity = findNotDeleted(requestId)
         if (!isAdmin) {
+            // 아직 공개되지 않은(DRAFT) 요청은 대상 여부와 무관하게 학생에게 존재하지 않는 것으로
+            // 취급한다. 소유권 검사보다 먼저 둬야, 대상이 아닌 학생이 실제 존재하는 DRAFT 요청의 id를
+            // 조회했을 때 403(NOT_REQUEST_TARGET)으로 "그 요청이 존재한다"는 사실이 노출되지 않는다.
+            if (entity.status == PortfolioRequestStatus.DRAFT) throw PortfolioRequestNotFoundException(requestId)
             if (!targetRepository.existsByRequestIdAndStudentMemberId(requestId, requesterId)) {
                 throw NotRequestTargetException()
             }
-            // 대상이더라도 아직 공개되지 않은(DRAFT) 요청은 학생에게 존재하지 않는 것으로 취급한다.
-            if (entity.status == PortfolioRequestStatus.DRAFT) throw PortfolioRequestNotFoundException(requestId)
         }
         return detailOf(entity)
     }
@@ -189,13 +191,16 @@ class PortfolioRequestServiceImpl(
         return targetIds
     }
 
-    /** 요청의 대상 학생 집합을 통째로 교체한다. 기존 대상을 먼저 지우고(Flush) 새 대상을 넣어 UNIQUE 충돌을 피한다. */
+    /**
+     * 요청의 대상 학생 집합을 통째로 교체한다. 기존 대상을 벌크 DELETE로 먼저 지운 뒤 새 대상을 넣어
+     * UNIQUE 충돌을 피한다([PortfolioRequestTargetRepository.deleteByRequestId]는 개별 조회 없이
+     * 한 번의 DELETE로 실행된다).
+     */
     private fun replaceTargets(
         requestId: Long,
         targetIds: Set<Long>,
     ) {
         targetRepository.deleteByRequestId(requestId)
-        targetRepository.flush()
         targetRepository.saveAll(targetIds.map { PortfolioRequestTarget(requestId = requestId, studentMemberId = it) })
     }
 

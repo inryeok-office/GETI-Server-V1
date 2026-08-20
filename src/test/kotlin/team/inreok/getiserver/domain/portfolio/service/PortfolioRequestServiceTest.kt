@@ -4,14 +4,18 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyIterable
+import org.mockito.ArgumentMatchers.anyList
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.PageRequest
 import team.inreok.getiserver.domain.member.query.PortfolioTargetMemberQueryPort
 import team.inreok.getiserver.domain.portfolio.dto.PortfolioRequestCreateRequest
 import team.inreok.getiserver.domain.portfolio.dto.PortfolioRequestStatusUpdateRequest
@@ -28,6 +32,7 @@ import team.inreok.getiserver.domain.portfolio.exception.TargetStudentRequiredEx
 import team.inreok.getiserver.domain.portfolio.repository.PortfolioRequestRepository
 import team.inreok.getiserver.domain.portfolio.repository.PortfolioRequestTargetRepository
 import team.inreok.getiserver.domain.portfolio.repository.PortfolioSubmissionRepository
+import team.inreok.getiserver.domain.portfolio.repository.RequestCountProjection
 import team.inreok.getiserver.domain.portfolio.service.impl.PortfolioRequestServiceImpl
 import java.time.LocalDateTime
 
@@ -201,10 +206,11 @@ class PortfolioRequestServiceTest {
     fun `학생은 아직 공개되지 않은 DRAFT 요청을 볼 수 없다`() {
         given(requestRepository.findByIdAndDeletedAtIsNull(5L))
             .willReturn(requestOf(id = 5L, status = PortfolioRequestStatus.DRAFT))
-        given(targetRepository.existsByRequestIdAndStudentMemberId(5L, REQUESTER_ID)).willReturn(true)
 
         assertThatThrownBy { service.getDetail(5L, REQUESTER_ID, isAdmin = false) }
             .isInstanceOf(PortfolioRequestNotFoundException::class.java)
+        // DRAFT는 소유권 검사보다 먼저 404로 처리되므로 대상 여부(existsBy)를 조회하지 않는다.
+        verify(targetRepository, never()).existsByRequestIdAndStudentMemberId(anyLong(), anyLong())
     }
 
     @Test
@@ -232,7 +238,81 @@ class PortfolioRequestServiceTest {
         verify(targetRepository, never()).existsByRequestIdAndStudentMemberId(anyLong(), anyLong())
     }
 
+    @Test
+    fun `대상이 아닌 학생도 DRAFT 요청은 404를 받아 존재가 노출되지 않는다`() {
+        // DRAFT는 대상 여부보다 먼저 404로 처리되어야 한다 -- 대상이 아닌 학생이 실제 존재하는
+        // DRAFT 요청 id를 조회했을 때 403(NOT_REQUEST_TARGET)으로 존재가 드러나면 안 된다.
+        given(requestRepository.findByIdAndDeletedAtIsNull(5L))
+            .willReturn(requestOf(id = 5L, status = PortfolioRequestStatus.DRAFT))
+
+        assertThatThrownBy { service.getDetail(5L, REQUESTER_ID, isAdmin = false) }
+            .isInstanceOf(PortfolioRequestNotFoundException::class.java)
+        verify(targetRepository, never()).existsByRequestIdAndStudentMemberId(anyLong(), anyLong())
+    }
+
+    // --- getList ---
+
+    @Test
+    fun `목록 조회 - 학생이면 자신이 대상인 공개 이후 요청만 조회하고 개수를 매핑한다`() {
+        val pageable = PageRequest.of(0, 20)
+        val published = requestOf(id = 5L, status = PortfolioRequestStatus.PUBLISHED)
+        val closed = requestOf(id = 6L, status = PortfolioRequestStatus.CLOSED)
+        given(requestRepository.findAllForStudent(anyLong(), anyList(), any(), any() ?: pageable))
+            .willReturn(PageImpl(listOf(published, closed), pageable, 2))
+        // 5L만 집계 결과가 있고 6L은 없다 -- 없는 요청은 0으로 취급되어야 한다.
+        given(targetRepository.countGroupedByRequestId(listOf(5L, 6L))).willReturn(listOf(countRow(5L, 3L)))
+        given(
+            submissionRepository.countGroupedByRequestIdAndStatus(listOf(5L, 6L), PortfolioSubmissionStatus.SUBMITTED),
+        ).willReturn(listOf(countRow(5L, 1L)))
+
+        val result = service.getList(status = null, requesterId = REQUESTER_ID, isAdmin = false, pageable = pageable)
+
+        assertThat(result.content).hasSize(2)
+        assertThat(result.content[0].targetCount).isEqualTo(3L)
+        assertThat(result.content[0].submittedCount).isEqualTo(1L)
+        assertThat(result.content[1].targetCount).isEqualTo(0L)
+        assertThat(result.content[1].submittedCount).isEqualTo(0L)
+        // 학생 목록은 자신이 대상인 공개 이후(PUBLISHED/CLOSED) 요청만 조회해야 한다. 관리자용
+        // findAllForAdmin으로 새면 DRAFT·타 학생 대상까지 노출되므로, 학생 경로 호출과 가시 상태(그
+        // 자체가 대상 필터의 핵심)를 함께 검증한다.
+        @Suppress("UNCHECKED_CAST")
+        val statusCaptor =
+            ArgumentCaptor.forClass(Collection::class.java) as ArgumentCaptor<Collection<PortfolioRequestStatus>>
+        verify(requestRepository)
+            .findAllForStudent(anyLong(), statusCaptor.capture() ?: emptyList(), any(), any() ?: pageable)
+        assertThat(statusCaptor.value)
+            .containsExactly(PortfolioRequestStatus.PUBLISHED, PortfolioRequestStatus.CLOSED)
+        verify(requestRepository, never()).findAllForAdmin(any(), any() ?: pageable)
+    }
+
+    @Test
+    fun `목록 조회 - 관리자면 전체 요청을 조회한다`() {
+        val pageable = PageRequest.of(0, 20)
+        val draft = requestOf(id = 7L, status = PortfolioRequestStatus.DRAFT)
+        given(requestRepository.findAllForAdmin(any(), any() ?: pageable))
+            .willReturn(PageImpl(listOf(draft), pageable, 1))
+        given(targetRepository.countGroupedByRequestId(listOf(7L))).willReturn(listOf(countRow(7L, 2L)))
+        given(submissionRepository.countGroupedByRequestIdAndStatus(listOf(7L), PortfolioSubmissionStatus.SUBMITTED))
+            .willReturn(emptyList())
+
+        val result = service.getList(status = null, requesterId = REQUESTER_ID, isAdmin = true, pageable = pageable)
+
+        assertThat(result.content).hasSize(1)
+        assertThat(result.content[0].status).isEqualTo(PortfolioRequestStatus.DRAFT)
+        assertThat(result.content[0].targetCount).isEqualTo(2L)
+        verify(requestRepository, never()).findAllForStudent(anyLong(), anyList(), any(), any() ?: pageable)
+    }
+
     // --- helpers ---
+
+    private fun countRow(
+        requestId: Long,
+        count: Long,
+    ): RequestCountProjection =
+        object : RequestCountProjection {
+            override val requestId = requestId
+            override val count = count
+        }
 
     private fun givenAllStudents(ids: Set<Long>) {
         given(targetMemberQueryPort.findStudentMemberIds(ids)).willReturn(ids)

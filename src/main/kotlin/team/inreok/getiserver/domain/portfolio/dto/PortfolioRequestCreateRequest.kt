@@ -22,8 +22,11 @@ data class PortfolioRequestCreateRequest(
     val description: String? = null,
     @param:Schema(description = "제출 마감 시각(필수)", example = "2026-09-30T23:59:59")
     val dueAt: LocalDateTime,
+    // 잘못 만들어진 요청 하나가 대량 IN 조회·INSERT로 이어지지 않도록 상한을 둔다(Bind Parameter
+    // 한도·DB 부하 방어선). 한 학교의 한 기수·학과 규모를 넉넉히 담을 수 있는 값이다.
+    @field:Size(max = 1000, message = "제출 대상 학생은 1000명을 넘을 수 없습니다.")
     @param:Schema(
-        description = "제출 대상 학생 memberId 목록(필수, 최소 1명). 실제 학생(STUDENT)만 지정할 수 있다.",
+        description = "제출 대상 학생 memberId 목록(필수, 최소 1명, 최대 1000명). 실제 학생(STUDENT)만 지정할 수 있다.",
         example = "[1, 2, 3]",
     )
     val targetStudentIds: List<Long>,

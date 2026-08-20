@@ -22,8 +22,10 @@ data class PortfolioRequestUpdateRequest(
     val description: String? = null,
     @param:Schema(description = "제출 마감 시각. 생략하면 유지", example = "2026-09-30T23:59:59", nullable = true)
     val dueAt: LocalDateTime? = null,
+    // 등록 요청과 같은 이유로 상한을 둔다(대량 IN 조회·INSERT 방어선).
+    @field:Size(max = 1000, message = "제출 대상 학생은 1000명을 넘을 수 없습니다.")
     @param:Schema(
-        description = "제출 대상 학생 memberId 목록. 생략하면 유지하고, 지정하면 전체를 교체한다(DRAFT에서만 허용).",
+        description = "제출 대상 학생 memberId 목록(최대 1000명). 생략하면 유지하고, 지정하면 전체를 교체한다(DRAFT에서만 허용).",
         example = "[1, 2, 3]",
         nullable = true,
     )

@@ -4,8 +4,10 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyBoolean
 import org.mockito.ArgumentMatchers.anyLong
+import org.mockito.ArgumentMatchers.eq
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.willThrow
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
 import org.springframework.context.annotation.Import
@@ -59,6 +61,20 @@ class PortfolioRequestControllerTest
                 .andExpect(jsonPath("$.data.content[0].requestId").value(1))
                 .andExpect(jsonPath("$.data.content[0].targetCount").value(20))
                 .andExpect(jsonPath("$.data.totalElements").value(1))
+            // 학생 요청은 isAdmin=false로 위임되어야 한다(Service가 대상·가시성 분기에 사용).
+            verify(portfolioRequestService).getList(any(), anyLong(), eq(false), anyPageable())
+        }
+
+        @Test
+        fun `교사가 목록을 조회하면 isAdmin=true로 위임한다`() {
+            given(portfolioRequestService.getList(any(), anyLong(), anyBoolean(), anyPageable()))
+                .willReturn(listResponse())
+
+            mockMvc
+                .perform(get("/api/v1/portfolio-requests").with(authOf(9L, "TEACHER")))
+                .andExpect(status().isOk)
+            // 교사·개발자는 관리 가능한 전체 요청을 봐야 하므로 isAdmin=true로 위임되어야 한다.
+            verify(portfolioRequestService).getList(any(), anyLong(), eq(true), anyPageable())
         }
 
         @Test
