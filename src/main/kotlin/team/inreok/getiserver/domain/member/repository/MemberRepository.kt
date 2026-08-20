@@ -124,4 +124,20 @@ interface MemberRepository : JpaRepository<Member, Long> {
         @Param("status") status: MemberStatus,
         @Param("role") role: RoleType,
     ): List<Long>
+
+    // 관리자 담당자 선택 Dropdown용 회원 목록 조회(AdminMemberQueryServiceImpl, Issue #182)에 쓴다.
+    // :status/:role은 호출 측(Service)이 ACTIVE/조회 대상 Role로 고정해 전달한다. 이름 오름차순으로
+    // 정렬하고(동명이인은 id로 안정 정렬), Dropdown 용도라 Pagination 없이 전체를 돌려준다.
+    @Query(
+        """
+        SELECT m FROM Member m
+        WHERE m.status = :status
+          AND EXISTS (SELECT 1 FROM MemberRole mr WHERE mr.id.memberId = m.id AND mr.id.role = :role)
+        ORDER BY m.name ASC, m.id ASC
+        """,
+    )
+    fun findAllByStatusAndRoleOrderByName(
+        @Param("status") status: MemberStatus,
+        @Param("role") role: RoleType,
+    ): List<Member>
 }
