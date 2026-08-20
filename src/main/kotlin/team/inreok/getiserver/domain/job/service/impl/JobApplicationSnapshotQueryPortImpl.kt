@@ -42,5 +42,6 @@ class JobApplicationSnapshotQueryPortImpl(
             recruitmentEndedAt = job.recruitmentEndedAt,
             createdByMemberId = job.createdByMemberId,
             managerMemberId = job.managerMemberId,
+            viewCount = job.viewCount,
         )
 }

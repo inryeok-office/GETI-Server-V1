@@ -25,6 +25,10 @@ import tools.jackson.databind.ObjectMapper
  * (`JobApplicationAdminServiceImpl`, Issue #172)에서만 실제 값을 채워 넘긴다 -- 학생용 초안·Action
  * 결과(`JobApplicationServiceImpl`)는 이 함수를 그대로 재사용하되 기본값 null을 그대로 두어, 이번
  * Issue 범위가 아닌 학생 조회 경로에 불필요한 Job/Company/Member 조회를 추가하지 않는다.
+ *
+ * [availableActions]는 반대로 학생 본인 상세 조회(`JobApplicationServiceImpl.getDetail`, Issue
+ * #184)에서만 채워 넘긴다 -- `availableStudentActionNames`(`JobApplicationServiceImpl.kt`)가 계산하는
+ * "학생이 다음에 수행할 수 있는 Action" 목록이라 교사·개발자용 조회에는 의미가 없다.
  */
 fun toJobApplicationDraftResponse(
     objectMapper: ObjectMapper,
@@ -34,6 +38,7 @@ fun toJobApplicationDraftResponse(
     companyName: String? = null,
     managerMemberId: Long? = null,
     managerName: String? = null,
+    availableActions: List<String> = emptyList(),
 ): JobApplicationDraftResponse =
     JobApplicationDraftResponse(
         applicationId = requireNotNull(application.id),
@@ -61,6 +66,7 @@ fun toJobApplicationDraftResponse(
         withdrawnAt = application.withdrawnAt,
         createdAt = requireNotNull(application.createdAt),
         updatedAt = requireNotNull(application.updatedAt),
+        availableActions = availableActions,
     )
 
 private fun FileSnapshot.toJobApplicationFileResponse(): JobApplicationFileResponse =

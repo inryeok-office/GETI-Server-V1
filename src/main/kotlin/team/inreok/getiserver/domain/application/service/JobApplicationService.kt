@@ -1,11 +1,14 @@
 package team.inreok.getiserver.domain.application.service
 
+import org.springframework.data.domain.Pageable
 import team.inreok.getiserver.domain.application.dto.CreateJobApplicationRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.dto.JobEligibilityResponse
+import team.inreok.getiserver.domain.application.dto.MyJobApplicationListResponse
 import team.inreok.getiserver.domain.application.dto.SaveJobApplicationDraftRequest
+import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 
 interface JobApplicationService {
     /** 서버가 계산한 지원 가능 여부를 반환한다(요구사항 7절). Job이나 학생 정보를 찾지 못해도
@@ -48,4 +51,21 @@ interface JobApplicationService {
         applicationId: Long,
         studentMemberId: Long,
     ): List<JobApplicationStatusHistoryResponse>
+
+    /** 본인 지원 목록을 조회한다(Issue #184). status를 지정하면 그 상태만 필터하고, 지정하지
+     * 않으면 DRAFT를 포함한 모든 상태를 반환한다(admin 목록과 달리 본인의 임시저장도 본인에게는
+     * 보여야 이어서 작성할 수 있다). */
+    fun list(
+        studentMemberId: Long,
+        status: JobApplicationStatus?,
+        pageable: Pageable,
+    ): MyJobApplicationListResponse
+
+    /** 본인 지원서 상세를 조회한다(Issue #184). 지원서가 없으면 ApplicationNotFoundException,
+     * 본인 소유가 아니면 ApplicationAccessForbiddenException. admin 상세(getDetail)와 달리 DRAFT도
+     * 조회할 수 있다(본인의 임시저장 확인 용도). */
+    fun getDetail(
+        applicationId: Long,
+        studentMemberId: Long,
+    ): JobApplicationDraftResponse
 }
