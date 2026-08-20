@@ -76,6 +76,7 @@ Profile을 지정하지 않으면 공통 설정만 적용된다(현재는 `local
 | `FILE_STORAGE_REGION` | `app.file.storage.region` | **prod 필수** | `prod` | 아니오 | `local`은 `us-east-1` 고정, `prod`는 없음(미지정 시 기동 실패) |
 | `OPENAI_API_KEY` | `app.ai.openai.api-key` | 선택 | 전체 | 예 | 없음(비어 있으면 `isConfigured()=false`, 분석 요청은 즉시 FAILED) |
 | `OPENAI_MODEL` | `app.ai.openai.model` | 선택 | 전체 | 아니오 | `gpt-4o-mini`(실제 운영 값이 아닌 최소 Fallback) |
+| `APP_WEB_CORS_ALLOWED_ORIGINS` | `app.web.cors.allowed-origins` | 선택 | 전체 | 아니오 | 없음(빈 목록이면 CORS Mapping 미등록) |
 | `APP_WEB_OAUTH_CALLBACK_REDIRECT_URL` | `app.web.oauth.callback-redirect-url` | 선택 | 전체 | 아니오(공개 Frontend URL) | 없음(비어 있으면 `clientType=WEB` 요청만 `OAUTH_WEB_REDIRECT_NOT_CONFIGURED`로 실패) |
 
 `APP_VERSION`/`APP_GIT_SHA`/`APP_BUILD_TIME`/`APP_ENVIRONMENT`는 `/actuator/info`의 `deployment` Field(`DeploymentInfoContributor`)와 CD의 배포 SHA 검증에 쓰인다. CD가 Docker Build/Runtime 시점에 실제 값을 주입하며([`cd.md`](./cd.md) 참고), 로컬 개발자가 직접 설정할 필요가 없어(안전한 기본값으로 기동됨) `.env.example`에는 포함하지 않았다.
@@ -97,6 +98,28 @@ Profile을 지정하지 않으면 공통 설정만 적용된다(현재는 `local
 PostgreSQL/Redis 연결 환경 변수(`DATABASE_URL` 등)는 이 표에 중복하지 않고 [`persistence.md`](./persistence.md)에서 관리한다.
 
 `SERVER_PORT`(→ `server.port`)처럼 Spring Boot가 기본으로 지원하는 환경 변수는 [Relaxed Binding](https://docs.spring.io/spring-boot/reference/features/external-config.html)으로 이미 동작하므로 `application.yaml`에 `${SERVER_PORT:8080}` 형태로 다시 선언하지 않았다. 새 환경 변수가 필요해지면 이 표와 `.env.example`을 함께 갱신한다.
+
+## Web CORS
+
+`APP_WEB_CORS_ALLOWED_ORIGINS`는 브라우저에서 API를 호출하는 Web Client의 Origin(`scheme://host:port`) 목록이다. GETI-Client-V1는 `next dev`를 사용하고 Port를 별도로 지정하지 않으므로 Local 개발 Origin은 `http://localhost:3000`이다.
+
+값이 없으면 `CorsProperties.allowedOrigins`가 빈 목록으로 바인딩되어 CORS Mapping 자체를 등록하지 않는다. 이는 모든 Origin을 허용하는 것이 아니라 CORS가 비활성화되어 브라우저의 기본 Same-Origin 정책만 적용되는 의미다.
+
+여러 Origin은 Spring Boot의 List 바인딩 규칙에 따라 쉼표로 구분한다.
+
+```dotenv
+APP_WEB_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+```
+
+Local 개발에서는 `.env.example`을 `.env`로 복사하거나 실행 환경에 아래처럼 설정한다. Compose의 `app` Service는 이 값을 전달하며, 값이 없을 때만 `http://localhost:3000`을 기본값으로 사용한다.
+
+```dotenv
+APP_WEB_CORS_ALLOWED_ORIGINS=http://localhost:3000
+```
+
+Wildcard(`*`)는 사용하지 않는다. 특히 `allowCredentials=true`일 때 Wildcard Origin은 현재 `CorsProperties` 검증에서 애플리케이션 시작 시 거부되므로, Cookie 등 Credential을 허용해야 하는 경우에도 실제 Origin을 명시적으로 나열한다. 기본 Credential 정책(`allowCredentials=false`)은 유지한다.
+
+Staging/Production에서는 실제 배포된 Client Domain(예: `https://example.com`)을 배포 환경의 `APP_WEB_CORS_ALLOWED_ORIGINS`로 주입해야 한다. 해당 환경의 실제 값은 이 Repository에서 확인할 수 없으며, 배포 담당자의 외부 검증이 필요하다. Client Domain 또는 개발 서버 Port가 변경되면 이 환경 변수와 `.env.example` 예시를 함께 갱신한다.
 
 ### Naming Convention
 
