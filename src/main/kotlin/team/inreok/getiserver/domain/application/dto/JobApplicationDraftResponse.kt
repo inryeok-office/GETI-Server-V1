@@ -63,4 +63,9 @@ data class JobApplicationDraftResponse(
     val createdAt: LocalDateTime,
     @param:Schema(description = "마지막 수정 일시")
     val updatedAt: LocalDateTime,
+    // 학생 본인 상세 조회(JobApplicationServiceImpl.getDetail, Issue #184)에서만 채운다. 다른
+    // 호출부(초안 생성·임시저장·Action·교사 조회)는 기본값 emptyList()를 그대로 둔다 -- 위
+    // jobTitle 등과 같은 관례(호출부별로 선택적으로 채우는 Field).
+    @param:Schema(description = "본인이 현재 상태에서 수행할 수 있는 Action 목록(JobApplicationAction). 학생 상세 조회에서만 채워진다.")
+    val availableActions: List<String> = emptyList(),
 )

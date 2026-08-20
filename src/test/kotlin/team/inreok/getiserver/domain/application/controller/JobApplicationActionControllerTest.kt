@@ -210,4 +210,47 @@ class JobApplicationActionControllerTest
                 .perform(get("/api/v1/job-applications/1/history"))
                 .andExpect(status().isUnauthorized)
         }
+
+        // ---------- 본인 지원서 상세 조회(Issue #184) ----------
+
+        @Test
+        fun `본인 지원서 상세를 조회하면 200과 함께 상세를 반환한다`() {
+            given(jobApplicationService.getDetail(anyLong(), anyLong()))
+                .willReturn(draftResponse(JobApplicationStatus.SUBMITTED))
+
+            mockMvc
+                .perform(get("/api/v1/job-applications/1").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.applicationId").value(1))
+                .andExpect(jsonPath("$.data.status").value("SUBMITTED"))
+        }
+
+        @Test
+        fun `존재하지 않는 지원서 상세를 조회하면 404 APPLICATION_NOT_FOUND를 반환한다`() {
+            given(jobApplicationService.getDetail(anyLong(), anyLong()))
+                .willThrow(ApplicationNotFoundException(999L))
+
+            mockMvc
+                .perform(get("/api/v1/job-applications/999").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.error.code").value("APPLICATION_NOT_FOUND"))
+        }
+
+        @Test
+        fun `다른 학생의 지원서 상세를 조회하면 403 APPLICATION_ACCESS_FORBIDDEN을 반환한다`() {
+            given(jobApplicationService.getDetail(anyLong(), anyLong()))
+                .willThrow(ApplicationAccessForbiddenException())
+
+            mockMvc
+                .perform(get("/api/v1/job-applications/1").with(authOf(2L, "STUDENT")))
+                .andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.error.code").value("APPLICATION_ACCESS_FORBIDDEN"))
+        }
+
+        @Test
+        fun `인증 없이 상세를 요청하면 401을 반환한다`() {
+            mockMvc
+                .perform(get("/api/v1/job-applications/1"))
+                .andExpect(status().isUnauthorized)
+        }
     }

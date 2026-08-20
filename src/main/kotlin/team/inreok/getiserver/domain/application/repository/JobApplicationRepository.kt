@@ -77,6 +77,24 @@ interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
         pageable: Pageable,
     ): Page<JobApplication>
 
+    // 학생 본인 지원 목록 조회다(Issue #184). :status는 null이면 조건을 적용하지 않는다(search()와
+    // 동일한 관례). admin의 search()와 달리 DRAFT를 제외하지 않는다 -- 본인의 임시저장은 admin
+    // 목록(다른 사람이 보는 목록)과 달리 "내 지원 목록"에서 본인에게 보여야 다시 이어서 작성할 수
+    // 있다(요구사항 "DRAFT 포함 여부와 상태 필터 의미를 기존 Application 정책과 일치시켜 문서화한다").
+    @Query(
+        """
+        SELECT a FROM JobApplication a
+        WHERE a.applicantMemberId = :applicantMemberId
+          AND (:status IS NULL OR a.status = :status)
+        ORDER BY a.id DESC
+        """,
+    )
+    fun searchForApplicant(
+        @Param("applicantMemberId") applicantMemberId: Long,
+        @Param("status") status: JobApplicationStatus?,
+        pageable: Pageable,
+    ): Page<JobApplication>
+
     // 공고별 공개 신청자 목록이다(Issue #137). "SUBMITTED 이후 전체"(DRAFT/WITHDRAWN 제외)만
     // 대상으로 한다(정책 확정, Issue #137 코멘트) -- 아직 제출하지 않은 임시저장과 철회한 지원은
     // "신청자"가 아니다. search()와 달리 jobId는 필수이고 status 필터는 받지 않는다(Phase 9는

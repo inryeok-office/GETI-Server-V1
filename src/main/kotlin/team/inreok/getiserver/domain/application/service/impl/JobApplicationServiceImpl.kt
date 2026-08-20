@@ -2,6 +2,7 @@ package team.inreok.getiserver.domain.application.service.impl
 
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.application.dto.ApplicationAnswer
@@ -11,6 +12,9 @@ import team.inreok.getiserver.domain.application.dto.JobApplicationActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.dto.JobEligibilityResponse
+import team.inreok.getiserver.domain.application.dto.MyJobApplicationJobSummary
+import team.inreok.getiserver.domain.application.dto.MyJobApplicationListItemResponse
+import team.inreok.getiserver.domain.application.dto.MyJobApplicationListResponse
 import team.inreok.getiserver.domain.application.dto.SaveJobApplicationDraftRequest
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationEligibilityReason
@@ -27,8 +31,15 @@ import team.inreok.getiserver.domain.application.repository.JobApplicationReposi
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationSubmissionRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationService
+import team.inreok.getiserver.domain.company.query.CompanyQuery
+import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
+import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
+import team.inreok.getiserver.domain.job.entity.type.JobStatus
+import team.inreok.getiserver.domain.job.entity.type.PostingType
+import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
 import tools.jackson.databind.ObjectMapper
@@ -121,6 +132,12 @@ class JobApplicationServiceImpl(
     private val jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository,
     private val jobApplicationSubmissionRepository: JobApplicationSubmissionRepository,
     private val fileLinkPort: FileLinkPort,
+    // 본인 지원 목록(list)/상세(getDetail)에 공고명·기업명·북마크 여부를 채우기 위해 쓴다(Issue
+    // #184). companyQuery는 JobApplicationAdminServiceImpl과 같은 이유로 이미 application이
+    // 의존하는 company.query 계약을 그대로 재사용하고, jobBookmarkAccessor는 search가 이미
+    // 소비하는 job.access.JobBookmarkAccessor(Issue #171 SPI)의 새 소비자다.
+    private val companyQuery: CompanyQuery,
+    private val jobBookmarkAccessor: JobBookmarkAccessor,
     private val objectMapper: ObjectMapper,
 ) : JobApplicationService {
     private val log = LoggerFactory.getLogger(JobApplicationServiceImpl::class.java)
@@ -237,7 +254,7 @@ class JobApplicationServiceImpl(
         request.answers?.let { application.answers = writeAnswers(it) }
 
         jobApplicationRepository.flush()
-        return toJobApplicationDraftResponse(objectMapper, application, currentFiles(application))
+        return toJobApplicationDraftResponse(objectMapper, application, currentFilesOf(fileLinkPort, application))
     }
 
     @Transactional
@@ -279,7 +296,7 @@ class JobApplicationServiceImpl(
         if (request.action == JobApplicationAction.SUBMIT || request.action == JobApplicationAction.RESUBMIT) {
             recordSubmissionSnapshot(jobApplicationSubmissionRepository, application)
         }
-        return toJobApplicationDraftResponse(objectMapper, application, currentFiles(application))
+        return toJobApplicationDraftResponse(objectMapper, application, currentFilesOf(fileLinkPort, application))
     }
 
     @Transactional(readOnly = true)
@@ -293,6 +310,56 @@ class JobApplicationServiceImpl(
         return jobApplicationStatusHistoryRepository
             .findByApplicationIdOrderByCreatedAtAsc(applicationId)
             .map(::toJobApplicationStatusHistoryResponse)
+    }
+
+    @Transactional(readOnly = true)
+    override fun list(
+        studentMemberId: Long,
+        status: JobApplicationStatus?,
+        pageable: Pageable,
+    ): MyJobApplicationListResponse {
+        val page = jobApplicationRepository.searchForApplicant(studentMemberId, status, pageable)
+
+        // 항목마다 공고·기업·북마크를 개별 조회하면 Page 항목 수만큼 Query가 늘어난다(N+1).
+        // JobApplicationAdminServiceImpl.list와 동일한 원칙으로 이번 Page에 등장하는 jobId/companyId를
+        // 모아 한 번에 배치 조회한다.
+        val jobIds = page.content.map { it.jobId }.toSet()
+        val jobs = if (jobIds.isEmpty()) emptyMap() else jobApplicationSnapshotQueryPort.findAllByIds(jobIds)
+        val companyIds = jobs.values.map { it.companyId }.toSet()
+        val companies =
+            if (companyIds.isEmpty()) emptyMap() else companyQuery.findActiveSummaries(companyIds, studentMemberId)
+        val bookmarkedJobIds =
+            if (jobIds.isEmpty()) emptySet() else jobBookmarkAccessor.findAllByJobIds(jobIds, studentMemberId)
+
+        return MyJobApplicationListResponse(
+            content = page.content.map { toMyListItem(it, jobs, companies, bookmarkedJobIds) },
+            page = page.number,
+            size = page.size,
+            totalElements = page.totalElements,
+            totalPages = page.totalPages,
+            first = page.isFirst,
+            last = page.isLast,
+        )
+    }
+
+    @Transactional(readOnly = true)
+    override fun getDetail(
+        applicationId: Long,
+        studentMemberId: Long,
+    ): JobApplicationDraftResponse {
+        val application =
+            jobApplicationRepository.findById(applicationId).orElseThrow { ApplicationNotFoundException(applicationId) }
+        if (application.applicantMemberId != studentMemberId) throw ApplicationAccessForbiddenException()
+
+        val job = jobApplicationSnapshotQueryPort.findById(application.jobId)
+        return toJobApplicationDraftResponse(
+            objectMapper,
+            application,
+            currentFilesOf(fileLinkPort, application),
+            jobTitle = job?.title,
+            companyName = job?.let { companyQuery.findActiveSummary(it.companyId, studentMemberId)?.name },
+            availableActions = availableStudentActionNames(application.status),
+        )
     }
 
     // 호출부(createDraft)의 hasActiveApplication() 확인과 이 saveAndFlush 사이에는 DB 잠금이
@@ -326,10 +393,44 @@ class JobApplicationServiceImpl(
         if (values.isEmpty()) null else objectMapper.writeValueAsString(values)
 
     private fun writeAnswers(answers: List<ApplicationAnswer>): String = objectMapper.writeValueAsString(answers)
+}
 
-    // saveDraft/executeAction 응답에 실을 "현재 연결된 첨부파일" 목록을 조회한다(Issue #134,
-    // toJobApplicationDraftResponse KDoc 참고). createDraft는 애초에 연결된 파일이 있을 수 없어 이
-    // Method를 쓰지 않는다.
-    private fun currentFiles(application: JobApplication) =
-        fileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, requireNotNull(application.id))
+// saveDraft/executeAction/getDetail 응답에 실을 "현재 연결된 첨부파일" 목록을 조회한다(Issue #134,
+// toJobApplicationDraftResponse KDoc 참고). createDraft는 애초에 연결된 파일이 있을 수 없어 이
+// 함수를 쓰지 않는다. detekt TooManyFunctions 한도 안에서 Service Class를 유지하기 위해 Top-level
+// 함수로 분리했다(requireAllowedTransition과 같은 이유).
+private fun currentFilesOf(
+    fileLinkPort: FileLinkPort,
+    application: JobApplication,
+) = fileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, requireNotNull(application.id))
+
+// list() 응답 항목 하나를 조립한다(Issue #184). detekt TooManyFunctions 한도 안에서 Service Class를
+// 유지하기 위해 Top-level 함수로 분리했다(requireAllowedTransition과 같은 이유).
+private fun toMyListItem(
+    application: JobApplication,
+    jobs: Map<Long, JobApplicationJobSnapshot>,
+    companies: Map<Long, CompanySummary>,
+    bookmarkedJobIds: Set<Long>,
+): MyJobApplicationListItemResponse {
+    val job = jobs[application.jobId]
+    return MyJobApplicationListItemResponse(
+        applicationId = requireNotNull(application.id),
+        job =
+            job?.let {
+                MyJobApplicationJobSummary(
+                    jobId = it.jobId,
+                    title = it.title,
+                    postingType = PostingType.valueOf(it.postingType),
+                    applicationMethod = ApplicationMethod.valueOf(it.applicationMethod),
+                    status = JobStatus.valueOf(it.status),
+                    company = companies[it.companyId],
+                    endDate = it.recruitmentEndedAt,
+                    viewCount = it.viewCount,
+                    bookmarked = it.jobId in bookmarkedJobIds,
+                )
+            },
+        status = application.status,
+        submittedAt = application.submittedAt,
+        updatedAt = requireNotNull(application.updatedAt),
+    )
 }
