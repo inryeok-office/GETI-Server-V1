@@ -294,5 +294,15 @@ private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     // Issue #155) -- "settings"는 대응하는 Notion Endpoint를 찾지 못해 기존 경로를
     // 유지했다.
     authorize("/api/v1/recommendations/settings", hasRole("STUDENT"))
+    // 포트폴리오 수합 요청 관리(등록·수정·상태 변경)는 교사와 개발자가 사용한다(Portfolio 도메인
+    // 요구사항 §2/§31). 등록자 본인만 수정할 수 있는지는 확정되지 않아 역할까지만 검증한다. 더
+    // 구체적인 admin 경로를 먼저 선언해야 아래 조회 규칙에 가려지지 않는다.
+    authorize("/api/v1/admin/portfolio-requests", hasAnyRole("TEACHER", "DEVELOPER"))
+    authorize("/api/v1/admin/portfolio-requests/**", hasAnyRole("TEACHER", "DEVELOPER"))
+    // 수합 요청 목록·상세 조회는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다. 학생이
+    // 자신이 대상인 공개 이후 요청만 볼 수 있는지는 Role로 알 수 없어 PortfolioRequestService가
+    // 별도로 판정한다.
+    authorize("/api/v1/portfolio-requests", authenticated)
+    authorize("/api/v1/portfolio-requests/**", authenticated)
     authorize(anyRequest, permitAll)
 }

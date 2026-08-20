@@ -528,9 +528,7 @@ class CoreDomainSchemaIntegrationTest
                     PortfolioRequest(
                         createdByMemberId = member.id!!,
                         title = "3학년 포트폴리오 제출",
-                        targetCondition = """{"grade":3}""",
-                        submissionStartedAt = LocalDateTime.now(),
-                        submissionEndedAt = LocalDateTime.now().plusDays(7),
+                        dueAt = LocalDateTime.now().plusDays(7),
                     ),
                 )
 

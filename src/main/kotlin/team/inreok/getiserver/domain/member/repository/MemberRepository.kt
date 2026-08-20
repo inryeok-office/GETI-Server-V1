@@ -104,4 +104,20 @@ interface MemberRepository : JpaRepository<Member, Long> {
         @Param("academicStatus") academicStatus: AcademicStatus,
         @Param("role") role: RoleType,
     ): List<Long>
+
+    // Portfolio 수합 요청의 제출 대상 검증(PortfolioTargetMemberQueryPortImpl, §26 "Target이 실제
+    // STUDENT인지 검증")에 쓴다. 존재 여부와 Role만 확인하고 재학/졸업 상태(academicStatus)는
+    // 걸러내지 않는다 -- 졸업생 Target 허용 여부는 아직 확정되지 않은 Product Decision이라(§39-8)
+    // 임의로 배제하지 않는다. :role은 호출 측이 항상 STUDENT로 고정해 전달한다.
+    @Query(
+        """
+        SELECT m.id FROM Member m
+        WHERE m.id IN :memberIds
+          AND EXISTS (SELECT 1 FROM MemberRole mr WHERE mr.id.memberId = m.id AND mr.id.role = :role)
+        """,
+    )
+    fun findIdsByIdInAndRole(
+        @Param("memberIds") memberIds: Collection<Long>,
+        @Param("role") role: RoleType,
+    ): List<Long>
 }
