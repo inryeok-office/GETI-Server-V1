@@ -346,16 +346,19 @@ Docker Desktop이 현재 실행 중이 아니다. `integrationTest`는 Docker를
 
 ---
 
-## 9. Follow-up Issue 후보
+## 9. Follow-up Issue (생성 완료)
 
-| # | 내용 |
-| --- | --- |
-| F1 | Push Device 등록·해제 / 푸시 설정 조회·변경 / FCM·APNs Provider (Notion 계약 존재, 저장소 구현 0) |
-| F2 | producer 없는 `NotificationType` 11개의 Event 연동 + 대량 Fan-out 수신자 정책 확정 |
-| F3 | `PORTFOLIO_REQUEST` Target Resolver (Portfolio Service 계층 완성 이후) |
-| F4 | `MEMBER_APPROVAL` 이동 대상 화면이 생기면 Resolver 추가 |
-| F5 | 알림 Retention / Cleanup (Soft Delete Row 정리 포함) |
-| F6 | 중복 알림 방지(`idempotencyKey`) — `NotificationCreateCommand` KDoc이 이미 유보해 둔 항목 |
+| Issue | 내용 | 선행 조건 |
+| --- | --- | --- |
+| #189 | 푸시 기기 등록·해제 및 푸시 알림 설정 API | 없음 (Notion에 계약 존재) |
+| #190 | FCM/APNs Push Provider 연동 | #189 |
+| #191 | producer 없는 `NotificationType` 11개 Event 연동과 수신자 정책 확정 | 수신자 정책 결정 |
+| #192 | `PORTFOLIO_REQUEST`·`MEMBER_APPROVAL` 대상 접근 판정 | Portfolio Service 계층 / 승인 결과 화면 |
+| #193 | 인앱 알림 중복 생성 방지(Idempotency) | Unique 범위 결정 |
+| #194 | 인앱 알림 보관 기한 및 정리 정책 | 보관 정책 결정 |
+
+#191(대량 Fan-out)을 켜기 전에 #194(정리 정책)가 있어야 `notifications` Table이 무한정 커지지 않는다.
+#193도 Fan-out 배치 재실행 안전성과 연결된다.
 
 ---
 
