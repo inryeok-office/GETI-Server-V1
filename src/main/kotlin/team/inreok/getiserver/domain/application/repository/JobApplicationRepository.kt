@@ -11,6 +11,19 @@ import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 
 interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
+    @Query(
+        """
+        SELECT a.jobId AS jobId, COUNT(a.id) AS applicationCount
+        FROM JobApplication a
+        WHERE a.jobId IN :jobIds
+          AND a.status <> team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus.DRAFT
+        GROUP BY a.jobId
+        """,
+    )
+    fun countByJobIds(
+        @Param("jobIds") jobIds: Set<Long>,
+    ): List<JobApplicationCountProjection>
+
     /**
      * 학생 Action(SUBMIT/REQUEST_EDIT/RESUBMIT/WITHDRAW)이 같은 지원서를 동시에 전이시키려는
      * 경합을 막기 위해 Pessimistic Write Lock으로 조회한다(요구사항 "동시성/데이터 무결성" 절).
@@ -114,4 +127,9 @@ interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
         @Param("jobId") jobId: Long,
         pageable: Pageable,
     ): Page<JobApplication>
+}
+
+interface JobApplicationCountProjection {
+    val jobId: Long
+    val applicationCount: Long
 }
