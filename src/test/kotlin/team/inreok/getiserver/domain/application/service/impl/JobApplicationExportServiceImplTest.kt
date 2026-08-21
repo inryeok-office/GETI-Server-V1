@@ -208,7 +208,7 @@ class JobApplicationExportServiceImplTest {
                 cohort = null,
                 department = null,
                 hasJobFilter = false,
-                jobIds = emptyList(),
+                jobIds = emptySet(),
                 pageable = Pageable.unpaged(),
             ),
         ).willReturn(PageImpl(applications.toList()))

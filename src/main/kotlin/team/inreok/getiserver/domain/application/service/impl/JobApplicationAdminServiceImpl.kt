@@ -1,6 +1,7 @@
 package team.inreok.getiserver.domain.application.service.impl
 
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -77,18 +78,25 @@ class JobApplicationAdminServiceImpl(
                 emptySet()
             }
 
+        // hasJobFilter가 true인데 filterJobIds가 비어 있으면 어떤 jobId와도 일치할 수 없어
+        // 결과가 항상 빈 목록이다(존재하지 않는 companyId 등). `a.jobId IN ()`으로 DB에 다녀오지
+        // 않고 바로 빈 Page로 대응한다(PR #211 코드리뷰 반영).
         val page =
-            jobApplicationRepository.search(
-                jobId = jobId,
-                status = status,
-                hasApplicantName = trimmedApplicantName != null,
-                applicantName = escapedApplicantName ?: "",
-                cohort = cohort,
-                department = department?.name,
-                hasJobFilter = hasJobFilter,
-                jobIds = filterJobIds,
-                pageable = pageable,
-            )
+            if (hasJobFilter && filterJobIds.isEmpty()) {
+                Page.empty<JobApplication>(pageable)
+            } else {
+                jobApplicationRepository.search(
+                    jobId = jobId,
+                    status = status,
+                    hasApplicantName = trimmedApplicantName != null,
+                    applicantName = escapedApplicantName ?: "",
+                    cohort = cohort,
+                    department = department?.name,
+                    hasJobFilter = hasJobFilter,
+                    jobIds = filterJobIds,
+                    pageable = pageable,
+                )
+            }
 
         // 항목마다 공고·기업·담당자를 개별 조회하면 Page 항목 수만큼 Query가 늘어난다(N+1).
         // 이번 Page에 등장하는 공고/기업/담당자 id를 모아 한 번에 배치 조회한다

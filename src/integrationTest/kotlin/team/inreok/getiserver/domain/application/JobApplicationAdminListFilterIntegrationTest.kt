@@ -203,6 +203,68 @@ class JobApplicationAdminListFilterIntegrationTest {
         assertThat(result.content.map { it.jobId }).containsExactlyInAnyOrder(managedJob, createdJob)
     }
 
+    // jobId(단일 지정)와 companyId(jobIds Filter로 변환)는 서로 다른 조건이지만 AND로 결합된다
+    // (JobApplicationRepository.search KDoc "두 조건이 서로 다른 공고를 가리키면 결과는 정직하게
+    // 빈 목록이 된다" 참고, PR #211 코드리뷰 반영 -- 실제 검증이 없었다).
+    @Test
+    fun `jobId와 companyId가 서로 다른 공고를 가리키면 빈 목록을 반환한다`() {
+        val companyAId = createCompany()
+        val companyBId = createCompany()
+        val jobOfCompanyA = createJob(companyId = companyAId)
+        val jobOfCompanyB = createJob(companyId = companyBId)
+        createApplication(jobOfCompanyA)
+        createApplication(jobOfCompanyB)
+
+        val result =
+            jobApplicationAdminService.list(
+                jobId = jobOfCompanyB,
+                status = null,
+                applicantName = null,
+                cohort = null,
+                department = null,
+                companyId = companyAId,
+                managerMemberId = null,
+                mineOnly = false,
+                requesterMemberId = createMember("requester"),
+                pageable = PageRequest.of(0, 20),
+            )
+
+        assertThat(result.content).isEmpty()
+    }
+
+    // managerMemberId와 mineOnly를 함께 지정하면 두 조건이 AND로 결합된다(JobRepository
+    // .findIdsByCompanyOrManagerFilter KDoc 참고, PR #211 코드리뷰 반영 -- 실제 검증이 없었다).
+    // managerMemberId만 만족하고 mineOnly(담당·등록)는 만족하지 않는 공고는 제외되어야 한다.
+    @Test
+    fun `managerMemberId와 mineOnly를 함께 지정하면 두 조건을 모두 만족하는 공고만 반환한다`() {
+        val requesterId = createMember("requester")
+        val otherCreatorId = createMember("other-creator")
+        val teacherId = createMember("teacher")
+        // managerMemberId(teacherId)와 mineOnly(requesterId가 등록) 조건을 모두 만족한다.
+        val bothMatch = createJob(managerMemberId = teacherId, createdByMemberId = requesterId)
+        // managerMemberId(teacherId)는 만족하지만 mineOnly(requesterId가 담당·등록 아님)는 만족하지
+        // 않는다.
+        val managerOnlyMatch = createJob(managerMemberId = teacherId, createdByMemberId = otherCreatorId)
+        createApplication(bothMatch)
+        createApplication(managerOnlyMatch)
+
+        val result =
+            jobApplicationAdminService.list(
+                jobId = null,
+                status = null,
+                applicantName = null,
+                cohort = null,
+                department = null,
+                companyId = null,
+                managerMemberId = teacherId,
+                mineOnly = true,
+                requesterMemberId = requesterId,
+                pageable = PageRequest.of(0, 20),
+            )
+
+        assertThat(result.content.map { it.jobId }).containsExactly(bothMatch)
+    }
+
     private fun createMember(subject: String): Long {
         val member =
             memberRepository.saveAndFlush(

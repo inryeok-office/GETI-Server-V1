@@ -10,6 +10,7 @@ import org.mockito.BDDMockito.given
 import org.mockito.Mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Page
@@ -357,6 +358,22 @@ class JobApplicationAdminServiceImplTest {
         listOf20()
 
         verify(jobApplicationAdminFilterQueryPort, never()).findIdsByFilters(any(), any(), any())
+    }
+
+    // companyId가 어떤 Job과도 일치하지 않으면 findIdsByFilters가 빈 집합을 반환한다. 이때
+    // `a.jobId IN ()`으로 DB에 다녀올 필요가 없어 Repository.search 자체를 호출하지 않는다(PR #211
+    // 코드리뷰 반영).
+    @Test
+    fun `Job Filter 결과가 빈 집합이면 Repository 조회 없이 빈 목록을 반환한다`() {
+        given(jobApplicationAdminFilterQueryPort.findIdsByFilters(999L, null, null)).willReturn(emptySet())
+
+        val result = listOf20(companyId = 999L)
+
+        assertThat(result.content).isEmpty()
+        assertThat(result.totalElements).isEqualTo(0)
+        assertThat(result.page).isEqualTo(0)
+        assertThat(result.size).isEqualTo(20)
+        verifyNoInteractions(jobApplicationRepository)
     }
 
     // ---------- getDetail ----------
