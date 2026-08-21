@@ -29,6 +29,8 @@ data class ProgramDetailResponse(
     val title: String,
     @param:Schema(description = "Markdown 본문", nullable = true)
     val content: String?,
+    @param:Schema(description = "장소", example = "본관 2층 대강당", nullable = true, maxLength = 500)
+    val location: String?,
     @param:Schema(description = "프로그램 유형", example = "SPECIAL_LECTURE")
     val programType: ProgramType,
     @param:Schema(description = "대상 학년 목록", example = "[2, 3]")

@@ -281,8 +281,14 @@ class JobApplicationExportServiceImplTest {
             jobApplicationRepository.search(
                 jobId = JOB_ID,
                 status = null,
+                hasApplicantName = false,
+                applicantName = "",
+                cohort = null,
+                department = null,
+                hasJobFilter = false,
+                jobIds = emptySet(),
                 hasApplicationIds = applicationIds != null,
-                applicationIds = applicationIds ?: emptyList(),
+                applicationIds = applicationIds ?: emptySet(),
                 pageable = Pageable.unpaged(),
             ),
         ).willReturn(PageImpl(applications.toList()))

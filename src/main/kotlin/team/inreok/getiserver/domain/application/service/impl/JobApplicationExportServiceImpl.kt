@@ -56,8 +56,17 @@ class JobApplicationExportServiceImpl(
                 .search(
                     jobId = jobId,
                     status = null,
+                    hasApplicantName = false,
+                    applicantName = "",
+                    cohort = null,
+                    department = null,
+                    hasJobFilter = false,
+                    // JobApplicationAdminServiceImpl.filterJobIds와 동일하게 emptySet()으로
+                    // 통일한다(PR #211 코드리뷰 반영 -- Collection 타입이 emptyList()/emptySet()로
+                    // 갈라지면 Mockito Stub이 값 일치로 매칭돼 한쪽만 나중에 고치면 조용히 깨진다).
+                    jobIds = emptySet(),
                     hasApplicationIds = applicationIds != null,
-                    applicationIds = applicationIds ?: emptyList(),
+                    applicationIds = applicationIds ?: emptySet(),
                     pageable = Pageable.unpaged(),
                 ).content
 

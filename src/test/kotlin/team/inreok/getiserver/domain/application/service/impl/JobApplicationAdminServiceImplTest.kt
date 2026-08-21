@@ -10,10 +10,13 @@ import org.mockito.BDDMockito.given
 import org.mockito.Mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminAction
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRequest
 import team.inreok.getiserver.domain.application.entity.JobApplication
@@ -31,8 +34,10 @@ import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.link.FileLinkPort
 import team.inreok.getiserver.domain.file.link.FileSnapshot
+import team.inreok.getiserver.domain.job.query.JobApplicationAdminFilterQueryPort
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
+import team.inreok.getiserver.domain.member.entity.type.DepartmentType
 import team.inreok.getiserver.domain.member.query.InquiryMemberSnapshot
 import team.inreok.getiserver.domain.member.query.InquiryMemberSnapshotQueryPort
 import tools.jackson.databind.json.JsonMapper
@@ -46,6 +51,9 @@ class JobApplicationAdminServiceImplTest {
 
     @Mock
     private lateinit var jobApplicationSnapshotQueryPort: JobApplicationSnapshotQueryPort
+
+    @Mock
+    private lateinit var jobApplicationAdminFilterQueryPort: JobApplicationAdminFilterQueryPort
 
     @Mock
     private lateinit var jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository
@@ -66,6 +74,7 @@ class JobApplicationAdminServiceImplTest {
         JobApplicationAdminServiceImpl(
             jobApplicationRepository,
             jobApplicationSnapshotQueryPort,
+            jobApplicationAdminFilterQueryPort,
             jobApplicationStatusHistoryRepository,
             fileLinkPort,
             companyQuery,
@@ -113,26 +122,57 @@ class JobApplicationAdminServiceImplTest {
 
     // ---------- list ----------
 
-    // 이 목록 조회는 applicationIds Filter를 받지 않으므로(Issue #203 범위 밖,
-    // JobApplicationAdminServiceImpl.list 참고) 항상 hasApplicationIds=false로 호출된다.
-    private fun givenDefaultSearch(page: PageImpl<JobApplication>) {
+    // 기본(무필터) search() 호출을 Stub한다 -- Filter 관련 Test는 각자 필요한 Parameter만 다르게
+    // Stub한다(아래 Filter 절 참고). 이 목록 조회는 applicationIds Filter를 받지 않으므로(Issue #203
+    // 범위 밖, JobApplicationAdminServiceImpl.list 참고) 항상 hasApplicationIds=false로 호출된다.
+    private fun givenDefaultSearch(page: Page<JobApplication>) {
         given(
             jobApplicationRepository.search(
                 jobId = null,
                 status = null,
+                hasApplicantName = false,
+                applicantName = "",
+                cohort = null,
+                department = null,
+                hasJobFilter = false,
+                jobIds = emptySet(),
                 hasApplicationIds = false,
-                applicationIds = emptyList(),
+                applicationIds = emptySet(),
                 pageable = PageRequest.of(0, 20),
             ),
         ).willReturn(page)
     }
+
+    private fun listOf20(
+        jobId: Long? = null,
+        status: JobApplicationStatus? = null,
+        applicantName: String? = null,
+        cohort: Int? = null,
+        department: DepartmentType? = null,
+        companyId: Long? = null,
+        managerMemberId: Long? = null,
+        mineOnly: Boolean = false,
+        requesterMemberId: Long = 1L,
+        pageable: Pageable = PageRequest.of(0, 20),
+    ) = service.list(
+        jobId,
+        status,
+        applicantName,
+        cohort,
+        department,
+        companyId,
+        managerMemberId,
+        mineOnly,
+        requesterMemberId,
+        pageable,
+    )
 
     @Test
     fun `목록을 조회하면 항목을 반환한다`() {
         val page = PageImpl(listOf(applicationOf()), PageRequest.of(0, 20), 1)
         givenDefaultSearch(page)
 
-        val result = service.list(null, null, PageRequest.of(0, 20))
+        val result = listOf20()
 
         assertThat(result.content).hasSize(1)
         assertThat(result.content[0].applicationId).isEqualTo(1L)
@@ -156,7 +196,7 @@ class JobApplicationAdminServiceImplTest {
         given(inquiryMemberSnapshotQueryPort.findAllByIds(setOf(200L)))
             .willReturn(mapOf(200L to InquiryMemberSnapshot(200L, "김담당", null, null, null, true)))
 
-        val item = service.list(null, null, PageRequest.of(0, 20)).content[0]
+        val item = listOf20().content[0]
 
         assertThat(item.applicantCohort).isEqualTo(5)
         assertThat(item.applicantDepartment).isEqualTo("SW")
@@ -176,7 +216,7 @@ class JobApplicationAdminServiceImplTest {
             .willReturn(mapOf(1L to jobOf(createdByMemberId = 100L, managerMemberId = null)))
         given(companyQuery.findActiveSummaries(setOf(1L))).willReturn(emptyMap())
 
-        val item = service.list(null, null, PageRequest.of(0, 20)).content[0]
+        val item = listOf20().content[0]
 
         assertThat(item.managerMemberId).isNull()
         assertThat(item.managerName).isNull()
@@ -194,11 +234,157 @@ class JobApplicationAdminServiceImplTest {
         given(companyQuery.findActiveSummaries(setOf(1L))).willReturn(emptyMap())
         given(inquiryMemberSnapshotQueryPort.findAllByIds(setOf(200L))).willReturn(emptyMap())
 
-        service.list(null, null, PageRequest.of(0, 20))
+        listOf20()
 
         verify(jobApplicationSnapshotQueryPort).findAllByIds(setOf(1L))
         verify(companyQuery).findActiveSummaries(setOf(1L))
         verify(inquiryMemberSnapshotQueryPort).findAllByIds(setOf(200L))
+    }
+
+    // ---------- list Filter(Issue #181) ----------
+
+    // applicantName은 검색어 앞뒤 공백을 제거하고 LIKE Wildcard를 이스케이프해 Repository에
+    // 전달한다(escapeLikePattern, InquiryServiceImpl.listAdmin과 동일한 관례).
+    @Test
+    fun `applicantName Filter는 공백을 제거하고 LIKE Wildcard를 이스케이프해 전달한다`() {
+        val page = PageImpl(emptyList<JobApplication>(), PageRequest.of(0, 20), 0)
+        given(
+            jobApplicationRepository.search(
+                jobId = null,
+                status = null,
+                hasApplicantName = true,
+                applicantName = "50\\%",
+                cohort = null,
+                department = null,
+                hasJobFilter = false,
+                jobIds = emptySet(),
+                hasApplicationIds = false,
+                applicationIds = emptySet(),
+                pageable = PageRequest.of(0, 20),
+            ),
+        ).willReturn(page)
+
+        val result = listOf20(applicantName = "  50%  ")
+
+        assertThat(result.totalElements).isEqualTo(0)
+    }
+
+    // 검색어가 공백뿐이면 검색어 없음과 동일하게 취급한다(InquiryServiceImpl.listAdmin과 동일한 관례).
+    @Test
+    fun `applicantName이 공백뿐이면 Filter를 적용하지 않는다`() {
+        val page = PageImpl(listOf(applicationOf()), PageRequest.of(0, 20), 1)
+        givenDefaultSearch(page)
+
+        val result = listOf20(applicantName = "   ")
+
+        assertThat(result.totalElements).isEqualTo(1)
+    }
+
+    @Test
+    fun `cohort와 department Filter를 그대로 전달한다`() {
+        val page = PageImpl(emptyList<JobApplication>(), PageRequest.of(0, 20), 0)
+        given(
+            jobApplicationRepository.search(
+                jobId = null,
+                status = null,
+                hasApplicantName = false,
+                applicantName = "",
+                cohort = 5,
+                department = "AI",
+                hasJobFilter = false,
+                jobIds = emptySet(),
+                hasApplicationIds = false,
+                applicationIds = emptySet(),
+                pageable = PageRequest.of(0, 20),
+            ),
+        ).willReturn(page)
+
+        val result = listOf20(cohort = 5, department = DepartmentType.AI)
+
+        assertThat(result.totalElements).isEqualTo(0)
+    }
+
+    // companyId만 지정되면 job 도메인에 배치 조회를 요청하고, 그 결과 jobId 집합을 jobIds Filter로
+    // 전달한다.
+    @Test
+    fun `companyId Filter를 지정하면 job 도메인 조회 결과를 jobIds Filter로 전달한다`() {
+        given(jobApplicationAdminFilterQueryPort.findIdsByFilters(1L, null, null)).willReturn(setOf(10L, 11L))
+        val page = PageImpl(emptyList<JobApplication>(), PageRequest.of(0, 20), 0)
+        given(
+            jobApplicationRepository.search(
+                jobId = null,
+                status = null,
+                hasApplicantName = false,
+                applicantName = "",
+                cohort = null,
+                department = null,
+                hasJobFilter = true,
+                jobIds = setOf(10L, 11L),
+                hasApplicationIds = false,
+                applicationIds = emptySet(),
+                pageable = PageRequest.of(0, 20),
+            ),
+        ).willReturn(page)
+
+        val result = listOf20(companyId = 1L)
+
+        assertThat(result.totalElements).isEqualTo(0)
+    }
+
+    // mineOnly=true면 requesterMemberId를 job 도메인 조회의 mineOnlyMemberId로 전달한다(담당
+    // (managerMemberId) 또는 등록(createdByMemberId) 공고, 사용자 확인 완료).
+    @Test
+    fun `mineOnly가 true면 requesterMemberId 기준으로 job 도메인에 조회를 요청한다`() {
+        given(jobApplicationAdminFilterQueryPort.findIdsByFilters(null, null, 100L)).willReturn(setOf(1L))
+        val page = PageImpl(listOf(applicationOf()), PageRequest.of(0, 20), 1)
+        given(
+            jobApplicationRepository.search(
+                jobId = null,
+                status = null,
+                hasApplicantName = false,
+                applicantName = "",
+                cohort = null,
+                department = null,
+                hasJobFilter = true,
+                jobIds = setOf(1L),
+                hasApplicationIds = false,
+                applicationIds = emptySet(),
+                pageable = PageRequest.of(0, 20),
+            ),
+        ).willReturn(page)
+
+        val result = listOf20(mineOnly = true, requesterMemberId = 100L)
+
+        assertThat(result.totalElements).isEqualTo(1)
+        verify(jobApplicationAdminFilterQueryPort).findIdsByFilters(null, null, 100L)
+    }
+
+    // mineOnly가 false이고 companyId/managerMemberId도 없으면 job 도메인 배치 조회 자체를 호출하지
+    // 않는다(불필요한 Query 방지).
+    @Test
+    fun `아무 Job Filter도 지정하지 않으면 job 도메인 배치 조회를 호출하지 않는다`() {
+        val page = PageImpl(listOf(applicationOf()), PageRequest.of(0, 20), 1)
+        givenDefaultSearch(page)
+
+        listOf20()
+
+        verify(jobApplicationAdminFilterQueryPort, never()).findIdsByFilters(any(), any(), any())
+    }
+
+    // companyId가 어떤 Job과도 일치하지 않으면 findIdsByFilters가 빈 집합을 반환한다. 이때
+    // `a.jobId IN ()`으로 DB에 다녀올 필요가 없어 Repository.search 자체를 호출하지 않는다(PR #211
+    // 코드리뷰 반영).
+    @Test
+    fun `Job Filter 결과가 빈 집합이면 Repository 조회 없이 빈 목록을 반환한다`() {
+        given(jobApplicationAdminFilterQueryPort.findIdsByFilters(999L, null, null)).willReturn(emptySet())
+
+        val result = listOf20(companyId = 999L)
+
+        assertThat(result.content).isEmpty()
+        assertThat(result.totalElements).isEqualTo(0)
+        assertThat(result.page).isEqualTo(0)
+        assertThat(result.size).isEqualTo(20)
+        verifyNoInteractions(jobApplicationRepository)
     }
 
     // ---------- getDetail ----------
