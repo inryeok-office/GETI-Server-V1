@@ -99,7 +99,7 @@ class PortfolioSubmissionServiceTest {
 
     @Test
     fun `공개 전 DRAFT 요청은 존재를 노출하지 않고 404를 던진다`() {
-        given(requestRepository.findByIdAndDeletedAtIsNull(REQUEST_ID))
+        given(requestRepository.findByIdAndDeletedAtIsNullForUpdate(REQUEST_ID))
             .willReturn(request(PortfolioRequestStatus.DRAFT, dueAt = FUTURE))
 
         assertThatThrownBy { service.submit(REQUEST_ID, REQUESTER_ID, upsert(PortfolioSubmissionStatus.SUBMITTED)) }
@@ -110,7 +110,7 @@ class PortfolioSubmissionServiceTest {
 
     @Test
     fun `없거나 삭제된 요청은 404를 던진다`() {
-        given(requestRepository.findByIdAndDeletedAtIsNull(REQUEST_ID)).willReturn(null)
+        given(requestRepository.findByIdAndDeletedAtIsNullForUpdate(REQUEST_ID)).willReturn(null)
 
         assertThatThrownBy { service.submit(REQUEST_ID, REQUESTER_ID, upsert(PortfolioSubmissionStatus.SUBMITTED)) }
             .isInstanceOf(PortfolioRequestNotFoundException::class.java)
@@ -118,7 +118,7 @@ class PortfolioSubmissionServiceTest {
 
     @Test
     fun `마감된 CLOSED 요청은 SUBMISSION_CLOSED를 던진다`() {
-        given(requestRepository.findByIdAndDeletedAtIsNull(REQUEST_ID))
+        given(requestRepository.findByIdAndDeletedAtIsNullForUpdate(REQUEST_ID))
             .willReturn(request(PortfolioRequestStatus.CLOSED, dueAt = FUTURE))
         givenIsTarget()
 
@@ -129,7 +129,7 @@ class PortfolioSubmissionServiceTest {
 
     @Test
     fun `마감 시각을 지난 PUBLISHED 요청은 SUBMISSION_CLOSED를 던진다`() {
-        given(requestRepository.findByIdAndDeletedAtIsNull(REQUEST_ID))
+        given(requestRepository.findByIdAndDeletedAtIsNullForUpdate(REQUEST_ID))
             .willReturn(request(PortfolioRequestStatus.PUBLISHED, dueAt = PAST))
         givenIsTarget()
 
@@ -202,7 +202,7 @@ class PortfolioSubmissionServiceTest {
     // --- helpers ---
 
     private fun givenPublishedRequest() {
-        given(requestRepository.findByIdAndDeletedAtIsNull(REQUEST_ID))
+        given(requestRepository.findByIdAndDeletedAtIsNullForUpdate(REQUEST_ID))
             .willReturn(request(PortfolioRequestStatus.PUBLISHED, dueAt = FUTURE))
     }
 

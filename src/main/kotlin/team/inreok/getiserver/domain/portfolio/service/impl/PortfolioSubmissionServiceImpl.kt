@@ -33,6 +33,11 @@ class PortfolioSubmissionServiceImpl(
      * 저장이 Rollback되는(또는 그 반대) 어긋난 상태를 만들지 않기 위해서다(JobApplication File Sync와
      * 같은 이유). File I/O는 외부 Storage가 아니라 DB의 files 행 상태만 바꾸므로 이 Transaction에
      * 포함해도 §17(느린 I/O를 Transaction 밖에 두기) 원칙과 충돌하지 않는다.
+     *
+     * 요청 Row를 [PortfolioRequestRepository.findByIdAndDeletedAtIsNullForUpdate]로 잠근 뒤
+     * 제출물을 Upsert한다. 같은 학생이 거의 동시에 두 번 제출해도 요청 Lock으로 순차화되어 두 번째
+     * 요청이 첫 번째가 만든 Row를 보고 정상 Update를 타므로, UNIQUE 제약 위반(500)이 발생하지 않는다
+     * (Program 신청 동시성과 같은 관례).
      */
     @Transactional
     override fun submit(
@@ -41,7 +46,7 @@ class PortfolioSubmissionServiceImpl(
         request: PortfolioSubmissionUpsertRequest,
     ): PortfolioSubmissionResponse {
         val entity =
-            requestRepository.findByIdAndDeletedAtIsNull(requestId)
+            requestRepository.findByIdAndDeletedAtIsNullForUpdate(requestId)
                 ?: throw PortfolioRequestNotFoundException(requestId)
         requireStudentTarget(entity, requestId, requesterId)
         if (!isWithinSubmissionWindow(entity)) throw SubmissionClosedException()
