@@ -72,10 +72,14 @@ class JobApplicationExportServiceImpl(
 
         // 지원서마다 단건 조회를 반복하면 지원자 수만큼 Query가 느는 N+1이 되므로(PR #157
         // 코드리뷰 반영), applicationId 전체에 대해 최신 제출 Snapshot을 한 Query로 배치 조회한다.
-        val applicationIds = applications.mapNotNull { it.id }.toSet()
+        // Issue #203으로 추가된 파라미터 applicationIds(요청 Filter)와 이름이 겹치지 않게
+        // matchedApplicationIds로 구분한다(search()가 이미 필터링해 반환한 결과의 id 집합이라
+        // 요청 Filter와는 다른 값이다 -- 같은 이름이면 이 함수를 이후에 수정할 때 요청 Filter를
+        // 다시 참조하려다 조용히 이 값을 대신 읽는 실수로 이어질 수 있다).
+        val matchedApplicationIds = applications.mapNotNull { it.id }.toSet()
         val latestSubmissionByApplicationId =
             jobApplicationSubmissionRepository
-                .findLatestByApplicationIdIn(applicationIds)
+                .findLatestByApplicationIdIn(matchedApplicationIds)
                 .associateBy { it.applicationId }
         val fileIdsByApplication =
             applications
