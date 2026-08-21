@@ -27,6 +27,20 @@ enum class MemberErrorCode(
     MEMBER_NOT_PENDING(HttpStatus.CONFLICT, "승인 대기 상태의 회원만 처리할 수 있습니다."),
     MEMBER_NOT_APPROVAL_TARGET(HttpStatus.BAD_REQUEST, "교직원 승인 대상 회원이 아닙니다."),
     MEMBER_REJECTION_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "거절 사유를 입력해야 합니다."),
+
+    /**
+     * 관리자가 자기 자신의 Role Set을 교체하거나 자기 자신의 계정 상태를 변경하려 한 경우다(Issue #183
+     * 요구사항 "자기 자신에 대한 위험한 변경 방지"). 자기 권한을 스스로 없애거나 자기 계정을 스스로
+     * 잠그는 사고를 막기 위해 대상(memberId)이 요청자 본인이면 이유를 가리지 않고 전부 거부한다.
+     */
+    MEMBER_SELF_MODIFICATION_FORBIDDEN(HttpStatus.FORBIDDEN, "자기 자신의 Role이나 계정 상태는 스스로 변경할 수 없습니다."),
+
+    /**
+     * 계정 상태 변경(PATCH .../status)이 허용되지 않는 전이일 때다(Issue #183 정책 확정: 관리자가
+     * 수동으로 전이할 수 있는 것은 ACTIVE <-> SUSPENDED뿐이다). PENDING/REJECTED/WITHDRAWN 관련
+     * 전이는 기존 전용 Flow(교직원 승인·거절, 회원 탈퇴)의 책임이라 이 API로는 다루지 않는다.
+     */
+    MEMBER_STATUS_TRANSITION_NOT_ALLOWED(HttpStatus.CONFLICT, "현재 상태에서는 요청한 상태로 변경할 수 없습니다."),
     ;
 
     override val code: String get() = name
