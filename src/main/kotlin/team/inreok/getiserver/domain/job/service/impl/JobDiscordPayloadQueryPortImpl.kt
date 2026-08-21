@@ -34,4 +34,13 @@ class JobDiscordPayloadQueryPortImpl(
             updatedAt = requireNotNull(job.updatedAt) { "저장된 Job은 updatedAt을 가져야 합니다." },
         )
     }
+
+    @Transactional(readOnly = true)
+    override fun findDisplayNamesByIds(jobIds: Set<Long>): Map<Long, String> {
+        if (jobIds.isEmpty()) return emptyMap()
+        // findById와 같은 이유로 Soft Delete를 거르지 않는다(Port KDoc 참고).
+        return jobRepository
+            .findAllById(jobIds)
+            .associate { requireNotNull(it.id) { "저장된 Job은 id를 가져야 합니다." } to it.title }
+    }
 }
