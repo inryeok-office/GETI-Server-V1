@@ -99,7 +99,7 @@ class JobApplicationAdminServiceImpl(
                     hasJobFilter = hasJobFilter,
                     jobIds = filterJobIds,
                     hasApplicationIds = false,
-                    applicationIds = emptyList(),
+                    applicationIds = emptySet(),
                     pageable = pageable,
                 )
             }
