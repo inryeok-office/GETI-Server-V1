@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController
 import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
 import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
+import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.search.dto.JobSearchResponse
 import team.inreok.getiserver.domain.search.dto.JobSort
@@ -81,6 +82,9 @@ class JobSearchController(
         @Parameter(description = "공고 유형 필터(선택)")
         @RequestParam(required = false)
         postingType: PostingType?,
+        @Parameter(description = "지원 방식 필터. INTERNAL(학교 지원) 또는 EXTERNAL(외부 지원)")
+        @RequestParam(required = false)
+        applicationMethod: ApplicationMethod?,
         @Parameter(description = "공고 상태 필터(선택). PUBLISHED 또는 CLOSED만 지정할 수 있다.")
         @RequestParam(required = false)
         status: PublicJobStatus?,
@@ -128,6 +132,7 @@ class JobSearchController(
             jobSearchService.search(
                 query,
                 postingType,
+                applicationMethod,
                 status,
                 companyType,
                 sourceName,
