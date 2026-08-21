@@ -100,15 +100,20 @@ class MemberAdminManagementIntegrationTest {
 
     @Test
     fun `role Filter는 EXISTS Subquery로 해당 Role을 가진 회원만 반환한다`() {
-        val teacher = createMember(status = MemberStatus.ACTIVE, roles = setOf(RoleType.TEACHER))
-        createMember(status = MemberStatus.ACTIVE, roles = setOf(RoleType.STUDENT))
+        // 이 Test Class의 다른 Test도 TEACHER Role을 가진 회원을 만들 수 있어(같은 Testcontainers
+        // Postgres를 Class 전체가 공유하고 Test 사이에 Rollback하지 않는다, MemberApprovalIntegrationTest
+        // 등 기존 관례와 동일), role=TEACHER 전역 검색은 다른 Test의 잔여 데이터와 섞일 수 있다.
+        // cohort를 이 Test만의 고유 값으로 함께 필터링해 결과를 이 Test가 만든 데이터로 좁힌다.
+        val uniqueCohort = (100_000..999_999).random()
+        val teacher = createMember(status = MemberStatus.ACTIVE, cohort = uniqueCohort, roles = setOf(RoleType.TEACHER))
+        createMember(status = MemberStatus.ACTIVE, cohort = uniqueCohort, roles = setOf(RoleType.STUDENT))
 
         val result =
             memberAdminManagementService.search(
                 name = null,
                 status = null,
                 role = RoleType.TEACHER,
-                cohort = null,
+                cohort = uniqueCohort,
                 department = null,
                 pageable = PageRequest.of(0, 20),
             )
