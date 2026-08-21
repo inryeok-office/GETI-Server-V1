@@ -32,6 +32,11 @@ interface JobRepository : JpaRepository<Job, Long> {
     // 받지 않고 PUBLISHED만 조회해, CLOSED까지 가져와 매번 걸러내는 낭비를 피한다.
     fun findAllByStatusAndDeletedAtIsNull(status: JobStatus): List<Job>
 
+    fun findAllByCompanyIdAndStatusInAndDeletedAtIsNull(
+        companyId: Long,
+        statuses: Collection<JobStatus>,
+    ): List<Job>
+
     // 공개 목록/검색(GET /api/v1/jobs)은 더 이상 이 Repository를 직접 쓰지 않는다(Issue #69,
     // domain.search.query.JobSearchQueryPort가 Elasticsearch로 대체). 이 Query는 Search의 전체
     // 재색인이 Postgres를 원본으로 다시 읽을 때 쓰는 최소 목적의 재색인용 조회다 — 필터는 없고
@@ -69,4 +74,31 @@ interface JobRepository : JpaRepository<Job, Long> {
     fun incrementViewCount(
         @Param("id") id: Long,
     ): Int
+
+    // 관리자 지원자 목록 필터(Issue #181)의 기업·담당자 조건을 만족하는 삭제되지 않은 Job id를
+    // 찾는다. JobApplication은 jobId만 가지고 있어 companyId/managerMemberId로 직접 필터링할 수
+    // 없으므로(JobApplicationAdminFilterQueryPort KDoc 참고), application 모듈이 이 결과를
+    // jobId IN (...) 조건으로 사용한다. 세 조건은 모두 null이면 적용하지 않고(search()와 동일한
+    // 관례) AND로 결합한다. :mineOnlyMemberId는 managerMemberId 또는 createdByMemberId 중 하나만
+    // 일치해도 포함한다(사용자 확인 완료 -- 공고에 managerMemberId를 지정하는 API가 아직 없어
+    // managerMemberId만 기준으로 하면 "담당 공고" 필터가 항상 빈 목록이 되기 때문에 등록자 기준도
+    // 포함한다).
+    @Query(
+        """
+        SELECT j.id FROM Job j
+        WHERE j.deletedAt IS NULL
+          AND (:companyId IS NULL OR j.companyId = :companyId)
+          AND (:managerMemberId IS NULL OR j.managerMemberId = :managerMemberId)
+          AND (
+            :mineOnlyMemberId IS NULL
+            OR j.managerMemberId = :mineOnlyMemberId
+            OR j.createdByMemberId = :mineOnlyMemberId
+          )
+        """,
+    )
+    fun findIdsByCompanyOrManagerFilter(
+        @Param("companyId") companyId: Long?,
+        @Param("managerMemberId") managerMemberId: Long?,
+        @Param("mineOnlyMemberId") mineOnlyMemberId: Long?,
+    ): List<Long>
 }

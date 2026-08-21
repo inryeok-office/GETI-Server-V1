@@ -88,6 +88,9 @@ class CompanyControllerTest
                 .andExpect(jsonPath("$.data.industry").value("소프트웨어 개발"))
                 .andExpect(jsonPath("$.data.address").value("대구광역시 남구 대명동"))
                 .andExpect(jsonPath("$.data.mouStartDate").value("2026-03-01"))
+                .andExpect(jsonPath("$.data.representativeEmail").doesNotExist())
+                .andExpect(jsonPath("$.data.representativePhone").doesNotExist())
+                .andExpect(jsonPath("$.data.memo").doesNotExist())
                 // File 도메인 연동 전이라 logoUrl은 항상 null로 응답한다.
                 .andExpect(jsonPath("$.data.logoUrl").isEmpty)
         }

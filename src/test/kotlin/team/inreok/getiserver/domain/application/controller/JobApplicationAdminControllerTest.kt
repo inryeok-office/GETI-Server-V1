@@ -4,7 +4,10 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyBoolean
 import org.mockito.ArgumentMatchers.anyLong
+import org.mockito.ArgumentMatchers.eq
+import org.mockito.ArgumentMatchers.isNull
 import org.mockito.BDDMockito.given
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
 import org.springframework.context.annotation.Import
@@ -30,6 +33,7 @@ import team.inreok.getiserver.domain.application.exception.ApplicationActionNotA
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
 import team.inreok.getiserver.domain.application.exception.ApplicationReviewForbiddenException
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
+import team.inreok.getiserver.domain.member.entity.type.DepartmentType
 import team.inreok.getiserver.global.security.JwtTokenProvider
 import team.inreok.getiserver.global.security.SecurityConfig
 import java.time.LocalDateTime
@@ -92,13 +96,109 @@ class JobApplicationAdminControllerTest
 
         @Test
         fun `교사가 목록을 조회하면 200과 함께 결과를 반환한다`() {
-            given(jobApplicationAdminService.list(any(), any(), anyPageable()))
-                .willReturn(JobApplicationAdminListResponse(emptyList(), 0, 20, 0, 0, true, true))
+            given(
+                jobApplicationAdminService.list(
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    anyBoolean(),
+                    anyLong(),
+                    anyPageable(),
+                ),
+            ).willReturn(JobApplicationAdminListResponse(emptyList(), 0, 20, 0, 0, true, true))
 
             mockMvc
                 .perform(get("/api/v1/admin/job-applications").with(authOf(100L, "TEACHER")))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.data.content").isArray)
+        }
+
+        // Issue #181 -- 새로 추가된 Query Parameter가 그대로 Service에 전달되는지, Authentication의
+        // principal이 requesterMemberId로 쓰이는지 확인한다(anyPageable()(Mockito any())만 쓰면
+        // 실제로 어떤 값이 전달됐는지 검증하지 못한다, InquiryAdminControllerTest와 동일한 방식).
+        @Test
+        fun `목록 조회 Query Parameter는 Service에 그대로 전달된다`() {
+            given(
+                jobApplicationAdminService.list(
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    anyBoolean(),
+                    anyLong(),
+                    anyPageable(),
+                ),
+            ).willReturn(JobApplicationAdminListResponse(emptyList(), 0, 20, 0, 0, true, true))
+
+            mockMvc
+                .perform(
+                    get("/api/v1/admin/job-applications")
+                        .param("jobId", "1")
+                        .param("status", "SUBMITTED")
+                        .param("applicantName", "홍길동")
+                        .param("cohort", "5")
+                        .param("department", "AI")
+                        .param("companyId", "2")
+                        .param("managerMemberId", "3")
+                        .param("mineOnly", "true")
+                        .with(authOf(100L, "TEACHER")),
+                ).andExpect(status().isOk)
+
+            verify(jobApplicationAdminService).list(
+                eq(1L),
+                eq(JobApplicationStatus.SUBMITTED),
+                eq("홍길동"),
+                eq(5),
+                eq(DepartmentType.AI),
+                eq(2L),
+                eq(3L),
+                eq(true),
+                eq(100L),
+                anyPageable(),
+            )
+        }
+
+        // mineOnly는 지정하지 않으면 기본값 false로 전달된다(다른 Filter도 모두 없으면 null).
+        @Test
+        fun `Query Parameter를 지정하지 않으면 mineOnly는 기본값 false로 전달된다`() {
+            given(
+                jobApplicationAdminService.list(
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    anyBoolean(),
+                    anyLong(),
+                    anyPageable(),
+                ),
+            ).willReturn(JobApplicationAdminListResponse(emptyList(), 0, 20, 0, 0, true, true))
+
+            mockMvc
+                .perform(get("/api/v1/admin/job-applications").with(authOf(100L, "TEACHER")))
+                .andExpect(status().isOk)
+
+            verify(jobApplicationAdminService).list(
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(false),
+                eq(100L),
+                anyPageable(),
+            )
         }
 
         @Test
