@@ -51,24 +51,34 @@ class JobApplicationExportServiceImpl(
         // hasJobFilter/jobIds와 동일한 관례). search()가 이미 jobId로 걸러낸 결과와 AND로
         // 결합되므로, 다른 공고 소속이거나 존재하지 않는 ID는 이 교집합에서 자연히 빠진다(정책
         // 확정: 오류 없이 무시).
+        //
+        // applicationIds가 null이 아니면서 비어 있으면(예: ?applicationIds= 처럼 Query Parameter
+        // 값이 빈 문자열이면 Spring이 크기 0인 List로 Binding한다) 무엇을 선택해도 일치할 수 없어
+        // 결과가 항상 빈 목록이다. `a.id IN ()`으로 DB에 다녀오지 않고 바로 빈 목록으로 대응한다
+        // (JobApplicationAdminServiceImpl.list의 hasJobFilter && filterJobIds.isEmpty() Guard와
+        // 동일한 관례, PR #211 코드리뷰 반영).
         val applications =
-            jobApplicationRepository
-                .search(
-                    jobId = jobId,
-                    status = null,
-                    hasApplicantName = false,
-                    applicantName = "",
-                    cohort = null,
-                    department = null,
-                    hasJobFilter = false,
-                    // JobApplicationAdminServiceImpl.filterJobIds와 동일하게 emptySet()으로
-                    // 통일한다(PR #211 코드리뷰 반영 -- Collection 타입이 emptyList()/emptySet()로
-                    // 갈라지면 Mockito Stub이 값 일치로 매칭돼 한쪽만 나중에 고치면 조용히 깨진다).
-                    jobIds = emptySet(),
-                    hasApplicationIds = applicationIds != null,
-                    applicationIds = applicationIds ?: emptySet(),
-                    pageable = Pageable.unpaged(),
-                ).content
+            if (applicationIds != null && applicationIds.isEmpty()) {
+                emptyList()
+            } else {
+                jobApplicationRepository
+                    .search(
+                        jobId = jobId,
+                        status = null,
+                        hasApplicantName = false,
+                        applicantName = "",
+                        cohort = null,
+                        department = null,
+                        hasJobFilter = false,
+                        // JobApplicationAdminServiceImpl.filterJobIds와 동일하게 emptySet()으로
+                        // 통일한다(PR #211 코드리뷰 반영 -- Collection 타입이 emptyList()/emptySet()로
+                        // 갈라지면 Mockito Stub이 값 일치로 매칭돼 한쪽만 나중에 고치면 조용히 깨진다).
+                        jobIds = emptySet(),
+                        hasApplicationIds = applicationIds != null,
+                        applicationIds = applicationIds ?: emptySet(),
+                        pageable = Pageable.unpaged(),
+                    ).content
+            }
 
         // 지원서마다 단건 조회를 반복하면 지원자 수만큼 Query가 느는 N+1이 되므로(PR #157
         // 코드리뷰 반영), applicationId 전체에 대해 최신 제출 Snapshot을 한 Query로 배치 조회한다.

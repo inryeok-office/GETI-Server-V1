@@ -256,6 +256,20 @@ class JobApplicationExportServiceImplTest {
     }
 
     @Test
+    fun `applicationIds가 null이 아니면서 비어 있으면 Repository 조회 없이 빈 목록을 반환한다`() {
+        // 코드리뷰 반영(PR #215) -- ?applicationIds=처럼 빈 값으로 호출하면 Spring이 크기 0인
+        // List로 Binding하는데, 이 경우 무엇을 선택해도 일치할 수 없어 결과가 항상 빈 목록이다.
+        // JobApplicationAdminServiceImpl.list의 hasJobFilter && filterJobIds.isEmpty() Guard와
+        // 동일한 관례로 `a.id IN ()` DB Round-trip 자체를 생략한다.
+        givenJob(createdByMemberId = MANAGER_ID)
+
+        val entries = service.buildExportEntries(JOB_ID, MANAGER_ID, isDeveloper = false, applicationIds = emptyList())
+
+        assertThat(entries).isEmpty()
+        org.mockito.Mockito.verifyNoInteractions(jobApplicationRepository)
+    }
+
+    @Test
     fun `writeZip은 FileArchivePort에 그대로 위임한다`() {
         val entries = listOf(FileArchiveEntry(1L, "a.pdf"))
         val output = ByteArrayOutputStream()
