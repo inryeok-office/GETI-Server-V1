@@ -17,12 +17,15 @@ import team.inreok.getiserver.domain.application.exception.ApplicationReviewForb
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
+import team.inreok.getiserver.domain.application.service.escapeLikePattern
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.job.query.JobApplicationAdminFilterQueryPort
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
+import team.inreok.getiserver.domain.member.entity.type.DepartmentType
 import team.inreok.getiserver.domain.member.query.InquiryMemberSnapshot
 import team.inreok.getiserver.domain.member.query.InquiryMemberSnapshotQueryPort
 import tools.jackson.databind.ObjectMapper
@@ -31,6 +34,9 @@ import tools.jackson.databind.ObjectMapper
 class JobApplicationAdminServiceImpl(
     private val jobApplicationRepository: JobApplicationRepository,
     private val jobApplicationSnapshotQueryPort: JobApplicationSnapshotQueryPort,
+    // 기업·담당 교사 Filter(Issue #181)가 companyId/managerMemberId/mineOnly 조건을 만족하는 Job
+    // id 집합을 얻는 데 쓴다(Module 경계 유지, JobApplicationAdminFilterQueryPort KDoc 참고).
+    private val jobApplicationAdminFilterQueryPort: JobApplicationAdminFilterQueryPort,
     private val jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository,
     private val fileLinkPort: FileLinkPort,
     private val companyQuery: CompanyQuery,
@@ -45,9 +51,44 @@ class JobApplicationAdminServiceImpl(
     override fun list(
         jobId: Long?,
         status: JobApplicationStatus?,
+        applicantName: String?,
+        cohort: Int?,
+        department: DepartmentType?,
+        companyId: Long?,
+        managerMemberId: Long?,
+        mineOnly: Boolean,
+        requesterMemberId: Long,
         pageable: Pageable,
     ): JobApplicationAdminListResponse {
-        val page = jobApplicationRepository.search(jobId, status, pageable)
+        // 검색어를 보내지 않은 경우와 공백만 보낸 경우를 모두 "검색어 없음"으로 취급한다
+        // (InquiryServiceImpl.listAdmin과 동일한 관례).
+        val trimmedApplicantName = applicantName?.trim()?.takeIf { it.isNotEmpty() }
+        val escapedApplicantName = trimmedApplicantName?.let(::escapeLikePattern)
+        val mineOnlyMemberId = if (mineOnly) requesterMemberId else null
+
+        // companyId/managerMemberId/mineOnly 중 하나라도 지정됐을 때만 job 도메인에 배치 조회를
+        // 요청한다(불필요한 Query 방지, JobApplicationAdminFilterQueryPort KDoc 참고). 셋 다
+        // null이면 jobIds Filter 자체를 적용하지 않는다.
+        val hasJobFilter = companyId != null || managerMemberId != null || mineOnly
+        val filterJobIds =
+            if (hasJobFilter) {
+                jobApplicationAdminFilterQueryPort.findIdsByFilters(companyId, managerMemberId, mineOnlyMemberId)
+            } else {
+                emptySet()
+            }
+
+        val page =
+            jobApplicationRepository.search(
+                jobId = jobId,
+                status = status,
+                hasApplicantName = trimmedApplicantName != null,
+                applicantName = escapedApplicantName ?: "",
+                cohort = cohort,
+                department = department?.name,
+                hasJobFilter = hasJobFilter,
+                jobIds = filterJobIds,
+                pageable = pageable,
+            )
 
         // 항목마다 공고·기업·담당자를 개별 조회하면 Page 항목 수만큼 Query가 늘어난다(N+1).
         // 이번 Page에 등장하는 공고/기업/담당자 id를 모아 한 번에 배치 조회한다

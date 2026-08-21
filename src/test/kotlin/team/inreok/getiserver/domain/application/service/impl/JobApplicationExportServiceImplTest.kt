@@ -199,8 +199,19 @@ class JobApplicationExportServiceImplTest {
     }
 
     private fun givenApplications(vararg applications: JobApplication) {
-        given(jobApplicationRepository.search(JOB_ID, null, Pageable.unpaged()))
-            .willReturn(PageImpl(applications.toList()))
+        given(
+            jobApplicationRepository.search(
+                jobId = JOB_ID,
+                status = null,
+                hasApplicantName = false,
+                applicantName = "",
+                cohort = null,
+                department = null,
+                hasJobFilter = false,
+                jobIds = emptyList(),
+                pageable = Pageable.unpaged(),
+            ),
+        ).willReturn(PageImpl(applications.toList()))
     }
 
     private fun givenSubmission(

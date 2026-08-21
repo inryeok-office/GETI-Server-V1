@@ -21,6 +21,7 @@ import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
+import team.inreok.getiserver.domain.member.entity.type.DepartmentType
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
 import team.inreok.getiserver.global.web.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
@@ -44,10 +45,13 @@ class JobApplicationAdminController(
     @Operation(
         summary = "지원서 목록 조회",
         description = """
-            제출된 지원서를 조회·검색한다. jobId·status 필터는 함께 조합할 수 있고(AND), 지정하지
-            않은 Filter는 적용하지 않는다. DRAFT(임시저장 중, 미제출) 상태는 status에 명시 지정해도
-            항상 결과에서 제외된다. 담당 공고 여부와 무관하게 모든 교사·개발자가 조회할 수 있다.
-            기본 page=0, size=20이며 최신 등록순으로 고정된다.
+            제출된 지원서를 조회·검색한다. 모든 Filter는 함께 조합할 수 있고(AND), 지정하지 않은
+            Filter는 적용하지 않는다. DRAFT(임시저장 중, 미제출) 상태는 status에 명시 지정해도
+            항상 결과에서 제외된다. `mineOnly=true`면 현재 로그인한 교사·개발자가 담당
+            (managerMemberId) 또는 등록(createdByMemberId)한 공고의 지원서만 반환하며, `mineOnly`를
+            지정하지 않으면(기본 false) 담당 공고 여부와 무관하게 모든 교사·개발자가 전체를 조회할
+            수 있다. `applicantName`은 지원자 이름 스냅샷을 대소문자 구분 없이 부분 검색한다. 기본
+            page=0, size=20이며 최신 등록순으로 고정된다.
         """,
     )
     @ApiResponses(
@@ -58,11 +62,37 @@ class JobApplicationAdminController(
     )
     @GetMapping
     fun listApplications(
+        authentication: Authentication,
         @Parameter(description = "공고 ID 필터(선택)") @RequestParam(required = false) jobId: Long?,
         @Parameter(description = "지원 상태 필터(선택)") @RequestParam(required = false) status: JobApplicationStatus?,
+        @Parameter(description = "지원자 이름 부분 검색(선택, 대소문자 무시)")
+        @RequestParam(required = false)
+        applicantName: String?,
+        @Parameter(description = "지원자 기수 필터(선택)") @RequestParam(required = false) cohort: Int?,
+        @Parameter(description = "지원자 학과 필터(선택)") @RequestParam(required = false) department: DepartmentType?,
+        @Parameter(description = "기업 ID 필터(선택)") @RequestParam(required = false) companyId: Long?,
+        @Parameter(description = "담당 교사 회원 ID 필터(선택)") @RequestParam(required = false) managerMemberId: Long?,
+        @Parameter(description = "현재 로그인한 사용자가 담당·등록한 공고의 지원서만 조회(선택, 기본 false)")
+        @RequestParam(required = false, defaultValue = "false")
+        mineOnly: Boolean,
         @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20)") pageable: Pageable,
-    ): ApiResponse<JobApplicationAdminListResponse> =
-        ApiResponse.of(jobApplicationAdminService.list(jobId, status, pageable))
+    ): ApiResponse<JobApplicationAdminListResponse> {
+        val requesterMemberId = authentication.principal as Long
+        return ApiResponse.of(
+            jobApplicationAdminService.list(
+                jobId = jobId,
+                status = status,
+                applicantName = applicantName,
+                cohort = cohort,
+                department = department,
+                companyId = companyId,
+                managerMemberId = managerMemberId,
+                mineOnly = mineOnly,
+                requesterMemberId = requesterMemberId,
+                pageable = pageable,
+            ),
+        )
+    }
 
     @Operation(
         summary = "지원서 상세 조회",

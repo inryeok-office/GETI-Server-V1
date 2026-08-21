@@ -44,7 +44,19 @@ class JobApplicationExportServiceImpl(
         // 이 Snapshot이 가리키는 fileId 자체는 바뀌지 않는다. 연결이 해제된 File도 삭제되지는
         // 않아(status는 UPLOADED로 돌아갈 뿐) isVisible()은 계속 true이므로 여전히 내려받을 수
         // 있다(FileArchivePort.writeZip이 이 판정을 담당).
-        val applications = jobApplicationRepository.search(jobId, null, Pageable.unpaged()).content
+        val applications =
+            jobApplicationRepository
+                .search(
+                    jobId = jobId,
+                    status = null,
+                    hasApplicantName = false,
+                    applicantName = "",
+                    cohort = null,
+                    department = null,
+                    hasJobFilter = false,
+                    jobIds = emptyList(),
+                    pageable = Pageable.unpaged(),
+                ).content
 
         // 지원서마다 단건 조회를 반복하면 지원자 수만큼 Query가 느는 N+1이 되므로(PR #157
         // 코드리뷰 반영), applicationId 전체에 대해 최신 제출 Snapshot을 한 Query로 배치 조회한다.
