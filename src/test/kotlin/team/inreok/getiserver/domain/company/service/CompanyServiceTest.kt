@@ -15,6 +15,9 @@ import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
+import team.inreok.getiserver.domain.audit.query.AuditLogWriter
+import team.inreok.getiserver.domain.audit.query.CompanyAuditQueryPort
+import team.inreok.getiserver.domain.audit.query.CompanyAuditSnapshot
 import team.inreok.getiserver.domain.company.dto.CompanyCreateRequest
 import team.inreok.getiserver.domain.company.dto.CompanyUpdateRequest
 import team.inreok.getiserver.domain.company.entity.Company
@@ -24,13 +27,18 @@ import team.inreok.getiserver.domain.company.exception.CompanyNameRequiredExcept
 import team.inreok.getiserver.domain.company.exception.CompanyNotFoundException
 import team.inreok.getiserver.domain.company.exception.DuplicateCompanyException
 import team.inreok.getiserver.domain.company.exception.MouPeriodInvalidException
+import team.inreok.getiserver.domain.company.query.CompanyAdminJobQueryPort
+import team.inreok.getiserver.domain.company.query.CompanyAdminJobSnapshot
+import team.inreok.getiserver.domain.company.query.CompanyApplicationCountQueryPort
 import team.inreok.getiserver.domain.company.repository.CompanyRepository
 import team.inreok.getiserver.domain.company.service.impl.CompanyServiceImpl
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.entity.type.FilePurpose
 import team.inreok.getiserver.domain.file.link.FileLinkPort
 import team.inreok.getiserver.domain.file.link.FileUrlPort
+import team.inreok.getiserver.domain.member.query.InquiryMemberSnapshotQueryPort
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 @ExtendWith(MockitoExtension::class)
 class CompanyServiceTest {
@@ -43,8 +51,32 @@ class CompanyServiceTest {
     @Mock
     private lateinit var fileUrlPort: FileUrlPort
 
+    @Mock
+    private lateinit var companyAdminJobQueryPort: CompanyAdminJobQueryPort
+
+    @Mock
+    private lateinit var companyApplicationCountQueryPort: CompanyApplicationCountQueryPort
+
+    @Mock
+    private lateinit var companyAuditQueryPort: CompanyAuditQueryPort
+
+    @Mock
+    private lateinit var auditLogWriter: AuditLogWriter
+
+    @Mock
+    private lateinit var inquiryMemberSnapshotQueryPort: InquiryMemberSnapshotQueryPort
+
     private val service: CompanyService by lazy {
-        CompanyServiceImpl(companyRepository, fileLinkPort, fileUrlPort)
+        CompanyServiceImpl(
+            companyRepository,
+            fileLinkPort,
+            fileUrlPort,
+            companyAdminJobQueryPort,
+            companyApplicationCountQueryPort,
+            companyAuditQueryPort,
+            auditLogWriter,
+            inquiryMemberSnapshotQueryPort,
+        )
     }
 
     // 이 Class의 기존 Test는 로고를 다루지 않는다. 로고 연결·URL 발급은 아래 별도 Test들에서
@@ -418,6 +450,42 @@ class CompanyServiceTest {
         given(fileUrlPort.presignedImageUrls(REQUESTER_ID, listOf(LOGO_FILE_ID))).willReturn(emptyMap())
 
         assertThat(service.get(1L, REQUESTER_ID).logoUrl).isNull()
+    }
+
+    @Test
+    fun `관리자 기업 상세는 연결 공고와 집계를 Port에서 조립한다`() {
+        val company =
+            companyOf().apply {
+                representativeEmail = "contact@example.com"
+                representativePhone = "02-1234-5678"
+                memo = "관리 메모"
+                updatedAt = LocalDateTime.of(2026, 3, 2, 9, 0)
+            }
+        given(companyRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(company)
+        given(companyAdminJobQueryPort.findByCompanyId(1L)).willReturn(
+            listOf(
+                CompanyAdminJobSnapshot(10L, "초안", "GENERAL", "DRAFT", null),
+                CompanyAdminJobSnapshot(11L, "모집 중", "MOU", "PUBLISHED", LocalDateTime.now().plusDays(1)),
+                CompanyAdminJobSnapshot(12L, "마감", "SCHOOL", "CLOSED", LocalDateTime.now().minusDays(1)),
+            ),
+        )
+        given(companyApplicationCountQueryPort.countByJobIds(setOf(10L, 11L, 12L)))
+            .willReturn(mapOf(10L to 0L, 11L to 4L, 12L to 3L))
+        given(companyAuditQueryPort.findRecentChanges(1L, 5)).willReturn(
+            listOf(CompanyAuditSnapshot(100L, "COMPANY_UPDATED", REQUESTER_ID, company.updatedAt)),
+        )
+        given(inquiryMemberSnapshotQueryPort.findAllByIds(setOf(REQUESTER_ID))).willReturn(emptyMap())
+
+        val result = service.getAdminDetail(1L, REQUESTER_ID)
+
+        assertThat(result.representativeEmail).isEqualTo("contact@example.com")
+        assertThat(result.memo).isEqualTo("관리 메모")
+        assertThat(result.lastEditedAt).isEqualTo(company.updatedAt)
+        assertThat(result.connectedJobs).hasSize(3)
+        assertThat(result.stats.totalConnectedJobs).isEqualTo(3L)
+        assertThat(result.stats.activeJobCount).isEqualTo(1L)
+        assertThat(result.stats.totalApplicationCount).isEqualTo(7L)
+        assertThat(result.recentChanges).hasSize(1)
     }
 
     private companion object {

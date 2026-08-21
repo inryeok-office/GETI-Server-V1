@@ -9,6 +9,7 @@ import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.DeleteMapping
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import team.inreok.getiserver.domain.company.dto.AdminCompanyDetailResponse
 import team.inreok.getiserver.domain.company.dto.CompanyCreateRequest
 import team.inreok.getiserver.domain.company.dto.CompanyResponse
 import team.inreok.getiserver.domain.company.dto.CompanyUpdateRequest
@@ -36,6 +38,23 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 class CompanyAdminController(
     private val companyService: CompanyService,
 ) {
+    @Operation(
+        summary = "관리자 기업 상세 조회",
+        description = "연락처, 내부 메모, 수정 이력, 연결된 공고와 관리자 통계를 포함한 기업 상세를 조회한다.",
+    )
+    @ApiResponses(
+        SwaggerApiResponse(responseCode = "200", description = "관리자 기업 상세 조회 성공"),
+        SwaggerApiResponse(responseCode = "401", description = "인증되지 않음"),
+        SwaggerApiResponse(responseCode = "403", description = "개발자 권한 없음"),
+        SwaggerApiResponse(responseCode = "404", description = "기업을 찾을 수 없음(COMPANY_NOT_FOUND)"),
+    )
+    @GetMapping("/{companyId}")
+    fun getCompanyDetail(
+        authentication: Authentication,
+        @Parameter(description = "조회할 기업 ID", example = "1") @PathVariable companyId: Long,
+    ): ApiResponse<AdminCompanyDetailResponse> =
+        ApiResponse.of(companyService.getAdminDetail(companyId, authentication.principal as Long))
+
     @Operation(
         summary = "기업 등록",
         description = """
@@ -138,8 +157,9 @@ class CompanyAdminController(
     @DeleteMapping("/{companyId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun deleteCompany(
+        authentication: Authentication,
         @Parameter(description = "삭제할 기업 ID", example = "1") @PathVariable companyId: Long,
     ) {
-        companyService.delete(companyId)
+        companyService.delete(companyId, authentication.principal as Long)
     }
 }

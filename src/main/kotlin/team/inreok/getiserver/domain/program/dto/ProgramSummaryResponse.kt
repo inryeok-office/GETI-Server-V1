@@ -20,6 +20,8 @@ data class ProgramSummaryResponse(
     val programType: ProgramType,
     @param:Schema(description = "프로그램 상태", example = "PUBLISHED")
     val status: ProgramStatus,
+    @param:Schema(description = "장소", example = "본관 2층 대강당", nullable = true, maxLength = 500)
+    val location: String?,
     @param:Schema(description = "행사 시작 일시", nullable = true)
     val startAt: LocalDateTime?,
     @param:Schema(description = "행사 종료 일시", nullable = true)
