@@ -10,6 +10,7 @@ import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import team.inreok.getiserver.domain.application.service.JobApplicationExportService
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
@@ -40,6 +41,11 @@ class JobApplicationExportController(
             담긴 FILE 유형 답변의 첨부파일을 모아 `{지원자 이름}_{원본 파일명}` 형태의 항목으로
             ZIP에 담는다. 응답 Content-Type은 application/zip이고 Content-Disposition으로
             내려받을 파일명을 지정한다.
+
+            applicationIds를 지정하면 이 공고 지원자 중 선택된 지원서의 자료만 ZIP에 담는다
+            (Issue #203). 지정하지 않으면 기존과 동일하게 이 공고의 전체 지원자가 대상이다(하위
+            호환). 이 공고에 속하지 않거나 존재하지 않는 지원서 ID는 오류로 처리하지 않고 조용히
+            무시한다.
         """,
     )
     @ApiResponses(
@@ -64,6 +70,13 @@ class JobApplicationExportController(
     fun exportApplications(
         authentication: Authentication,
         @Parameter(description = "대상 공고 ID", example = "1") @PathVariable jobId: Long,
+        @Parameter(
+            description =
+                "다운로드 대상 지원서 ID 목록(선택, 쉼표로 구분: 1,2,3). 지정하지 않으면 이 공고의 " +
+                    "전체 지원자가 대상이다(하위 호환). 이 공고에 속하지 않는 지원서 ID는 조용히 무시된다.",
+        )
+        @RequestParam(required = false)
+        applicationIds: List<Long>?,
         response: HttpServletResponse,
     ) {
         val requesterMemberId = authentication.principal as Long
@@ -71,7 +84,8 @@ class JobApplicationExportController(
 
         // DB 조회(권한 판정 포함)를 먼저 끝내 여기서 예외가 나면 정상적인 JSON 오류 응답으로
         // 나가게 한다 -- 이 시점까지는 response에 아무것도 쓰지 않았다.
-        val entries = jobApplicationExportService.buildExportEntries(jobId, requesterMemberId, isDeveloper)
+        val entries =
+            jobApplicationExportService.buildExportEntries(jobId, requesterMemberId, isDeveloper, applicationIds)
 
         // Content-Type/Content-Disposition을 여기서 미리 정하지 않는다 -- writeZip 내부의
         // 개수·용량 상한 검증(FileArchivePort.writeZip, Storage 접근 전)이나 entries가 비어

@@ -123,7 +123,8 @@ class JobApplicationAdminServiceImplTest {
     // ---------- list ----------
 
     // 기본(무필터) search() 호출을 Stub한다 -- Filter 관련 Test는 각자 필요한 Parameter만 다르게
-    // Stub한다(아래 Filter 절 참고).
+    // Stub한다(아래 Filter 절 참고). 이 목록 조회는 applicationIds Filter를 받지 않으므로(Issue #203
+    // 범위 밖, JobApplicationAdminServiceImpl.list 참고) 항상 hasApplicationIds=false로 호출된다.
     private fun givenDefaultSearch(page: Page<JobApplication>) {
         given(
             jobApplicationRepository.search(
@@ -135,6 +136,8 @@ class JobApplicationAdminServiceImplTest {
                 department = null,
                 hasJobFilter = false,
                 jobIds = emptySet(),
+                hasApplicationIds = false,
+                applicationIds = emptySet(),
                 pageable = PageRequest.of(0, 20),
             ),
         ).willReturn(page)
@@ -255,6 +258,8 @@ class JobApplicationAdminServiceImplTest {
                 department = null,
                 hasJobFilter = false,
                 jobIds = emptySet(),
+                hasApplicationIds = false,
+                applicationIds = emptySet(),
                 pageable = PageRequest.of(0, 20),
             ),
         ).willReturn(page)
@@ -288,6 +293,8 @@ class JobApplicationAdminServiceImplTest {
                 department = "AI",
                 hasJobFilter = false,
                 jobIds = emptySet(),
+                hasApplicationIds = false,
+                applicationIds = emptySet(),
                 pageable = PageRequest.of(0, 20),
             ),
         ).willReturn(page)
@@ -313,6 +320,8 @@ class JobApplicationAdminServiceImplTest {
                 department = null,
                 hasJobFilter = true,
                 jobIds = setOf(10L, 11L),
+                hasApplicationIds = false,
+                applicationIds = emptySet(),
                 pageable = PageRequest.of(0, 20),
             ),
         ).willReturn(page)
@@ -338,6 +347,8 @@ class JobApplicationAdminServiceImplTest {
                 department = null,
                 hasJobFilter = true,
                 jobIds = setOf(1L),
+                hasApplicationIds = false,
+                applicationIds = emptySet(),
                 pageable = PageRequest.of(0, 20),
             ),
         ).willReturn(page)

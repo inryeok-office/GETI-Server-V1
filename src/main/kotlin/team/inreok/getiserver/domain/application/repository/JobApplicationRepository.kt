@@ -72,10 +72,11 @@ interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
     ): List<JobApplication>
 
     // 교사·개발자용 지원서 목록 조회다(Issue #125 요구사항 "모든 교사가 조회 가능", Issue #181로
-    // applicantName/cohort/department/jobIds Filter 확장). :jobId, :status는 null이면 조건을
-    // 적용하지 않는다(FormRepository.search와 동일한 관례). Issue #125는 "제출된 지원서"만
-    // 대상으로 하므로 DRAFT(임시저장 중, 미제출)는 :status로 명시 지정해도 항상 제외한다(PR #130
-    // Review 반영, 담당 공고 아닌 교사에게 학생 임시저장이 노출되는 문제 방지).
+    // applicantName/cohort/department/jobIds Filter 확장, Issue #203으로 applicationIds Filter
+    // 추가). :jobId, :status는 null이면 조건을 적용하지 않는다(FormRepository.search와 동일한
+    // 관례). Issue #125는 "제출된 지원서"만 대상으로 하므로 DRAFT(임시저장 중, 미제출)는 :status로
+    // 명시 지정해도 항상 제외한다(PR #130 Review 반영, 담당 공고 아닌 교사에게 학생 임시저장이
+    // 노출되는 문제 방지).
     //
     // :hasApplicantName이 false면 이 조건은 항상 참으로 취급된다(InquiryRepository.searchForAdmin
     // KDoc의 :hasQuery와 동일한 이유 -- :applicantName을 null로 바인딩하면 LOWER(CONCAT(...))
@@ -92,6 +93,11 @@ interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
     // 집합을 :jobIds로 전달한다(Module 경계 유지, Cross-Module Join 금지). 기존 :jobId(단일)
     // 조건과는 별개로 AND 결합되므로, 두 조건이 서로 다른 공고를 가리키면 결과는 정직하게 빈
     // 목록이 된다(InquiryRepository.searchForAdmin의 assigneeId/mineOnlyMemberId와 동일한 관례).
+    //
+    // :hasApplicationIds가 false면 :applicationIds 조건은 적용하지 않는다(:hasJobFilter/:jobIds와
+    // 동일한 관례 -- 모든 신규 Filter는 In-Memory가 아닌 DB 수준(JPQL)에서 처리한다). :jobId와
+    // AND로 결합되므로, 이 공고에 속하지 않거나 존재하지 않는 id는 결과에서 자연히 빠진다(Issue
+    // #203 정책 확정: 오류로 처리하지 않고 조용히 무시).
     @Query(
         """
         SELECT a FROM JobApplication a
@@ -105,6 +111,7 @@ interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
           AND (:cohort IS NULL OR a.applicantCohort = :cohort)
           AND (:department IS NULL OR a.applicantDepartment = :department)
           AND (:hasJobFilter = FALSE OR a.jobId IN :jobIds)
+          AND (:hasApplicationIds = FALSE OR a.id IN :applicationIds)
         ORDER BY a.id DESC
         """,
     )
@@ -117,6 +124,8 @@ interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
         @Param("department") department: String?,
         @Param("hasJobFilter") hasJobFilter: Boolean,
         @Param("jobIds") jobIds: Collection<Long>,
+        @Param("hasApplicationIds") hasApplicationIds: Boolean,
+        @Param("applicationIds") applicationIds: Collection<Long>,
         pageable: Pageable,
     ): Page<JobApplication>
 

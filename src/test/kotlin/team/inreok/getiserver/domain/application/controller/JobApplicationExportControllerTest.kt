@@ -7,6 +7,7 @@ import org.mockito.ArgumentMatchers.anyBoolean
 import org.mockito.ArgumentMatchers.anyList
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.BDDMockito.given
+import org.mockito.BDDMockito.then
 import org.mockito.BDDMockito.willAnswer
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
@@ -78,6 +79,69 @@ class JobApplicationExportControllerTest
         }
 
         @Test
+        fun `applicationIds Query Parameter를 지정하면 쉼표로 구분된 값이 List로 Binding되어 Service에 전달된다`() {
+            // Issue #203 -- Controller의 Parameter Binding만 검증한다(다른 공고 소속 ID 무시 등
+            // 정책 판단은 Service 책임이라 여기서는 다루지 않는다).
+            val entries = listOf(FileArchiveEntry(1L, "홍길동_resume.pdf"))
+            given(jobApplicationExportService.buildExportEntries(1L, 100L, false, listOf(1L, 2L, 3L)))
+                .willReturn(entries)
+            willAnswer { invocation ->
+                val output = invocation.getArgument<OutputStream>(1)
+                output.write("PK".toByteArray())
+                null
+            }.given(jobApplicationExportService).writeZip(anyList(), anyOutputStream())
+
+            mockMvc
+                .perform(
+                    get("/api/v1/admin/jobs/1/applications/export")
+                        .queryParam("applicationIds", "1,2,3")
+                        .with(authOf(100L, "TEACHER")),
+                ).andExpect(status().isOk)
+
+            then(jobApplicationExportService).should().buildExportEntries(1L, 100L, false, listOf(1L, 2L, 3L))
+        }
+
+        @Test
+        fun `applicationIds Query Parameter를 반복 지정해도 List로 Binding되어 Service에 전달된다`() {
+            // Issue #203 -- "?applicationIds=1&applicationIds=2" 형태도 지원한다(Spring 기본 동작).
+            val entries = listOf(FileArchiveEntry(1L, "홍길동_resume.pdf"))
+            given(jobApplicationExportService.buildExportEntries(1L, 100L, false, listOf(1L, 2L)))
+                .willReturn(entries)
+            willAnswer { invocation ->
+                val output = invocation.getArgument<OutputStream>(1)
+                output.write("PK".toByteArray())
+                null
+            }.given(jobApplicationExportService).writeZip(anyList(), anyOutputStream())
+
+            mockMvc
+                .perform(
+                    get("/api/v1/admin/jobs/1/applications/export")
+                        .queryParam("applicationIds", "1", "2")
+                        .with(authOf(100L, "TEACHER")),
+                ).andExpect(status().isOk)
+
+            then(jobApplicationExportService).should().buildExportEntries(1L, 100L, false, listOf(1L, 2L))
+        }
+
+        @Test
+        fun `applicationIds Query Parameter를 지정하지 않으면 Service에 null이 전달된다(하위 호환)`() {
+            // Issue #203 -- Client DownloadModal이 지원자를 개별 선택하지 않은 기존 호출부와 동일한 경로다.
+            val entries = listOf(FileArchiveEntry(1L, "홍길동_resume.pdf"))
+            given(jobApplicationExportService.buildExportEntries(1L, 100L, false, null)).willReturn(entries)
+            willAnswer { invocation ->
+                val output = invocation.getArgument<OutputStream>(1)
+                output.write("PK".toByteArray())
+                null
+            }.given(jobApplicationExportService).writeZip(anyList(), anyOutputStream())
+
+            mockMvc
+                .perform(get("/api/v1/admin/jobs/1/applications/export").with(authOf(100L, "TEACHER")))
+                .andExpect(status().isOk)
+
+            then(jobApplicationExportService).should().buildExportEntries(1L, 100L, false, null)
+        }
+
+        @Test
         fun `담당자가 아닌 교사는 403이다`() {
             given(jobApplicationExportService.buildExportEntries(1L, 999L, false))
                 .willThrow(ApplicationReviewForbiddenException())
@@ -89,7 +153,9 @@ class JobApplicationExportControllerTest
 
         @Test
         fun `존재하지 않는 공고는 404다`() {
-            given(jobApplicationExportService.buildExportEntries(anyLong(), anyLong(), anyBoolean()))
+            // Issue #203 -- applicationIds(List<Long>?) 추가로 4번째 Parameter도 Matcher가 필요하다.
+            // Nullable Parameter라 any()의 null 반환이 NPE 없이 그대로 허용된다.
+            given(jobApplicationExportService.buildExportEntries(anyLong(), anyLong(), anyBoolean(), any()))
                 .willThrow(JobNotFoundException(999L))
 
             mockMvc

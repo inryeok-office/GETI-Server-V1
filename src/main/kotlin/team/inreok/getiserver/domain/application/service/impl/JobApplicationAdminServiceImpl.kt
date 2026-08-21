@@ -81,6 +81,10 @@ class JobApplicationAdminServiceImpl(
         // hasJobFilter가 true인데 filterJobIds가 비어 있으면 어떤 jobId와도 일치할 수 없어
         // 결과가 항상 빈 목록이다(존재하지 않는 companyId 등). `a.jobId IN ()`으로 DB에 다녀오지
         // 않고 바로 빈 Page로 대응한다(PR #211 코드리뷰 반영).
+        //
+        // 이 목록 조회는 applicationIds Filter를 받지 않는다(Issue #203는 Export 대상 선택에만
+        // 한정된 범위, JobApplicationExportServiceImpl.buildExportEntries KDoc 참고) -- Repository의
+        // hasApplicationIds/applicationIds에는 항상 고정값을 전달한다.
         val page =
             if (hasJobFilter && filterJobIds.isEmpty()) {
                 Page.empty<JobApplication>(pageable)
@@ -94,6 +98,8 @@ class JobApplicationAdminServiceImpl(
                     department = department?.name,
                     hasJobFilter = hasJobFilter,
                     jobIds = filterJobIds,
+                    hasApplicationIds = false,
+                    applicationIds = emptySet(),
                     pageable = pageable,
                 )
             }
