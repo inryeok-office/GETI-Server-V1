@@ -579,6 +579,7 @@ class ProgramServiceImplTest {
             programOf(status = ProgramStatus.PUBLISHED, createdByMemberId = 7L, capacity = 20).apply {
                 id =
                     1L
+                location = "본관 2층 대강당"
             }
         val program2 =
             programOf(status = ProgramStatus.PUBLISHED, createdByMemberId = 7L, capacity = 10).apply {
@@ -617,9 +618,11 @@ class ProgramServiceImplTest {
         // program1: 배치 Count 결과에 있음(5명), 배치 신청 목록에는 없음(applied=false)
         assertThat(summary1.currentApplicants).isEqualTo(5)
         assertThat(summary1.applied).isFalse()
+        assertThat(summary1.location).isEqualTo("본관 2층 대강당")
         // program2: 배치 Count 결과에 없음(0명 취급), 배치 신청 목록에 있음(applied=true)
         assertThat(summary2.currentApplicants).isEqualTo(0)
         assertThat(summary2.applied).isTrue()
+        assertThat(summary2.location).isNull()
     }
 
     // --- 상세 조회 ---
@@ -653,6 +656,29 @@ class ProgramServiceImplTest {
         val response = service.getDetail(1L, requesterMemberId = 99L)
 
         assertThat(response.files).extracting("fileId").containsExactly(5L)
+    }
+
+    @Test
+    fun `상세 조회 응답은 저장된 location을 그대로 반환한다`() {
+        val program =
+            programOf(status = ProgramStatus.PUBLISHED, createdByMemberId = 7L).apply {
+                location = "본관 2층 대강당"
+            }
+        given(programRepository.findById(1L)).willReturn(Optional.of(program))
+
+        val response = service.getDetail(1L, requesterMemberId = 99L)
+
+        assertThat(response.location).isEqualTo("본관 2층 대강당")
+    }
+
+    @Test
+    fun `location이 없는 프로그램 상세 조회는 location이 null이다`() {
+        val program = programOf(status = ProgramStatus.PUBLISHED, createdByMemberId = 7L)
+        given(programRepository.findById(1L)).willReturn(Optional.of(program))
+
+        val response = service.getDetail(1L, requesterMemberId = 99L)
+
+        assertThat(response.location).isNull()
     }
 
     @Test
