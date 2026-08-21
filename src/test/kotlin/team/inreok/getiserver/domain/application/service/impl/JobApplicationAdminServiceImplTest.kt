@@ -113,10 +113,24 @@ class JobApplicationAdminServiceImplTest {
 
     // ---------- list ----------
 
+    // 이 목록 조회는 applicationIds Filter를 받지 않으므로(Issue #203 범위 밖,
+    // JobApplicationAdminServiceImpl.list 참고) 항상 hasApplicationIds=false로 호출된다.
+    private fun givenDefaultSearch(page: PageImpl<JobApplication>) {
+        given(
+            jobApplicationRepository.search(
+                jobId = null,
+                status = null,
+                hasApplicationIds = false,
+                applicationIds = emptyList(),
+                pageable = PageRequest.of(0, 20),
+            ),
+        ).willReturn(page)
+    }
+
     @Test
     fun `목록을 조회하면 항목을 반환한다`() {
         val page = PageImpl(listOf(applicationOf()), PageRequest.of(0, 20), 1)
-        given(jobApplicationRepository.search(null, null, PageRequest.of(0, 20))).willReturn(page)
+        givenDefaultSearch(page)
 
         val result = service.list(null, null, PageRequest.of(0, 20))
 
@@ -134,7 +148,7 @@ class JobApplicationAdminServiceImplTest {
                 applicantDepartment = "SW"
             }
         val page = PageImpl(listOf(application), PageRequest.of(0, 20), 1)
-        given(jobApplicationRepository.search(null, null, PageRequest.of(0, 20))).willReturn(page)
+        givenDefaultSearch(page)
         given(jobApplicationSnapshotQueryPort.findAllByIds(setOf(1L)))
             .willReturn(mapOf(1L to jobOf(createdByMemberId = 100L, managerMemberId = 200L)))
         given(companyQuery.findActiveSummaries(setOf(1L)))
@@ -157,7 +171,7 @@ class JobApplicationAdminServiceImplTest {
     @Test
     fun `공고에 담당 교사가 없으면 담당자 정보는 빈 값이다`() {
         val page = PageImpl(listOf(applicationOf()), PageRequest.of(0, 20), 1)
-        given(jobApplicationRepository.search(null, null, PageRequest.of(0, 20))).willReturn(page)
+        givenDefaultSearch(page)
         given(jobApplicationSnapshotQueryPort.findAllByIds(setOf(1L)))
             .willReturn(mapOf(1L to jobOf(createdByMemberId = 100L, managerMemberId = null)))
         given(companyQuery.findActiveSummaries(setOf(1L))).willReturn(emptyMap())
@@ -174,7 +188,7 @@ class JobApplicationAdminServiceImplTest {
     fun `목록 항목이 여러 건이어도 공고·기업·담당자 배치 조회는 한 번만 호출된다`() {
         val applications = listOf(applicationOf(id = 1L), applicationOf(id = 2L))
         val page = PageImpl(applications, PageRequest.of(0, 20), 2)
-        given(jobApplicationRepository.search(null, null, PageRequest.of(0, 20))).willReturn(page)
+        givenDefaultSearch(page)
         given(jobApplicationSnapshotQueryPort.findAllByIds(setOf(1L)))
             .willReturn(mapOf(1L to jobOf(createdByMemberId = 100L, managerMemberId = 200L)))
         given(companyQuery.findActiveSummaries(setOf(1L))).willReturn(emptyMap())

@@ -47,7 +47,16 @@ class JobApplicationAdminServiceImpl(
         status: JobApplicationStatus?,
         pageable: Pageable,
     ): JobApplicationAdminListResponse {
-        val page = jobApplicationRepository.search(jobId, status, pageable)
+        // 이 목록 조회는 applicationIds Filter를 받지 않는다(Issue #203는 Export 대상 선택에만
+        // 한정된 범위, JobApplicationExportServiceImpl.buildExportEntries KDoc 참고).
+        val page =
+            jobApplicationRepository.search(
+                jobId = jobId,
+                status = status,
+                hasApplicationIds = false,
+                applicationIds = emptyList(),
+                pageable = pageable,
+            )
 
         // 항목마다 공고·기업·담당자를 개별 조회하면 Page 항목 수만큼 Query가 늘어난다(N+1).
         // 이번 Page에 등장하는 공고/기업/담당자 id를 모아 한 번에 배치 조회한다

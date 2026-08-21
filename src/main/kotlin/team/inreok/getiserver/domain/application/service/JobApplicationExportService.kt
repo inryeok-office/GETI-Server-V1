@@ -17,6 +17,9 @@ import java.io.OutputStream
  */
 interface JobApplicationExportService {
     /**
+     * @param applicationIds 지정하면 이 지원서들의 자료만 대상으로 한다(Issue #203). `null`이면
+     *   기존과 동일하게 이 공고의 전체 지원자가 대상이다(하위 호환). 이 공고에 속하지 않거나
+     *   존재하지 않는 `applicationId`는 오류로 처리하지 않고 조용히 무시한다.
      * @throws team.inreok.getiserver.domain.application.exception.JobNotFoundException 공고가 없음
      * @throws team.inreok.getiserver.domain.application.exception.ApplicationReviewForbiddenException
      *   요청자가 이 공고의 등록자·담당 교사·개발자가 아님
@@ -25,6 +28,7 @@ interface JobApplicationExportService {
         jobId: Long,
         requesterMemberId: Long,
         isDeveloper: Boolean,
+        applicationIds: List<Long>? = null,
     ): List<FileArchiveEntry>
 
     /** `FileArchivePort.writeZip`의 얇은 위임이다 -- Controller가 File Port를 직접 참조하지 않게 한다. */
