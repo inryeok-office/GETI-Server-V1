@@ -23,7 +23,11 @@ import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.job.repository.JobRepository
+import team.inreok.getiserver.domain.member.entity.Member
 import team.inreok.getiserver.domain.member.entity.type.DepartmentType
+import team.inreok.getiserver.domain.member.entity.type.MemberStatus
+import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
+import team.inreok.getiserver.domain.member.repository.MemberRepository
 import java.util.UUID
 
 /**
@@ -59,6 +63,9 @@ class JobApplicationAdminListFilterIntegrationTest {
     @Autowired
     private lateinit var companyRepository: CompanyRepository
 
+    @Autowired
+    private lateinit var memberRepository: MemberRepository
+
     @Test
     fun `applicantName은 대소문자 구분 없이 부분 검색된다`() {
         val jobId = createJob()
@@ -75,7 +82,7 @@ class JobApplicationAdminListFilterIntegrationTest {
                 companyId = null,
                 managerMemberId = null,
                 mineOnly = false,
-                requesterMemberId = 1L,
+                requesterMemberId = createMember("requester"),
                 pageable = PageRequest.of(0, 20),
             )
 
@@ -99,7 +106,7 @@ class JobApplicationAdminListFilterIntegrationTest {
                 companyId = null,
                 managerMemberId = null,
                 mineOnly = false,
-                requesterMemberId = 1L,
+                requesterMemberId = createMember("requester"),
                 pageable = PageRequest.of(0, 20),
             )
 
@@ -126,7 +133,7 @@ class JobApplicationAdminListFilterIntegrationTest {
                 companyId = companyAId,
                 managerMemberId = null,
                 mineOnly = false,
-                requesterMemberId = 1L,
+                requesterMemberId = createMember("requester"),
                 pageable = PageRequest.of(0, 20),
             )
 
@@ -136,8 +143,8 @@ class JobApplicationAdminListFilterIntegrationTest {
 
     @Test
     fun `managerMemberId Filter는 해당 교사가 담당하는 공고의 지원서만 반환한다`() {
-        val managerId = 100L
-        val otherTeacherId = 200L
+        val managerId = createMember("manager")
+        val otherTeacherId = createMember("other-teacher")
         val managedJob = createJob(managerMemberId = managerId)
         val otherJob = createJob(managerMemberId = otherTeacherId)
         createApplication(managedJob)
@@ -153,7 +160,7 @@ class JobApplicationAdminListFilterIntegrationTest {
                 companyId = null,
                 managerMemberId = managerId,
                 mineOnly = false,
-                requesterMemberId = 1L,
+                requesterMemberId = createMember("requester"),
                 pageable = PageRequest.of(0, 20),
             )
 
@@ -166,10 +173,15 @@ class JobApplicationAdminListFilterIntegrationTest {
     // API가 아직 없어 등록자 기준도 포함해야 "담당 공고" 필터가 항상 빈 목록이 되지 않는다).
     @Test
     fun `mineOnly는 담당(managerMemberId) 또는 등록(createdByMemberId) 공고를 모두 포함한다`() {
-        val requesterId = 300L
-        val managedJob = createJob(managerMemberId = requesterId, createdByMemberId = 999L)
+        val requesterId = createMember("requester")
+        val otherId = createMember("other")
+        val managedJob = createJob(managerMemberId = requesterId, createdByMemberId = otherId)
         val createdJob = createJob(managerMemberId = null, createdByMemberId = requesterId)
-        val unrelatedJob = createJob(managerMemberId = 111L, createdByMemberId = 222L)
+        val unrelatedJob =
+            createJob(
+                managerMemberId = createMember("unrelated-manager"),
+                createdByMemberId = createMember("unrelated-creator"),
+            )
         createApplication(managedJob)
         createApplication(createdJob)
         createApplication(unrelatedJob)
@@ -189,6 +201,19 @@ class JobApplicationAdminListFilterIntegrationTest {
             )
 
         assertThat(result.content.map { it.jobId }).containsExactlyInAnyOrder(managedJob, createdJob)
+    }
+
+    private fun createMember(subject: String): Long {
+        val member =
+            memberRepository.saveAndFlush(
+                Member(
+                    oauthProvider = OAuthProvider.DG,
+                    oauthSubject = "filter-it-$subject-${UUID.randomUUID()}",
+                    email = "filter-it-$subject-${UUID.randomUUID()}@example.com",
+                    status = MemberStatus.ACTIVE,
+                ),
+            )
+        return requireNotNull(member.id)
     }
 
     private fun createCompany(): Long {
@@ -229,7 +254,7 @@ class JobApplicationAdminListFilterIntegrationTest {
         jobApplicationRepository.saveAndFlush(
             JobApplication(
                 jobId = jobId,
-                applicantMemberId = 1L,
+                applicantMemberId = createMember("applicant"),
                 attemptNumber = 1,
                 contactEmail = "applicant-${UUID.randomUUID()}@example.com",
                 answers = "[]",
