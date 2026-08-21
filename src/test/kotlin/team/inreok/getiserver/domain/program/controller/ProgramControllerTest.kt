@@ -2,13 +2,16 @@ package team.inreok.getiserver.domain.program.controller
 
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.anyBoolean
 import org.mockito.ArgumentMatchers.anyLong
+import org.mockito.ArgumentMatchers.isNull
 import org.mockito.BDDMockito.given
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
 import org.springframework.context.annotation.Import
+import org.springframework.data.domain.Pageable
 import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
@@ -24,6 +27,8 @@ import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionRequest
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionResponse
 import team.inreok.getiserver.domain.program.dto.ProgramDetailResponse
 import team.inreok.getiserver.domain.program.dto.ProgramFileResponse
+import team.inreok.getiserver.domain.program.dto.ProgramListResponse
+import team.inreok.getiserver.domain.program.dto.ProgramSummaryResponse
 import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationAction
 import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationEligibilityReason
 import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationStatus
@@ -132,11 +137,14 @@ class ProgramControllerTest
                 .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"))
         }
 
+        private fun anyPageable(): Pageable = any(Pageable::class.java) ?: Pageable.unpaged()
+
         private fun detailResponseWithFiles() =
             ProgramDetailResponse(
                 programId = 1L,
                 title = "특강",
                 content = "본문",
+                location = "장소",
                 programType = ProgramType.SPECIAL_LECTURE,
                 targetGrades = listOf(2, 3),
                 startAt = null,
@@ -191,5 +199,55 @@ class ProgramControllerTest
                 .andExpect(status().isOk)
 
             verify(programService).getDetail(1L, 1L)
+        }
+
+        @Test
+        fun `상세 조회 응답은 location을 포함한다`() {
+            given(programService.getDetail(anyLong(), anyLong())).willReturn(detailResponseWithFiles())
+
+            mockMvc
+                .perform(get("/api/v1/programs/1").with(authOf(2L, "DEVELOPER")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.location").value("장소"))
+        }
+
+        private fun summaryResponseWithLocation() =
+            ProgramSummaryResponse(
+                programId = 1L,
+                title = "특강",
+                programType = ProgramType.SPECIAL_LECTURE,
+                status = ProgramStatus.PUBLISHED,
+                location = "본관 2층 대강당",
+                startAt = null,
+                endAt = null,
+                applicationStartAt = null,
+                applicationEndAt = null,
+                capacity = null,
+                currentApplicants = 0,
+                remainingCapacity = null,
+                firstComeServed = true,
+                applied = false,
+            )
+
+        private fun listResponseWithLocation() =
+            ProgramListResponse(
+                content = listOf(summaryResponseWithLocation()),
+                page = 0,
+                size = 20,
+                totalElements = 1,
+                totalPages = 1,
+                first = true,
+                last = true,
+            )
+
+        @Test
+        fun `목록 조회 응답은 location을 포함한다`() {
+            given(programService.list(isNull(), isNull(), anyBoolean(), anyLong(), anyPageable()))
+                .willReturn(listResponseWithLocation())
+
+            mockMvc
+                .perform(get("/api/v1/programs").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.content[0].location").value("본관 2층 대강당"))
         }
     }
