@@ -20,10 +20,12 @@ import team.inreok.getiserver.domain.auth.dto.AuthorizeResponse
 import team.inreok.getiserver.domain.auth.dto.OAuthLoginResponse
 import team.inreok.getiserver.domain.auth.service.AuthLoginService
 import team.inreok.getiserver.domain.auth.service.OAuthClientType
+import team.inreok.getiserver.domain.auth.service.OAuthLoginIntent
 import team.inreok.getiserver.domain.auth.service.OAuthLoginService
 import team.inreok.getiserver.domain.auth.service.OAuthWebRedirectUriResolver
 import team.inreok.getiserver.domain.auth.service.RefreshTokenCookieFactory
 import team.inreok.getiserver.domain.auth.service.impl.OAuthClientTypeStore
+import team.inreok.getiserver.domain.auth.service.impl.OAuthLoginIntentStore
 import team.inreok.getiserver.global.error.BusinessException
 import team.inreok.getiserver.global.web.ApiResponse
 import java.net.URI
@@ -37,6 +39,7 @@ class OAuthController(
     private val authLoginService: AuthLoginService,
     private val refreshTokenCookieFactory: RefreshTokenCookieFactory,
     private val oAuthClientTypeStore: OAuthClientTypeStore,
+    private val oAuthLoginIntentStore: OAuthLoginIntentStore,
     private val oAuthWebRedirectUriResolver: OAuthWebRedirectUriResolver,
 ) {
     private val log = LoggerFactory.getLogger(OAuthController::class.java)
@@ -77,12 +80,20 @@ class OAuthController(
         )
         @RequestParam(required = false)
         clientType: OAuthClientType?,
+        @Parameter(
+            description =
+                "REAPPLY이면 거절된(REJECTED) 교직원의 재신청으로 처리한다 -- /callback이 회원을 승인 대기" +
+                    "(PENDING)로 되돌린다. 지정하지 않으면 일반 로그인이다(Issue #229).",
+        )
+        @RequestParam(required = false)
+        intent: OAuthLoginIntent?,
     ): ApiResponse<AuthorizeResponse> {
         // Provider 로그인 왕복을 시작하기 전에 Web Redirect 설정 누락을 미리 걸러낸다(Fail-Fast) --
         // 사용자가 로그인을 끝까지 완료한 뒤에야 Redirect가 깨진 것을 알게 되는 상황을 막는다.
         if (clientType == OAuthClientType.WEB) oAuthWebRedirectUriResolver.requireConfigured()
         val authorization = oAuthLoginService.getAuthorizationUrl(provider)
         if (clientType != null) oAuthClientTypeStore.save(authorization.state, clientType)
+        if (intent != null) oAuthLoginIntentStore.save(authorization.state, intent)
         return ApiResponse.of(AuthorizeResponse(authorization.authorizationUrl, authorization.state))
     }
 
@@ -108,6 +119,11 @@ class OAuthController(
 
             clientType을 지정하지 않은 요청(App 등)은 기존과 동일하게 200과 함께 Token·회원 정보를
             그대로 반환한다(Breaking Change 없음). 인증 없이 접근 가능하다.
+
+            거절된(REJECTED) 교직원이 재신청 없이 로그인하면 403(MEMBER_SIGNUP_REJECTED)으로 막고
+            응답 message에 거절 사유를 담아 `/staff/signup`이 표시할 수 있게 한다. authorize에서
+            intent=REAPPLY로 시작한 재신청이면 회원을 승인 대기(PENDING)로 되돌리고 정상 로그인시킨다
+            (Issue #229).
         """,
     )
     @ApiResponses(
@@ -129,7 +145,10 @@ class OAuthController(
         ),
         SwaggerApiResponse(
             responseCode = "403",
-            description = "로그인이 허용되지 않는 회원 상태(정지/탈퇴/거절 등)(MEMBER_LOGIN_NOT_ALLOWED, clientType 미지정 시에만 이 Status로 응답)",
+            description =
+                "가입이 거절된 교직원이 재신청 없이 로그인함 -- 응답 message에 거절 사유 포함" +
+                    "(MEMBER_SIGNUP_REJECTED), 또는 정지/탈퇴 등 로그인 불가 상태" +
+                    "(MEMBER_LOGIN_NOT_ALLOWED). clientType 미지정 시에만 이 Status로 응답한다.",
         ),
         SwaggerApiResponse(
             responseCode = "409",
@@ -161,8 +180,9 @@ class OAuthController(
         // state 하나당 1회만 소비한다(OAuthClientTypeStore.consume 참고). authorize에서
         // clientType을 저장하지 않았으면(App 등) 항상 null이라 기존 JSON 경로로 그대로 떨어진다.
         val clientType = oAuthClientTypeStore.consume(state)
+        val reapply = oAuthLoginIntentStore.consume(state) == OAuthLoginIntent.REAPPLY
         return try {
-            val login = authLoginService.loginWithOAuth(provider, code, state)
+            val login = authLoginService.loginWithOAuth(provider, code, state, reapply)
             // Web Client용 HttpOnly Cookie로도 Refresh Token을 내려준다(Body에도 함께 담김, Issue
             // #105). clientType=WEB이어도 이후 Frontend가 Cookie 기반 Refresh로 Access Token을
             // 얻어야 하므로 Cookie 자체는 항상 설정한다.
