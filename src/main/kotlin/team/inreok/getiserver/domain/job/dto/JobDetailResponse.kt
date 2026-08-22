@@ -70,6 +70,12 @@ data class JobDetailResponse(
         nullable = true,
     )
     val employmentType: String?,
+    @param:Schema(
+        description = "공고 출처의 안정 식별자. 수집 공고는 JobSource sourceCode와 같고 직접 등록 공고는 null일 수 있다.",
+        example = "SARAMIN",
+        nullable = true,
+    )
+    val sourceName: String? = null,
     @param:Schema(description = "선착순 모집 여부", example = "false")
     val firstComeServed: Boolean,
     @param:Schema(description = "조회수. 공개 상세 조회 응답에는 이번 조회분이 반영된 값이 담긴다.", example = "129")
@@ -120,6 +126,7 @@ data class JobDetailResponse(
                 capacity = job.capacity,
                 location = job.location,
                 employmentType = job.employmentType,
+                sourceName = job.sourceName,
                 firstComeServed = job.firstComeServed,
                 viewCount = viewCount,
                 publishedAt = job.publishedAt,

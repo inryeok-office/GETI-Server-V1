@@ -428,13 +428,14 @@ class JobServiceTest {
 
     @Test
     fun `공개 상세를 조회하면 조회수를 원자적으로 증가시키고 증가된 값을 응답한다`() {
-        val job = jobOf(status = JobStatus.PUBLISHED, viewCount = 10)
+        val job = jobOf(status = JobStatus.PUBLISHED, viewCount = 10).apply { sourceName = "MMA" }
         givenFoundNotDeleted(job)
         givenActiveCompany()
 
         val response = service.getPublicDetail(1L, REQUESTER_ID)
 
         assertThat(response.viewCount).isEqualTo(11)
+        assertThat(response.sourceName).isEqualTo("MMA")
         verify(jobRepository).incrementViewCount(1L)
     }
 
