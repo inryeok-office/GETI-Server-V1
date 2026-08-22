@@ -168,6 +168,7 @@ class JobSearchServiceImplTest {
 
         assertThat(response.content[0].location).isEqualTo("서울특별시 중구")
         assertThat(response.content[0].employmentType).isEqualTo("인턴")
+        assertThat(response.content[0].sourceName).isEqualTo("MMA")
     }
 
     @Test
@@ -238,6 +239,7 @@ class JobSearchServiceImplTest {
         jobId: Long,
         companyName: String? = "인력개발원",
         companyLogoFileId: Long?,
+        sourceName: String? = "MMA",
     ) = JobSearchDocument(
         id = jobId.toString(),
         jobId = jobId,
@@ -250,7 +252,7 @@ class JobSearchServiceImplTest {
         companyName = companyName,
         companyType = "GENERAL",
         companyLogoFileId = companyLogoFileId,
-        sourceName = null,
+        sourceName = sourceName,
         targetGrade = null,
         capacity = null,
         firstComeServed = false,

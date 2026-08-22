@@ -69,6 +69,7 @@ class JobControllerTest
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.jobId").value(1))
                 .andExpect(jsonPath("$.data.viewCount").value(11))
+                .andExpect(jsonPath("$.data.sourceName").value("MMA"))
                 .andExpect(jsonPath("$.data.company.companyId").value(1))
                 .andExpect(
                     jsonPath("$.data.company.logoUrl").value("https://storage.example/company-logo?signature=test"),
@@ -169,6 +170,7 @@ class JobControllerTest
             capacity = 2,
             location = location,
             employmentType = employmentType,
+            sourceName = "MMA",
             firstComeServed = false,
             viewCount = viewCount,
             publishedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
