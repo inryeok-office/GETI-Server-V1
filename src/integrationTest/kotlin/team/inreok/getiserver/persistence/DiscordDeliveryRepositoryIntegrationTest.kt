@@ -253,6 +253,90 @@ class DiscordDeliveryRepositoryIntegrationTest
                 now = now,
             )
 
+        // --- 관리자 횡단 목록 조회 (Issue #206) ---------------------------------
+
+        @Test
+        fun `횡단 목록은 대상 종류를 가리지 않고 최신순으로 조회한다`() {
+            val first =
+                deliveryRepository.saveAndFlush(
+                    delivery(key = "JOB:1:CREATE", template = DiscordMessageTemplate.JOB_PUBLISHED),
+                )
+            val second = deliveryRepository.saveAndFlush(delivery(key = "PROGRAM:2:CREATE"))
+            val third =
+                deliveryRepository.saveAndFlush(
+                    delivery(key = "INQUIRY:3:CREATE", template = DiscordMessageTemplate.INQUIRY_CREATED),
+                )
+
+            val page = deliveryRepository.findRecent(status = null, pageable = PageRequest.of(0, 20))
+
+            assertThat(page.content.map { it.id }).containsExactly(third.id, second.id, first.id)
+            assertThat(page.totalElements).isEqualTo(3)
+        }
+
+        @Test
+        fun `횡단 목록은 status로 걸러낸다`() {
+            deliveryRepository.saveAndFlush(
+                delivery(key = "JOB:1:CREATE", template = DiscordMessageTemplate.JOB_PUBLISHED),
+            )
+            val failed =
+                deliveryRepository.saveAndFlush(
+                    delivery(key = "JOB:2:CREATE", template = DiscordMessageTemplate.JOB_PUBLISHED).apply {
+                        markFailed(errorCode = "RATE_LIMITED", errorMessage = "제한됨", now = now)
+                    },
+                )
+
+            val page =
+                deliveryRepository.findRecent(
+                    status = DiscordDeliveryStatus.FAILED,
+                    pageable = PageRequest.of(0, 20),
+                )
+
+            assertThat(page.content.map { it.id }).containsExactly(failed.id)
+            assertThat(page.totalElements).isEqualTo(1)
+        }
+
+        @Test
+        fun `횡단 목록의 Pagination은 전체 건수를 기준으로 계산한다`() {
+            repeat(3) { index ->
+                deliveryRepository.saveAndFlush(
+                    delivery(key = "JOB:${index + 1}:CREATE", template = DiscordMessageTemplate.JOB_PUBLISHED),
+                )
+            }
+
+            val page = deliveryRepository.findRecent(status = null, pageable = PageRequest.of(1, 2))
+
+            assertThat(page.content).hasSize(1)
+            assertThat(page.totalElements).isEqualTo(3)
+            assertThat(page.totalPages).isEqualTo(2)
+            assertThat(page.isLast).isTrue()
+        }
+
+        @Test
+        fun `대상별 최신 Delivery id만 반환한다`() {
+            // 공고 1번은 게시 후 수정돼 Row가 둘이다. 재시도 가능한 것은 그중 최신 Row뿐이다.
+            deliveryRepository.saveAndFlush(
+                delivery(key = "JOB:1:CREATE", template = DiscordMessageTemplate.JOB_PUBLISHED),
+            )
+            val latestOfJob =
+                deliveryRepository.saveAndFlush(
+                    delivery(key = "JOB:1:UPDATE", template = DiscordMessageTemplate.JOB_UPDATED, targetId = 1L),
+                )
+            val program = deliveryRepository.saveAndFlush(delivery(key = "PROGRAM:1:CREATE"))
+
+            val latestIds =
+                deliveryRepository.findLatestDeliveryIds(
+                    targetTypes =
+                        setOf(
+                            DiscordMessageTemplate.JOB_PUBLISHED.targetType,
+                            DiscordMessageTemplate.PROGRAM_PUBLISHED.targetType,
+                        ),
+                    targetIds = setOf(1L),
+                )
+
+            // 공고 1번과 프로그램 1번은 targetId가 같아도 서로 다른 대상으로 취급된다.
+            assertThat(latestIds).containsExactlyInAnyOrder(latestOfJob.id, program.id)
+        }
+
         private fun reload(delivery: DiscordDelivery) =
             requireNotNull(deliveryRepository.findById(requireNotNull(delivery.id)).orElse(null))
 

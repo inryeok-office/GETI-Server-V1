@@ -21,6 +21,15 @@ interface ProgramDiscordPayloadQueryPort {
      * 삭제된 프로그램의 제목으로 기존 메시지를 수정해야 하기 때문이다.
      */
     fun findById(programId: Long): ProgramDiscordPayloadSnapshot?
+
+    /**
+     * 관리자 Discord 전달 목록에 표시할 프로그램 제목을 배치로 읽는다(Issue #206). 존재하지 않는
+     * id는 결과 Map에서 빠지고, 삭제된 프로그램도 포함한다. 목적과 근거는
+     * [team.inreok.getiserver.domain.job.query.JobDiscordPayloadQueryPort.findDisplayNamesByIds]와
+     * 같다 -- 특히 [ProgramDiscordPayloadSnapshot.bodyMarkdown]은 본문 전체라, 제목만 필요한
+     * 목록에서 Snapshot을 그대로 100건 실어 오지 않으려고 String만 돌려준다.
+     */
+    fun findDisplayNamesByIds(programIds: Set<Long>): Map<Long, String>
 }
 
 /**

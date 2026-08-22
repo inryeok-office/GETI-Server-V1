@@ -289,6 +289,13 @@ private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     authorize(HttpMethod.PATCH, "/api/v1/admin/inquiries/*/assignee", hasRole("DEVELOPER"))
     authorize(HttpMethod.GET, "/api/v1/admin/inquiries", hasRole("DEVELOPER"))
     authorize("/api/v1/admin/inquiries/**", hasRole("DEVELOPER"))
+    // Discord 전달 내역 횡단 목록(Issue #206)은 개발자만 접근한다. 대상별 개별 조회는 각
+    // 도메인의 admin 경로 규칙(/api/v1/admin/jobs = TEACHER/DEVELOPER 등)을 그대로 따르지만,
+    // 이 목록은 공고·프로그램·문의를 한 Table에 섞어 보여주므로 그중 가장 엄격한 문의 규칙
+    // (DEVELOPER)에 맞춘다 -- 그렇지 않으면 교사가 이 목록을 통해 문의 Discord 전달의 존재를
+    // 알게 되어 바로 위 DEVELOPER 전용 규칙을 우회하는 셈이 된다. 하위 경로가 없는 단일
+    // Endpoint라 "/**" 형태는 추가하지 않는다.
+    authorize("/api/v1/admin/discord-deliveries", hasRole("DEVELOPER"))
     // 문의 등록·상세 조회는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
     // 상세 조회의 본인 소유권 검증(다른 사용자 문의 차단, 개발자는 예외)은 Role로 알
     // 수 없어 InquiryService가 별도로 수행한다. "/api/v1/admin/inquiries"는 이 Prefix와
