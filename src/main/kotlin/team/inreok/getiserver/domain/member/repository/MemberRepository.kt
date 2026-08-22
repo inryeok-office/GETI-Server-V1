@@ -140,4 +140,34 @@ interface MemberRepository : JpaRepository<Member, Long> {
         @Param("status") status: MemberStatus,
         @Param("role") role: RoleType,
     ): List<Member>
+
+    // 관리자용 회원 목록 조회(Issue #183)다. `search`(학생 이름 검색 전용, status/role을 Service가
+    // 항상 ACTIVE/STUDENT로 고정)와 달리 이 Query는 Role/Status를 가리지 않고, 모든 Filter가
+    // Nullable이며 지정하지 않으면 적용하지 않는다(FormRepository.search와 동일한 관례). :hasName이
+    // false면 이름 조건은 항상 참으로 취급한다(MemberRepository.search의 :hasApplicantName과 동일한
+    // 이유 -- :name을 null로 바인딩하면 LOWER(CONCAT(...)) Type 추론 문제가 난다). :name은 Service
+    // 계층에서 LIKE Wildcard를 미리 이스케이프해 전달한다.
+    @Query(
+        """
+        SELECT m FROM Member m
+        WHERE (
+          :hasName = FALSE
+          OR LOWER(m.name) LIKE LOWER(CONCAT('%', :name, '%')) ESCAPE '\'
+        )
+          AND (:status IS NULL OR m.status = :status)
+          AND (:role IS NULL OR EXISTS (SELECT 1 FROM MemberRole mr WHERE mr.id.memberId = m.id AND mr.id.role = :role))
+          AND (:cohort IS NULL OR m.cohort = :cohort)
+          AND (:department IS NULL OR m.department = :department)
+        ORDER BY m.id DESC
+        """,
+    )
+    fun searchForAdmin(
+        @Param("hasName") hasName: Boolean,
+        @Param("name") name: String,
+        @Param("status") status: MemberStatus?,
+        @Param("role") role: RoleType?,
+        @Param("cohort") cohort: Int?,
+        @Param("department") department: DepartmentType?,
+        pageable: Pageable,
+    ): Page<Member>
 }
