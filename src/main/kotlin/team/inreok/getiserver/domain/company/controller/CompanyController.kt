@@ -80,8 +80,8 @@ class CompanyController(
         description = """
             companyId로 지정한 기업의 상세 정보를 조회한다. 삭제된 기업은 404로 처리한다.
             `logoUrl`은 로고가 등록되어 있으면 브라우저가 바로 표시할 수 있는 짧은 유효기간의
-            서명된 URL이고, 없으면 null이다. 연결된 공개 공고 목록은 Job 도메인 구현 후 별도
-            작업에서 추가된다.
+            서명된 URL이고, 없으면 null이다. `openJobs`에는 PUBLISHED이면서 마감 시각이 지나지
+            않은 공고만 포함되며 관리자 전용 기업 정보나 비공개 공고는 포함되지 않는다.
         """,
     )
     @ApiResponses(
