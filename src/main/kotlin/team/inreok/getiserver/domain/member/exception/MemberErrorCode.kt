@@ -24,6 +24,13 @@ enum class MemberErrorCode(
     PROFILE_VIEW_FORBIDDEN(HttpStatus.FORBIDDEN, "학생 프로필을 조회할 권한이 없습니다."),
     OAUTH_EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 다른 방식으로 가입된 이메일입니다."),
     MEMBER_LOGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "로그인이 허용되지 않는 회원 상태입니다."),
+
+    /**
+     * 가입이 거절된(REJECTED) 교직원이 재신청 없이 OAuth 로그인을 시도한 경우다(Issue #229). 로그인은
+     * 막되 `/staff/signup`이 사유를 표시할 수 있도록 관리자가 작성한 거절 사유를 응답 Message로 전달한다.
+     * 정지/탈퇴(SUSPENDED/WITHDRAWN)는 사유를 노출하지 않고 [MEMBER_LOGIN_NOT_ALLOWED]로 다룬다.
+     */
+    MEMBER_SIGNUP_REJECTED(HttpStatus.FORBIDDEN, "가입이 거절되었습니다."),
     MEMBER_NOT_PENDING(HttpStatus.CONFLICT, "승인 대기 상태의 회원만 처리할 수 있습니다."),
     MEMBER_NOT_APPROVAL_TARGET(HttpStatus.BAD_REQUEST, "교직원 승인 대상 회원이 아닙니다."),
     MEMBER_REJECTION_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "거절 사유를 입력해야 합니다."),

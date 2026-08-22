@@ -9,9 +9,15 @@ import team.inreok.getiserver.domain.auth.dto.OAuthLoginResponse
  * [TokenService]가 담당하고, 이 Service는 그 조합만 책임진다.
  */
 interface AuthLoginService {
+    /**
+     * @param reapply 거절된 교직원의 재신청(intent=REAPPLY) 요청이면 true다(Issue #229). true이고
+     *   기존 회원이 REJECTED면 승인 대기(PENDING)로 되돌린 뒤 로그인을 완료하고, false이고 REJECTED면
+     *   거절 사유를 담아 거부한다.
+     */
     fun loginWithOAuth(
         provider: String,
         code: String,
         state: String,
+        reapply: Boolean = false,
     ): OAuthLoginResponse
 }

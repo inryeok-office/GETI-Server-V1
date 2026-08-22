@@ -83,4 +83,21 @@ class AuthLoginServiceImplTest {
         assertThat(response.roles).containsExactly("DEVELOPER")
         assertThat(response.isNewMember).isFalse()
     }
+
+    @Test
+    fun `재신청(reapply=true)이면 회원 처리에 그대로 전달하고 되돌아온 상태로 Token을 발급한다`() {
+        given(oAuthLoginService.exchangeCode("google", "auth-code", "state-value"))
+            .willReturn(OAuthUserInfo(subject = "rejected-subject", email = "teacher@example.com"))
+        // 재신청으로 REJECTED가 PENDING(무권한)으로 되돌아온 결과를 그대로 Token 발급에 넘긴다.
+        given(oAuthMemberPort.findOrCreateByOAuth("google", "rejected-subject", "teacher@example.com", true))
+            .willReturn(
+                OAuthMemberIdentity(memberId = 12L, status = "PENDING", roles = emptyList(), isNewMember = false),
+            )
+        given(tokenService.issueFor(12L, emptyList(), null)).willReturn(IssuedTokens("a", "r", 1800))
+
+        val response = service.loginWithOAuth("google", "auth-code", "state-value", reapply = true)
+
+        assertThat(response.status).isEqualTo("PENDING")
+        assertThat(response.accessToken).isEqualTo("a")
+    }
 }
