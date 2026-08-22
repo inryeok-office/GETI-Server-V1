@@ -12,6 +12,7 @@ import team.inreok.getiserver.domain.company.dto.AdminCompanyConnectedJobRespons
 import team.inreok.getiserver.domain.company.dto.AdminCompanyDetailResponse
 import team.inreok.getiserver.domain.company.dto.AdminCompanyStatsResponse
 import team.inreok.getiserver.domain.company.dto.CompanyCreateRequest
+import team.inreok.getiserver.domain.company.dto.CompanyOpenJobResponse
 import team.inreok.getiserver.domain.company.dto.CompanyResponse
 import team.inreok.getiserver.domain.company.dto.CompanySearchResponse
 import team.inreok.getiserver.domain.company.dto.CompanySummaryResponse
@@ -19,6 +20,7 @@ import team.inreok.getiserver.domain.company.dto.CompanyUpdateRequest
 import team.inreok.getiserver.domain.company.entity.Company
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.company.entity.type.MouStatus
+import team.inreok.getiserver.domain.company.exception.CompanyHasActiveJobsException
 import team.inreok.getiserver.domain.company.exception.CompanyNameRequiredException
 import team.inreok.getiserver.domain.company.exception.CompanyNotFoundException
 import team.inreok.getiserver.domain.company.exception.DuplicateCompanyException
@@ -100,7 +102,11 @@ class CompanyServiceImpl(
         requesterId: Long,
     ): CompanyResponse {
         val company = findActive(companyId)
-        return CompanyResponse.from(company, logoUrl(company, requesterId))
+        return CompanyResponse.from(
+            company,
+            logoUrl(company, requesterId),
+            openJobs = openJobs(companyAdminJobQueryPort.findByCompanyId(companyId), LocalDateTime.now()),
+        )
     }
 
     @Transactional(readOnly = true)
@@ -185,10 +191,25 @@ class CompanyServiceImpl(
             )
         // 목록의 로고를 한 번에 URL로 바꾼다. 항목마다 단건 발급하면 기업 수만큼 반복된다(N+1).
         val logoUrls = fileUrlPort.presignedImageUrls(requesterId, page.content.mapNotNull { it.logoFileId })
+        val companyIds = page.content.mapTo(mutableSetOf()) { requireNotNull(it.id) }
+        val jobs = companyAdminJobQueryPort.findByCompanyIds(companyIds)
+        val jobsByCompanyId = jobs.groupBy { it.companyId }
+        val jobIds = jobs.mapTo(mutableSetOf()) { it.jobId }
+        val applicationCounts =
+            if (jobIds.isEmpty()) emptyMap() else companyApplicationCountQueryPort.countByJobIds(jobIds)
+        val now = LocalDateTime.now()
         return CompanySearchResponse(
             content =
                 page.content.map { company ->
-                    CompanySummaryResponse.from(company, company.logoFileId?.let { logoUrls[it] })
+                    val companyJobs = jobsByCompanyId[requireNotNull(company.id)].orEmpty()
+                    val activeJobs = companyJobs.filter { it.isActiveAt(now) }
+                    CompanySummaryResponse.from(
+                        company = company,
+                        logoUrl = company.logoFileId?.let { logoUrls[it] },
+                        openJobCount = activeJobs.size.toLong(),
+                        activeMouJobCount = activeJobs.count { it.postingType == MOU_POSTING_TYPE }.toLong(),
+                        applicationCount = companyJobs.sumOf { applicationCounts[it.jobId] ?: 0L },
+                    )
                 },
             page = page.number,
             size = page.size,
@@ -233,7 +254,11 @@ class CompanyServiceImpl(
             throwDuplicateOrRethrow(ex)
         }
         auditLogWriter.record("COMPANY_UPDATED", COMPANY_TARGET_TYPE, companyId, requesterId)
-        return CompanyResponse.from(company, logoUrl(company, requesterId))
+        return CompanyResponse.from(
+            company,
+            logoUrl(company, requesterId),
+            openJobs = openJobs(companyAdminJobQueryPort.findByCompanyId(companyId), LocalDateTime.now()),
+        )
     }
 
     @Transactional
@@ -253,9 +278,10 @@ class CompanyServiceImpl(
         companyId: Long,
         requesterId: Long?,
     ) {
-        // 연결된 공개 공고가 있을 때의 차단(COMPANY_HAS_ACTIVE_JOBS)은 domain.job 조회가 필요해
-        // 이번 범위에서 제외했다(Issue #56, Modulith Module 경계). Job 도메인 연동 후 추가한다.
-        findActive(companyId).deletedAt = LocalDateTime.now()
+        val company = findActive(companyId)
+        val now = LocalDateTime.now()
+        if (companyAdminJobQueryPort.hasActiveJob(companyId, now)) throw CompanyHasActiveJobsException()
+        company.deletedAt = now
         auditLogWriter.record("COMPANY_DELETED", COMPANY_TARGET_TYPE, companyId, requesterId)
     }
 
@@ -342,6 +368,25 @@ class CompanyServiceImpl(
     private fun CompanyAdminJobSnapshot.isActiveAt(now: LocalDateTime): Boolean =
         status == "PUBLISHED" && (recruitmentEndedAt == null || !recruitmentEndedAt.isBefore(now))
 
+    private fun openJobs(
+        jobs: List<CompanyAdminJobSnapshot>,
+        now: LocalDateTime,
+    ): List<CompanyOpenJobResponse> =
+        jobs.filter { it.isActiveAt(now) }.map { job ->
+            CompanyOpenJobResponse(
+                jobId = job.jobId,
+                title = job.title,
+                postingType = job.postingType,
+                applicationMethod = job.applicationMethod,
+                status = job.status,
+                startDate = job.recruitmentStartedAt,
+                endDate = job.recruitmentEndedAt,
+                location = job.location,
+                employmentType = job.employmentType,
+                sourceName = job.sourceName,
+            )
+        }
+
     private fun validateMouPeriod(
         startDate: LocalDate?,
         endDate: LocalDate?,
@@ -356,5 +401,6 @@ class CompanyServiceImpl(
         const val NAME_TYPE_UNIQUE_INDEX = "uk_companies_name_type_active"
         const val COMPANY_TARGET_TYPE = "COMPANY"
         const val RECENT_AUDIT_LIMIT = 5
+        const val MOU_POSTING_TYPE = "MOU"
     }
 }
