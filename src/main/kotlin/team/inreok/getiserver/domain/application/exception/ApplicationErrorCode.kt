@@ -27,6 +27,7 @@ enum class ApplicationErrorCode(
     APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 지원서를 찾을 수 없습니다."),
     APPLICATION_ACCESS_FORBIDDEN(HttpStatus.FORBIDDEN, "본인의 지원서만 접근할 수 있습니다."),
     APPLICATION_ACTION_NOT_AVAILABLE(HttpStatus.CONFLICT, "현재 상태에서는 이 작업을 할 수 없습니다."),
+    UNSUPPORTED_EXPORT_FORMAT(HttpStatus.BAD_REQUEST, "현재 지원하지 않는 Export 포맷입니다. XLSX를 사용해 주세요."),
 
     // 학생 제출·수정요청·재제출·철회 (Phase 3)
     APPLICATION_REQUIRED_ANSWER_MISSING(HttpStatus.BAD_REQUEST, "필수 항목에 대한 답변이 누락되었습니다."),

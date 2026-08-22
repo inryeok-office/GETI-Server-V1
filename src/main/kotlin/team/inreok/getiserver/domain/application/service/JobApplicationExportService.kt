@@ -1,5 +1,7 @@
 package team.inreok.getiserver.domain.application.service
 
+import team.inreok.getiserver.domain.application.dto.ApplicationExportMaterialType
+import team.inreok.getiserver.domain.file.archive.FileArchiveContentEntry
 import team.inreok.getiserver.domain.file.archive.FileArchiveEntry
 import java.io.OutputStream
 
@@ -16,6 +18,14 @@ import java.io.OutputStream
  * 않으므로, Controller가 이 둘을 순서대로 호출하는 두 단계로 공개 계약 자체를 나눴다.
  */
 interface JobApplicationExportService {
+    fun buildExportMaterials(
+        jobId: Long,
+        requesterMemberId: Long,
+        isDeveloper: Boolean,
+        applicationIds: List<Long>? = null,
+        materialTypes: Set<ApplicationExportMaterialType> = setOf(ApplicationExportMaterialType.ATTACHMENTS),
+    ): JobApplicationExport
+
     /**
      * @param applicationIds 지정하면 이 지원서들의 자료만 대상으로 한다(Issue #203). `null`이면
      *   기존과 동일하게 이 공고의 전체 지원자가 대상이다(하위 호환). 이 공고에 속하지 않거나
@@ -36,4 +46,14 @@ interface JobApplicationExportService {
         entries: List<FileArchiveEntry>,
         outputStream: OutputStream,
     )
+
+    fun writeZip(
+        export: JobApplicationExport,
+        outputStream: OutputStream,
+    )
 }
+
+data class JobApplicationExport(
+    val fileEntries: List<FileArchiveEntry>,
+    val contentEntries: List<FileArchiveContentEntry>,
+)
