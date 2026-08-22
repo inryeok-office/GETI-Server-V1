@@ -54,4 +54,16 @@ data class RecommendationJobResponse(
     val techStacks: List<JobAiSkillAccessView>,
     @param:Schema(description = "전체 회원 기준 북마크 수", example = "12")
     val bookmarkCount: Long,
+    @param:Schema(
+        description = "근무지역. 정해진 값 집합이 없는 표시 전용 문자열이다. 입력되지 않았으면 null.",
+        example = "서울특별시 중구",
+        nullable = true,
+    )
+    val location: String? = null,
+    @param:Schema(
+        description = "고용형태. 정해진 값 집합이 없는 표시 전용 문자열이다. 입력되지 않았으면 null.",
+        example = "인턴",
+        nullable = true,
+    )
+    val employmentType: String? = null,
 )
