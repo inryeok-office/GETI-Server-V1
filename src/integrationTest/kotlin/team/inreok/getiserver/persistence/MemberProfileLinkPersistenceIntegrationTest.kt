@@ -39,8 +39,18 @@ class MemberProfileLinkPersistenceIntegrationTest
             val member = persistMember("links-order-subject")
             memberProfileLinkRepository.saveAll(
                 listOf(
-                    MemberProfileLink(memberId = member.id!!, label = "포트폴리오", url = "https://portfolio.example.com", displayOrder = 1),
-                    MemberProfileLink(memberId = member.id!!, label = "블로그", url = "https://blog.example.com", displayOrder = 0),
+                    MemberProfileLink(
+                        memberId = member.id!!,
+                        label = "포트폴리오",
+                        url = "https://portfolio.example.com",
+                        displayOrder = 1,
+                    ),
+                    MemberProfileLink(
+                        memberId = member.id!!,
+                        label = "블로그",
+                        url = "https://blog.example.com",
+                        displayOrder = 0,
+                    ),
                 ),
             )
             memberProfileLinkRepository.flush()
@@ -55,7 +65,12 @@ class MemberProfileLinkPersistenceIntegrationTest
         fun `member가 삭제되면 member_profile_links도 함께 삭제된다`() {
             val member = persistMember("links-cascade-subject")
             memberProfileLinkRepository.saveAndFlush(
-                MemberProfileLink(memberId = member.id!!, label = "블로그", url = "https://blog.example.com", displayOrder = 0),
+                MemberProfileLink(
+                    memberId = member.id!!,
+                    label = "블로그",
+                    url = "https://blog.example.com",
+                    displayOrder = 0,
+                ),
             )
 
             memberRepository.delete(member)
@@ -72,8 +87,18 @@ class MemberProfileLinkPersistenceIntegrationTest
             val member = persistMember("links-replace-subject")
             memberProfileLinkRepository.saveAll(
                 listOf(
-                    MemberProfileLink(memberId = member.id!!, label = "블로그", url = "https://blog.example.com", displayOrder = 0),
-                    MemberProfileLink(memberId = member.id!!, label = "포트폴리오", url = "https://portfolio.example.com", displayOrder = 1),
+                    MemberProfileLink(
+                        memberId = member.id!!,
+                        label = "블로그",
+                        url = "https://blog.example.com",
+                        displayOrder = 0,
+                    ),
+                    MemberProfileLink(
+                        memberId = member.id!!,
+                        label = "포트폴리오",
+                        url = "https://portfolio.example.com",
+                        displayOrder = 1,
+                    ),
                 ),
             )
             memberProfileLinkRepository.flush()
