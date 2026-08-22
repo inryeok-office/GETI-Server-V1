@@ -298,7 +298,8 @@ class JobApplicationExportServiceImplTest {
     }
 
     @Test
-    fun `PROFILE과 ANSWERS는 제출 Snapshot과 제출 당시 Form Version으로 문서를 만든다`() {
+    @Suppress("LongMethod")
+    fun `PROFILE_ANSWERS_use_submission_snapshots_and_form_version`() {
         val application =
             applicationOf(id = 1L, applicantName = "홍길동").apply {
                 contactEmail = "application-snapshot@example.com"
@@ -321,7 +322,10 @@ class JobApplicationExportServiceImplTest {
                     formId = 10L,
                     version = 1,
                     schemaData =
-                        """[{"key":"motivation","type":"TEXTAREA","label":"지원 동기","description":null,"required":true,"order":0,"options":null,"filePolicy":null},{"key":"resume","type":"FILE","label":"이력서","description":null,"required":false,"order":1,"options":null,"filePolicy":{}}]""",
+                        """[
+                            {"key":"motivation","type":"TEXTAREA","label":"지원 동기","description":null,"required":true,"order":0,"options":null,"filePolicy":null},
+                            {"key":"resume","type":"FILE","label":"이력서","description":null,"required":false,"order":1,"options":null,"filePolicy":{}}
+                        ]""",
                 ),
             ),
         )

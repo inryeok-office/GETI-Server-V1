@@ -39,6 +39,7 @@ class JobApplicationExportServiceImpl(
     private val documentWriter: ApplicationExportDocumentWriter,
 ) : JobApplicationExportService {
     @Transactional(readOnly = true)
+    @Suppress("LongMethod", "NestedBlockDepth", "ReturnCount")
     override fun buildExportMaterials(
         jobId: Long,
         requesterMemberId: Long,
