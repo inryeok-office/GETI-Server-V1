@@ -76,7 +76,7 @@ class CollectionRunQueryServiceImplTest {
         assertThat(result.content.single().sourceName).isEqualTo("병역일터")
         assertThat(result.content.single().createdCount).isEqualTo(2)
         assertThat(result.content.single().updatedCount).isEqualTo(1)
-        assertThat(result.content.single().failedCount).isEqualTo(1)
+        assertThat(result.content.single().failureCount).isEqualTo(1)
         assertThat(result.totalElements).isEqualTo(1)
     }
 
@@ -108,7 +108,6 @@ class CollectionRunQueryServiceImplTest {
         assertThat(result.sourceName).isEqualTo("병역일터")
         assertThat(result.createdCount).isEqualTo(2)
         assertThat(result.updatedCount).isEqualTo(1)
-        assertThat(result.failedCount).isEqualTo(result.failureCount)
         assertThat(result.errors.single().missingFields).containsExactly("title", "externalUrl")
     }
 
