@@ -38,12 +38,29 @@ class MemberSelectionMetadataIntegrationTest
         }
 
         @Test
-        fun `majors에는 V31 Seed Migration이 적재한 데이터가 있다`() {
+        fun `majors에는 V31 Seed Migration이 적재한 최종 확정 15개 값이 있다`() {
             val majors = majorRepository.findAll()
 
-            assertThat(majors).isNotEmpty
-            assertThat(majors.map { it.name }).contains("백엔드", "프론트엔드", "AI")
             assertThat(majors).allMatch { it.active }
+            assertThat(majors.map { it.name })
+                .doesNotContain("기능반")
+                .containsExactlyInAnyOrder(
+                    "백엔드",
+                    "프론트엔드",
+                    "디자인",
+                    "AI",
+                    "IoT",
+                    "DevOps",
+                    "클라우드 컴퓨팅",
+                    "모바일 앱 개발 (Flutter)",
+                    "네이티브 앱 개발 (Android)",
+                    "네이티브 앱 개발 (iOS)",
+                    "사이버 보안",
+                    "모바일 로보틱스",
+                    "IT 네트워크",
+                    "크로스 플랫폼 앱 개발 (React Native)",
+                    "기타",
+                )
         }
 
         companion object {
