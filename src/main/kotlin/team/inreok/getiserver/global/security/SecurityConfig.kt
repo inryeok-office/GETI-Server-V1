@@ -236,6 +236,9 @@ private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     authorize("/api/v1/admin/collection-runs/**", hasRole("DEVELOPER"))
     // 검색 색인 운영(전체 재구축)은 개발자만 접근한다(Issue #69).
     authorize("/api/v1/admin/search-actions", hasRole("DEVELOPER"))
+    // 감사 로그는 운영·개인정보 변경 이력을 포함하므로 개발자만 조회한다(Issue #228).
+    authorize("/api/v1/admin/audit-logs", hasRole("DEVELOPER"))
+    authorize("/api/v1/admin/audit-logs/**", hasRole("DEVELOPER"))
     // 공고 조회(목록·상세)는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
     authorize("/api/v1/jobs", authenticated)
     authorize("/api/v1/jobs/**", authenticated)
