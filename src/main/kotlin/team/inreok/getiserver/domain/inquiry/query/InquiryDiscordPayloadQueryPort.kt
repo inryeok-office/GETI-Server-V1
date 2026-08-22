@@ -29,6 +29,17 @@ import java.time.LocalDateTime
 interface InquiryDiscordPayloadQueryPort {
     /** 존재하지 않으면 null을 반환한다. */
     fun findById(inquiryId: Long): InquiryDiscordPayloadSnapshot?
+
+    /**
+     * 관리자 Discord 전달 목록에 표시할 문의 이름을 배치로 읽는다(Issue #206). 존재하지 않는
+     * id는 결과 Map에서 빠진다.
+     *
+     * **제목이 아니라 [InquiryDiscordPayloadSnapshot.category]와 같은 `InquiryType.name`을
+     * 돌려준다.** 위 "개인정보 최소화(§40)"가 제목과 작성자 이름을 Module 밖으로 내보내지 못하게
+     * 하기 때문이다. category는 이미 Discord 알림으로 나가는 값이라 노출 범위가 넓어지지 않고,
+     * 관리자는 유형과 `targetId`로 대상을 식별할 수 있다.
+     */
+    fun findDisplayNamesByIds(inquiryIds: Set<Long>): Map<Long, String>
 }
 
 @NamedInterface

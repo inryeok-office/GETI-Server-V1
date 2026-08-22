@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
+import java.time.LocalDateTime
 
 interface JobRepository : JpaRepository<Job, Long> {
     fun findBySourceNameAndExternalJobId(
@@ -36,6 +37,26 @@ interface JobRepository : JpaRepository<Job, Long> {
         companyId: Long,
         statuses: Collection<JobStatus>,
     ): List<Job>
+
+    fun findAllByCompanyIdInAndStatusInAndDeletedAtIsNull(
+        companyIds: Collection<Long>,
+        statuses: Collection<JobStatus>,
+    ): List<Job>
+
+    @Query(
+        """
+        SELECT CASE WHEN COUNT(j.id) > 0 THEN TRUE ELSE FALSE END
+        FROM Job j
+        WHERE j.companyId = :companyId
+          AND j.status = team.inreok.getiserver.domain.job.entity.type.JobStatus.PUBLISHED
+          AND j.deletedAt IS NULL
+          AND (j.recruitmentEndedAt IS NULL OR j.recruitmentEndedAt >= :now)
+        """,
+    )
+    fun existsActiveByCompanyId(
+        @Param("companyId") companyId: Long,
+        @Param("now") now: LocalDateTime,
+    ): Boolean
 
     // 공개 목록/검색(GET /api/v1/jobs)은 더 이상 이 Repository를 직접 쓰지 않는다(Issue #69,
     // domain.search.query.JobSearchQueryPort가 Elasticsearch로 대체). 이 Query는 Search의 전체

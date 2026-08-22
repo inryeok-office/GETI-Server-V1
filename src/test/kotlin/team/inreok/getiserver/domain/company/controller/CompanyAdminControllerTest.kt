@@ -33,6 +33,7 @@ import team.inreok.getiserver.domain.company.dto.CompanyResponse
 import team.inreok.getiserver.domain.company.dto.CompanyUpdateRequest
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.company.entity.type.MouStatus
+import team.inreok.getiserver.domain.company.exception.CompanyHasActiveJobsException
 import team.inreok.getiserver.domain.company.exception.CompanyNameRequiredException
 import team.inreok.getiserver.domain.company.exception.CompanyNotFoundException
 import team.inreok.getiserver.domain.company.exception.DuplicateCompanyException
@@ -331,6 +332,16 @@ class CompanyAdminControllerTest
                 .perform(delete("/api/v1/admin/companies/999").with(authOf(1L, "DEVELOPER")))
                 .andExpect(status().isNotFound)
                 .andExpect(jsonPath("$.error.code").value("COMPANY_NOT_FOUND"))
+        }
+
+        @Test
+        fun `현재 모집 중인 공고가 있으면 기업 삭제는 409를 반환한다`() {
+            willThrow(CompanyHasActiveJobsException()).given(companyService).delete(1L, 1L)
+
+            mockMvc
+                .perform(delete("/api/v1/admin/companies/1").with(authOf(1L, "DEVELOPER")))
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.error.code").value("COMPANY_HAS_ACTIVE_JOBS"))
         }
 
         @Test

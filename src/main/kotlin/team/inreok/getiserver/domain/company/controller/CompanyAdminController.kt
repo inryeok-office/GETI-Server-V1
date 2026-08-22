@@ -144,7 +144,8 @@ class CompanyAdminController(
         description = """
             기업을 Soft Delete한다(`deleted_at` 기록). 기존 공고와 이력을 유지하기 위해 실제 행을
             삭제하지 않는다. 삭제된 기업은 이후 목록·상세 조회에서 제외된다. 이미 삭제된 기업은
-            404로 처리한다. 연결된 공개 공고가 있을 때의 차단은 Job 도메인 연동 후 추가된다.
+            404로 처리한다. PUBLISHED이면서 마감 시각이 지나지 않은 공고가 하나라도 있으면
+            COMPANY_HAS_ACTIVE_JOBS로 삭제를 거부한다.
         """,
     )
     @ApiResponses(
@@ -152,6 +153,7 @@ class CompanyAdminController(
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "403", description = "개발자 권한이 없음 (FORBIDDEN)"),
         SwaggerApiResponse(responseCode = "404", description = "기업이 없거나 이미 삭제됨 (COMPANY_NOT_FOUND)"),
+        SwaggerApiResponse(responseCode = "409", description = "현재 모집 중인 공고가 있음 (COMPANY_HAS_ACTIVE_JOBS)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @DeleteMapping("/{companyId}")
