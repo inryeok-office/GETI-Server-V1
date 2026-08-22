@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import team.inreok.getiserver.domain.application.dto.ApplicationExportMaterialType
+import team.inreok.getiserver.domain.application.dto.ExportFormat
+import team.inreok.getiserver.domain.application.exception.UnsupportedExportFormatException
 import team.inreok.getiserver.domain.application.service.JobApplicationExportService
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
 import java.io.OutputStream
@@ -52,6 +54,7 @@ class JobApplicationExportController(
     )
     @ApiResponses(
         SwaggerApiResponse(responseCode = "200", description = "ZIP 생성 성공(application/zip Binary)"),
+        SwaggerApiResponse(responseCode = "400", description = "지원하지 않는 Export 포맷 또는 Query 형식 오류"),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(
             responseCode = "403",
@@ -88,10 +91,17 @@ class JobApplicationExportController(
         )
         @RequestParam(required = false)
         materialTypes: List<ApplicationExportMaterialType>?,
+        @Parameter(
+            description = "문서 포맷. 현재 XLSX만 실제 지원하며 PDF/DOCX/HWPX는 후속 확장 대상이다.",
+            example = "XLSX",
+        )
+        @RequestParam(required = false, defaultValue = "XLSX")
+        format: ExportFormat,
         response: HttpServletResponse,
     ) {
         val requesterMemberId = authentication.principal as Long
         val isDeveloper = authentication.authorities.any { it.authority == "ROLE_DEVELOPER" }
+        if (format != ExportFormat.XLSX) throw UnsupportedExportFormatException(format)
 
         // DB 조회(권한 판정 포함)를 먼저 끝내 여기서 예외가 나면 정상적인 JSON 오류 응답으로
         // 나가게 한다 -- 이 시점까지는 response에 아무것도 쓰지 않았다.
