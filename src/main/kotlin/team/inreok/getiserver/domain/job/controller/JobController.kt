@@ -44,6 +44,8 @@ class JobController(
 
             존재하지 않거나 삭제된 공고는 404, 아직 게시되지 않은(DRAFT) 공고는 403으로 처리한다.
             임시저장 공고를 확인하려면 관리자용 상세 조회 API를 사용한다.
+
+            `files`(첨부파일 목록)는 게시(PUBLISHED)·마감(CLOSED) 상태에서는 누구나 볼 수 있다.
         """,
     )
     @ApiResponses(
