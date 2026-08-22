@@ -59,6 +59,10 @@ class CollectionRunQueryServiceImplTest {
     ) = CollectionRun(sourceId = sourceId, action = CollectorAction.SYNC, status = status, startedAt = now).apply {
         this.id =
             id
+        createdCount = 2
+        updatedCount = 1
+        successCount = 4
+        failureCount = 1
     }
 
     @Test
@@ -70,6 +74,9 @@ class CollectionRunQueryServiceImplTest {
         val result = service.search(null, null, null, null, PageRequest.of(0, 20))
 
         assertThat(result.content.single().sourceName).isEqualTo("병역일터")
+        assertThat(result.content.single().createdCount).isEqualTo(2)
+        assertThat(result.content.single().updatedCount).isEqualTo(1)
+        assertThat(result.content.single().failedCount).isEqualTo(1)
         assertThat(result.totalElements).isEqualTo(1)
     }
 
@@ -99,6 +106,9 @@ class CollectionRunQueryServiceImplTest {
         val result = service.getDetail(5L)
 
         assertThat(result.sourceName).isEqualTo("병역일터")
+        assertThat(result.createdCount).isEqualTo(2)
+        assertThat(result.updatedCount).isEqualTo(1)
+        assertThat(result.failedCount).isEqualTo(result.failureCount)
         assertThat(result.errors.single().missingFields).containsExactly("title", "externalUrl")
     }
 
