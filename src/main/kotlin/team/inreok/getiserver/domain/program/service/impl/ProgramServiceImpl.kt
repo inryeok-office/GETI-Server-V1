@@ -49,7 +49,6 @@ import team.inreok.getiserver.domain.program.exception.NotEnrolledException
 import team.inreok.getiserver.domain.program.exception.NotTargetGradeException
 import team.inreok.getiserver.domain.program.exception.ProgramActionNotAvailableException
 import team.inreok.getiserver.domain.program.exception.ProgramClosedException
-import team.inreok.getiserver.domain.program.exception.ProgramDeletedException
 import team.inreok.getiserver.domain.program.exception.ProgramFormNotLinkableException
 import team.inreok.getiserver.domain.program.exception.ProgramFullException
 import team.inreok.getiserver.domain.program.exception.ProgramManageForbiddenException
@@ -400,10 +399,9 @@ class ProgramServiceImpl(
         requesterMemberId: Long,
     ): ProgramDetailResponse {
         val program = programRepository.findById(programId).orElseThrow { ProgramNotFoundException(programId) }
-        if (program.deletedAt != null) throw ProgramDeletedException()
-
         val targetGrades = currentTargetGrades(programId)
         val member = memberApplicantSnapshotQueryPort.findById(requesterMemberId)
+        val latestApplication = latestApplication(programId, requesterMemberId)
         val hasActiveApplication = hasActiveApplication(programId, requesterMemberId)
         val currentApplicants = activeApplicantCount(programId)
         val now = LocalDateTime.now()
@@ -440,6 +438,9 @@ class ProgramServiceImpl(
                 endAt = program.eventEndedAt,
                 applicationStartAt = program.applicationStartedAt,
                 applicationEndAt = program.applicationEndedAt,
+                applicationSubmittedAt = latestApplication?.appliedAt,
+                applicationCancelledAt = latestApplication?.canceledAt,
+                programDeletedAt = program.deletedAt,
                 capacity = program.capacity,
                 currentApplicants = currentApplicants,
                 remainingCapacity = program.capacity?.let { it - currentApplicants },
@@ -742,6 +743,15 @@ class ProgramServiceImpl(
             memberId,
             ProgramApplicationStatus.APPLIED,
         ) != null
+
+    private fun latestApplication(
+        programId: Long,
+        memberId: Long,
+    ): ProgramApplication? =
+        programApplicationRepository.findFirstByProgramIdAndApplicantMemberIdOrderByAppliedAtDescIdDesc(
+            programId,
+            memberId,
+        )
 
     // list()가 Page 항목마다 activeApplicantCount()를 호출하면 N+1 쿼리가 발생하므로(PR #81 리뷰
     // 지적), programId 목록을 한 번에 넘겨 단일 Query로 가져온다. 신청이 없는 Program은 결과에
