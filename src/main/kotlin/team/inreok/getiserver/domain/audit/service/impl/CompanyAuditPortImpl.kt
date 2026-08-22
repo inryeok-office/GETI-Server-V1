@@ -4,6 +4,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.audit.entity.AuditLog
+import team.inreok.getiserver.domain.audit.entity.type.AuditResult
 import team.inreok.getiserver.domain.audit.query.AuditLogWriter
 import team.inreok.getiserver.domain.audit.query.CompanyAuditQueryPort
 import team.inreok.getiserver.domain.audit.query.CompanyAuditSnapshot
@@ -36,11 +37,17 @@ class CompanyAuditPortImpl(
         targetType: String,
         targetId: Long,
         actorMemberId: Long?,
+        result: AuditResult,
+        resultMessage: String?,
+        requestPath: String?,
     ) {
         auditLogRepository.save(
             AuditLog(action = action, targetType = targetType).apply {
                 this.targetId = targetId
                 this.actorMemberId = actorMemberId
+                this.result = result
+                this.resultMessage = resultMessage
+                this.requestPath = requestPath
             },
         )
     }
