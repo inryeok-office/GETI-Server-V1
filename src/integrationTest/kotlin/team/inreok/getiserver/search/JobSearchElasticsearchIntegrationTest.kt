@@ -176,6 +176,8 @@ class JobSearchElasticsearchIntegrationTest {
         val result = search(sourceName = "MMA", targetGrade = 3)
 
         assertThat(result.content.map { it.jobId }).containsExactly(1L)
+        assertThat(result.content.single().sourceName).isEqualTo("MMA")
+        assertThat(search(sourceName = "UNKNOWN_SOURCE").content).isEmpty()
     }
 
     @Test
