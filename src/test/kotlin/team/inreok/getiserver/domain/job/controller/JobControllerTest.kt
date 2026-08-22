@@ -188,6 +188,7 @@ class JobControllerTest
                     availableActions = listOf("CREATE_DRAFT"),
                 ),
             bookmarked = bookmarked,
+            files = emptyList(),
         )
 
         private companion object {
