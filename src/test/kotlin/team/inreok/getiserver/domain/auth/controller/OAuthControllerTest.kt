@@ -24,13 +24,16 @@ import team.inreok.getiserver.domain.auth.exception.UnsupportedOAuthProviderExce
 import team.inreok.getiserver.domain.auth.service.AuthLoginService
 import team.inreok.getiserver.domain.auth.service.OAuthAuthorization
 import team.inreok.getiserver.domain.auth.service.OAuthClientType
+import team.inreok.getiserver.domain.auth.service.OAuthLoginIntent
 import team.inreok.getiserver.domain.auth.service.OAuthLoginService
 import team.inreok.getiserver.domain.auth.service.OAuthWebRedirectUriResolver
 import team.inreok.getiserver.domain.auth.service.RefreshTokenCookieFactory
 import team.inreok.getiserver.domain.auth.service.impl.OAuthClientTypeStore
+import team.inreok.getiserver.domain.auth.service.impl.OAuthLoginIntentStore
 import team.inreok.getiserver.domain.member.entity.type.MemberStatus
 import team.inreok.getiserver.domain.member.exception.MemberLoginNotAllowedException
 import team.inreok.getiserver.domain.member.exception.OAuthEmailAlreadyRegisteredException
+import team.inreok.getiserver.domain.member.exception.StaffSignupRejectedException
 import java.net.URI
 
 @WebMvcTest(controllers = [OAuthController::class])
@@ -52,6 +55,9 @@ class OAuthControllerTest
 
         @MockitoBean
         private lateinit var oAuthClientTypeStore: OAuthClientTypeStore
+
+        @MockitoBean
+        private lateinit var oAuthLoginIntentStore: OAuthLoginIntentStore
 
         @MockitoBean
         private lateinit var oAuthWebRedirectUriResolver: OAuthWebRedirectUriResolver
@@ -184,6 +190,65 @@ class OAuthControllerTest
                 .perform(get("/api/v1/auth/google/callback").param("code", "auth-code").param("state", "state-value"))
                 .andExpect(status().isForbidden)
                 .andExpect(jsonPath("$.error.code").value("MEMBER_LOGIN_NOT_ALLOWED"))
+        }
+
+        @Test
+        fun `가입이 거절된 교직원이 재신청 없이 로그인하면 403과 거절 사유를 반환한다`() {
+            willThrow(StaffSignupRejectedException("증빙 서류가 확인되지 않았습니다."))
+                .given(authLoginService)
+                .loginWithOAuth("google", "auth-code", "state-value", false)
+
+            mockMvc
+                .perform(get("/api/v1/auth/google/callback").param("code", "auth-code").param("state", "state-value"))
+                .andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.error.code").value("MEMBER_SIGNUP_REJECTED"))
+                .andExpect(jsonPath("$.error.message").value("증빙 서류가 확인되지 않았습니다."))
+        }
+
+        // ---------- 재신청 Flow(Issue #229) ----------
+
+        @Test
+        fun `authorize에 intent=REAPPLY를 지정하면 state에 저장한다`() {
+            given(oAuthLoginService.getAuthorizationUrl("google"))
+                .willReturn(OAuthAuthorization(authorizationUrl = "https://accounts.google.com/x", state = "state-1"))
+
+            mockMvc
+                .perform(get("/api/v1/auth/google/authorize").param("intent", "REAPPLY"))
+                .andExpect(status().isOk)
+
+            verify(oAuthLoginIntentStore).save("state-1", OAuthLoginIntent.REAPPLY)
+        }
+
+        @Test
+        fun `콜백이 재신청(intent=REAPPLY) 요청이면 reapply=true로 로그인에 위임한다`() {
+            given(oAuthLoginIntentStore.consume("state-value")).willReturn(OAuthLoginIntent.REAPPLY)
+            given(authLoginService.loginWithOAuth("google", "auth-code", "state-value", true))
+                .willReturn(
+                    OAuthLoginResponse(
+                        accessToken = "access-token",
+                        refreshToken = "refresh-token",
+                        accessTokenExpiresInSeconds = 1800,
+                        memberId = 1L,
+                        roles = emptyList(),
+                        status = "PENDING",
+                        isNewMember = false,
+                    ),
+                )
+            given(refreshTokenCookieFactory.create("refresh-token"))
+                .willReturn(
+                    ResponseCookie
+                        .from("refreshToken", "refresh-token")
+                        .httpOnly(true)
+                        .path("/api/v1/auth")
+                        .build(),
+                )
+
+            mockMvc
+                .perform(get("/api/v1/auth/google/callback").param("code", "auth-code").param("state", "state-value"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+
+            verify(authLoginService).loginWithOAuth("google", "auth-code", "state-value", true)
         }
 
         // ---------- Web Client 복귀 Flow(Issue #162) ----------
