@@ -68,4 +68,10 @@ data class JobApplicationDraftResponse(
     // jobTitle 등과 같은 관례(호출부별로 선택적으로 채우는 Field).
     @param:Schema(description = "본인이 현재 상태에서 수행할 수 있는 Action 목록(JobApplicationAction). 학생 상세 조회에서만 채워진다.")
     val availableActions: List<String> = emptyList(),
+    @param:Schema(
+        description =
+            "지원서 생성 시점에 연결된 Form Version의 문항 구조. 각 문항의 fieldId는 answers.fieldId와 " +
+                "동일하며, 학생용 초안·임시저장·Action·본인 상세 응답에 포함된다.",
+    )
+    val questions: List<FormFieldResponse> = emptyList(),
 )

@@ -6,10 +6,15 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
+import team.inreok.getiserver.domain.application.dto.FormFieldSchema
+import team.inreok.getiserver.domain.application.entity.FormVersion
 import team.inreok.getiserver.domain.application.entity.JobApplication
+import team.inreok.getiserver.domain.application.entity.type.FormFieldType
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.exception.ApplicationAccessForbiddenException
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
@@ -96,6 +101,7 @@ class JobApplicationServiceImplQueryTest {
     }
 
     private val fixedTime = LocalDateTime.of(2026, 3, 1, 10, 0, 0)
+    private val jsonMapper = JsonMapper()
 
     private fun jobOf() =
         JobApplicationJobSnapshot(
@@ -116,6 +122,8 @@ class JobApplicationServiceImplQueryTest {
         id: Long = 1L,
         applicantMemberId: Long = 1L,
         status: JobApplicationStatus = JobApplicationStatus.DRAFT,
+        formId: Long? = null,
+        formVersion: Int? = null,
     ) = JobApplication(
         jobId = 1L,
         applicantMemberId = applicantMemberId,
@@ -125,9 +133,35 @@ class JobApplicationServiceImplQueryTest {
         status = status,
     ).apply {
         this.id = id
+        this.formId = formId
+        this.formVersion = formVersion
         createdAt = fixedTime
         updatedAt = fixedTime
     }
+
+    private fun formVersionOf(
+        formId: Long,
+        version: Int,
+        fieldId: String,
+    ) = FormVersion(
+        formId = formId,
+        version = version,
+        schemaData =
+            jsonMapper.writeValueAsString(
+                listOf(
+                    FormFieldSchema(
+                        key = fieldId,
+                        type = FormFieldType.TEXTAREA,
+                        label = fieldId,
+                        description = "설명",
+                        required = true,
+                        order = 0,
+                        options = null,
+                        filePolicy = null,
+                    ),
+                ),
+            ),
+    )
 
     // ---------- list ----------
 
@@ -198,6 +232,39 @@ class JobApplicationServiceImplQueryTest {
 
         assertThat(result.status).isEqualTo(JobApplicationStatus.DRAFT)
         assertThat(result.availableActions).containsExactly("SUBMIT", "WITHDRAW")
+    }
+
+    @Test
+    fun `본인 지원서 상세는 Form 변경 이후에도 생성 당시 Version의 questions를 반환한다`() {
+        given(jobApplicationRepository.findById(1L))
+            .willReturn(Optional.of(draftOf(formId = 10L, formVersion = 1)))
+        given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf())
+        given(companyQuery.findActiveSummary(1L, 1L))
+            .willReturn(CompanySummary(companyId = 1L, name = "인력개발원"))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, 1L)).willReturn(emptyList())
+        given(formVersionRepository.findByFormIdAndVersion(10L, 1))
+            .willReturn(formVersionOf(formId = 10L, version = 1, fieldId = "oldQuestion"))
+
+        val result = service.getDetail(1L, 1L)
+
+        assertThat(result.formVersion).isEqualTo(1)
+        assertThat(result.questions).extracting<String> { it.fieldId }.containsExactly("oldQuestion")
+        verify(formVersionRepository).findByFormIdAndVersion(10L, 1)
+        verify(formVersionRepository, never()).findTopByFormIdOrderByVersionDesc(10L)
+    }
+
+    @Test
+    fun `Form Version Snapshot이 없으면 본인 상세 조회에서 정합성 오류를 드러낸다`() {
+        given(jobApplicationRepository.findById(1L))
+            .willReturn(Optional.of(draftOf(formId = 10L, formVersion = 1)))
+        given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf())
+        given(companyQuery.findActiveSummary(1L, 1L))
+            .willReturn(CompanySummary(companyId = 1L, name = "인력개발원"))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, 1L)).willReturn(emptyList())
+        given(formVersionRepository.findByFormIdAndVersion(10L, 1)).willReturn(null)
+
+        assertThatThrownBy { service.getDetail(1L, 1L) }
+            .isInstanceOf(IllegalStateException::class.java)
     }
 
     @Test

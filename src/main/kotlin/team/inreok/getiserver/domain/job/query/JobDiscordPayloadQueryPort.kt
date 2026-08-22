@@ -28,6 +28,19 @@ interface JobDiscordPayloadQueryPort {
      * Worker가 Delivery를 한 건씩 처리하므로 배치가 아닌 단건 조회다.
      */
     fun findById(jobId: Long): JobDiscordPayloadSnapshot?
+
+    /**
+     * 관리자 Discord 전달 목록에 표시할 공고 제목을 배치로 읽는다(Issue #206). 존재하지 않는
+     * id는 결과 Map에서 빠진다.
+     *
+     * [findById]와 같은 이유로 삭제된 공고도 포함한다 -- 실패한 `DELETE_NOTICE` 전달이 목록에
+     * 남아 있는데 이름이 사라지면 관리자가 어떤 공고인지 식별할 수 없다.
+     *
+     * [JobDiscordPayloadSnapshot] 전체가 아니라 표시 이름만 돌려준다. 목록은 제목 외의 값을 쓰지
+     * 않고, 목록 한 Page는 최대 100건이라 Snapshot을 그대로 실으면 쓰지 않을 값까지 함께 따라온다.
+     * 목록 API가 한 번에 최대 100건을 반환하므로 단건이 아닌 배치 조회로 둔다(N+1 방지).
+     */
+    fun findDisplayNamesByIds(jobIds: Set<Long>): Map<Long, String>
 }
 
 /**

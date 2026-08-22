@@ -42,6 +42,8 @@ data class CompanyResponse(
     val createdAt: LocalDateTime?,
     @param:Schema(description = "최근 수정 시각", example = "2026-03-02T09:00:00")
     val updatedAt: LocalDateTime?,
+    @param:Schema(description = "현재 공개 중인 연결 공고 목록", example = "[]")
+    val openJobs: List<CompanyOpenJobResponse> = emptyList(),
 ) {
     companion object {
         /**
@@ -52,6 +54,7 @@ data class CompanyResponse(
         fun from(
             company: Company,
             logoUrl: String?,
+            openJobs: List<CompanyOpenJobResponse> = emptyList(),
         ): CompanyResponse =
             CompanyResponse(
                 companyId = requireNotNull(company.id) { "저장된 Company는 id를 가져야 합니다." },
@@ -68,6 +71,31 @@ data class CompanyResponse(
                 mouEndDate = company.mouEndedOn,
                 createdAt = company.createdAt,
                 updatedAt = company.updatedAt,
+                openJobs = openJobs,
             )
     }
 }
+
+@Schema(description = "기업 상세의 현재 공개 중인 공고 요약")
+data class CompanyOpenJobResponse(
+    @param:Schema(description = "공고 ID", example = "10")
+    val jobId: Long,
+    @param:Schema(description = "공고 제목", example = "Backend 개발자 채용")
+    val title: String,
+    @param:Schema(description = "공고 유형", example = "MOU")
+    val postingType: String,
+    @param:Schema(description = "지원 방식", example = "INTERNAL")
+    val applicationMethod: String,
+    @param:Schema(description = "공고 상태", example = "PUBLISHED")
+    val status: String,
+    @param:Schema(description = "모집 시작 시각", example = "2026-03-01T09:00:00", nullable = true)
+    val startDate: LocalDateTime?,
+    @param:Schema(description = "모집 종료 시각", example = "2026-03-31T18:00:00", nullable = true)
+    val endDate: LocalDateTime?,
+    @param:Schema(description = "근무 지역", example = "서울", nullable = true)
+    val location: String?,
+    @param:Schema(description = "고용 형태", example = "인턴", nullable = true)
+    val employmentType: String?,
+    @param:Schema(description = "공고 출처 식별자", example = "SARAMIN", nullable = true)
+    val sourceName: String?,
+)

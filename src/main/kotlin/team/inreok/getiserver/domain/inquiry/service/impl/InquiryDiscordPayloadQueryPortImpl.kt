@@ -35,4 +35,14 @@ class InquiryDiscordPayloadQueryPortImpl(
             createdAt = inquiry.createdAt,
         )
     }
+
+    @Transactional(readOnly = true)
+    override fun findDisplayNamesByIds(inquiryIds: Set<Long>): Map<Long, String> {
+        if (inquiryIds.isEmpty()) return emptyMap()
+        // 제목이 아니라 유형(InquiryType.name)이다 -- 제목·작성자 이름은 §40에 따라 Module 밖으로
+        // 내보내지 않는다(Port KDoc 참고).
+        return inquiryRepository
+            .findAllById(inquiryIds)
+            .associate { requireNotNull(it.id) { "저장된 Inquiry는 id를 가져야 합니다." } to it.type.name }
+    }
 }

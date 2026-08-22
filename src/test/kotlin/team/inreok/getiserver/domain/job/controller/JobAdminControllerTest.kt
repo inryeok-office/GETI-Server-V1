@@ -410,5 +410,6 @@ class JobAdminControllerTest
                     availableActions = emptyList(),
                 ),
             bookmarked = false,
+            files = emptyList(),
         )
     }

@@ -176,6 +176,7 @@ class JobApplicationServiceImplTest {
         given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf())
         given(memberApplicantSnapshotQueryPort.findById(1L)).willReturn(memberOf())
         stubActiveLink()
+        given(formVersionRepository.findByFormIdAndVersion(10L, 2)).willReturn(formVersionOf(10L, 2))
         given(
             jobApplicationRepository.findByJobIdAndApplicantMemberIdAndStatusIn(
                 1L,
@@ -216,6 +217,7 @@ class JobApplicationServiceImplTest {
         given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf())
         given(memberApplicantSnapshotQueryPort.findById(1L)).willReturn(memberOf())
         stubActiveLink()
+        given(formVersionRepository.findByFormIdAndVersion(10L, 2)).willReturn(formVersionOf(10L, 2))
         given(
             jobApplicationRepository.findByJobIdAndApplicantMemberIdAndStatusIn(
                 1L,
@@ -247,6 +249,7 @@ class JobApplicationServiceImplTest {
         given(jobApplicationSnapshotQueryPort.findById(1L)).willReturn(jobOf())
         given(memberApplicantSnapshotQueryPort.findById(1L)).willReturn(memberOf())
         stubActiveLink()
+        given(formVersionRepository.findByFormIdAndVersion(10L, 2)).willReturn(formVersionOf(10L, 2))
         given(
             jobApplicationRepository.findByJobIdAndApplicantMemberIdAndStatusIn(
                 1L,
