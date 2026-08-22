@@ -272,9 +272,44 @@ class CollectorExecutionServiceImplTest {
         val finalRun = captor.allValues.last()
         assertThat(finalRun.action).isEqualTo(CollectorAction.SYNC)
         assertThat(finalRun.status).isEqualTo(CollectionRunStatus.SUCCESS)
+        assertThat(finalRun.createdCount).isEqualTo(2)
+        assertThat(finalRun.updatedCount).isZero()
         assertThat(finalRun.successCount).isEqualTo(2)
         assertThat(finalRun.failureCount).isEqualTo(0)
         assertThat(finalRun.partialQualityCount).isEqualTo(1)
+    }
+
+    @Test
+    fun `생성 갱신 변경없음 실패를 분리 집계하고 기존 성공 실패 불변식을 유지한다`() {
+        val source = sourceOf()
+        given(jobSourceRepository.findAllByOrderBySourceCodeAsc()).willReturn(listOf(source))
+        given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
+        given(collectionRunRepository.saveAndFlush(anyCollectionRun())).willAnswer(::assignIdIfAbsent)
+        givenCompanyResolves()
+        given(collectedJobUpsertUseCase.upsert(anyUpsertCommand()))
+            .willReturn(CollectedJobUpsertResult(jobId = 1L, outcome = JobImportOutcome.CREATED, published = true))
+            .willReturn(CollectedJobUpsertResult(jobId = 2L, outcome = JobImportOutcome.UPDATED, published = true))
+            .willReturn(CollectedJobUpsertResult(jobId = 3L, outcome = JobImportOutcome.UNCHANGED, published = true))
+            .willThrow(IllegalStateException("upsert 실패"))
+        val provider =
+            FakeCollectorProvider(JobSourceCode.MMA) {
+                CollectorCollectionResult(
+                    jobs = listOf(jobOf("CREATED"), jobOf("UPDATED"), jobOf("UNCHANGED"), jobOf("FAILED")),
+                )
+            }
+
+        serviceWith(provider).runDailyCollection()
+
+        val captor = ArgumentCaptor.forClass(CollectionRun::class.java)
+        verify(collectionRunRepository, times(3)).saveAndFlush(captor.capture())
+        val finalRun = captor.allValues.last()
+        assertThat(finalRun.createdCount).isEqualTo(1)
+        assertThat(finalRun.updatedCount).isEqualTo(1)
+        assertThat(finalRun.successCount).isEqualTo(3)
+        assertThat(finalRun.failureCount).isEqualTo(1)
+        assertThat(finalRun.totalCount).isEqualTo(finalRun.successCount + finalRun.failureCount)
+        assertThat(finalRun.status).isEqualTo(CollectionRunStatus.PARTIAL_SUCCESS)
+        verify(collectionRunErrorRepository).save(anyCollectionRunError())
     }
 
     // Provider가 준 근무지·고용형태를 Job에 넘기지 않으면 외부 수집 공고의 공고 카드가 영원히
@@ -398,7 +433,12 @@ class CollectorExecutionServiceImplTest {
         verify(collectionRunErrorRepository, times(2)).save(anyCollectionRunError())
         val captor = ArgumentCaptor.forClass(CollectionRun::class.java)
         verify(collectionRunRepository, times(3)).saveAndFlush(captor.capture())
-        assertThat(captor.allValues.last().status).isEqualTo(CollectionRunStatus.FAILED)
+        val finalRun = captor.allValues.last()
+        assertThat(finalRun.status).isEqualTo(CollectionRunStatus.FAILED)
+        assertThat(finalRun.createdCount).isZero()
+        assertThat(finalRun.updatedCount).isZero()
+        assertThat(finalRun.successCount).isZero()
+        assertThat(finalRun.failureCount).isEqualTo(2)
     }
 
     @Test
@@ -492,6 +532,35 @@ class CollectorExecutionServiceImplTest {
             jobNotificationService,
             times(0),
         ).enqueueIfEligible(anyTrigger(), org.mockito.ArgumentMatchers.anyBoolean())
+        val captor = ArgumentCaptor.forClass(CollectionRun::class.java)
+        verify(collectionRunRepository, times(3)).saveAndFlush(captor.capture())
+        val finalRun = captor.allValues.last()
+        assertThat(finalRun.createdCount).isZero()
+        assertThat(finalRun.updatedCount).isZero()
+        assertThat(finalRun.successCount).isEqualTo(1)
+    }
+
+    @Test
+    fun `공고가 갱신되면 updatedCount만 증가한다`() {
+        val source = sourceOf()
+        given(jobSourceRepository.findAllByOrderBySourceCodeAsc()).willReturn(listOf(source))
+        given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
+        given(collectionRunRepository.saveAndFlush(anyCollectionRun())).willAnswer(::assignIdIfAbsent)
+        givenCompanyResolves()
+        given(collectedJobUpsertUseCase.upsert(anyUpsertCommand()))
+            .willReturn(CollectedJobUpsertResult(jobId = 42L, outcome = JobImportOutcome.UPDATED, published = true))
+        val provider =
+            FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(jobs = listOf(jobOf("EXT-1"))) }
+
+        serviceWith(provider).runDailyCollection()
+
+        val captor = ArgumentCaptor.forClass(CollectionRun::class.java)
+        verify(collectionRunRepository, times(3)).saveAndFlush(captor.capture())
+        val finalRun = captor.allValues.last()
+        assertThat(finalRun.createdCount).isZero()
+        assertThat(finalRun.updatedCount).isEqualTo(1)
+        assertThat(finalRun.successCount).isEqualTo(1)
+        assertThat(finalRun.failureCount).isZero()
     }
 
     // --- triggerManual ---
