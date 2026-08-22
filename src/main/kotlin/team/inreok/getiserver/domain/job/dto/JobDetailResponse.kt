@@ -14,9 +14,14 @@ import java.time.LocalDateTime
  * 공고 상세 응답이다. 공개 상세와 관리자 상세가 같은 구조를 사용하고, 관리자만 볼 수 있는
  * `DRAFT`/`DELETED` 여부는 [status]로 구분한다. `deletedAt`은 노출하지 않는다.
  *
- * `files`, `formId`, `aiRequestAccepted`, `bookmarkCount`는 각각 File/Recommendation Domain이
+ * `formId`, `aiRequestAccepted`, `bookmarkCount`는 각각 Application/Recommendation Domain이
  * 준비된 뒤 추가한다. 가짜 값이나 빈 목록을 지금 내보내면 Client가 없는 기능을 있는 것으로
  * 오해하므로 Field 자체를 넣지 않았다.
+ *
+ * [files]는 Issue #126에서 추가했다. DRAFT 상태에서는 등록자·담당 교사·개발자에게만 실제 목록을
+ * 반환하고, 그 외 요청자에게는 빈 목록을 반환한다(`job.access.canViewJobFiles`,
+ * `ProgramDetailResponse.files`와 동일한 규칙 — 실제 다운로드 가능 여부보다 더 많은 첨부파일
+ * Metadata를 흘리지 않기 위해서다).
  *
  * [aiAnalysis]는 AI Analysis Phase 1(Issue #132)에서 추가했다. 아직 분석이 시작되지 않은(예:
  * PUBLISHED 이후 비동기 Trigger가 아직 처리되지 않은) 공고는 null이다.
@@ -96,6 +101,8 @@ data class JobDetailResponse(
     val application: JobApplicationEligibilityAccessSnapshot,
     @param:Schema(description = "요청자 기준 북마크 여부", example = "false")
     val bookmarked: Boolean,
+    @param:Schema(description = "첨부파일 목록. 조회 권한이 없으면(비공개 상태 + 등록자·담당 교사·개발자가 아님) 빈 목록이다.")
+    val files: List<JobFileResponse>,
 ) {
     companion object {
         /**
@@ -110,6 +117,7 @@ data class JobDetailResponse(
             aiAnalysis: JobAiAnalysisAccessSnapshot? = null,
             application: JobApplicationEligibilityAccessSnapshot,
             bookmarked: Boolean,
+            files: List<JobFileResponse>,
         ): JobDetailResponse =
             JobDetailResponse(
                 jobId = requireNotNull(job.id) { "저장된 Job은 id를 가져야 합니다." },
@@ -136,6 +144,7 @@ data class JobDetailResponse(
                 aiAnalysis = aiAnalysis,
                 application = application,
                 bookmarked = bookmarked,
+                files = files,
             )
     }
 }

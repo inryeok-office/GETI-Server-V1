@@ -6,11 +6,13 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.anyList
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.BDDMockito.given
 import org.mockito.Captor
 import org.mockito.Mock
 import org.mockito.Mockito.atLeastOnce
+import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
@@ -19,6 +21,11 @@ import org.mockito.quality.Strictness
 import org.springframework.context.ApplicationEventPublisher
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.entity.type.FilePurpose
+import team.inreok.getiserver.domain.file.exception.FileNotOwnedException
+import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.file.link.FileSnapshot
 import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
@@ -41,6 +48,8 @@ import team.inreok.getiserver.domain.job.exception.JobStatusTransitionInvalidExc
 import team.inreok.getiserver.domain.job.exception.JobValidationFailedException
 import team.inreok.getiserver.domain.job.repository.JobRepository
 import team.inreok.getiserver.domain.job.service.impl.JobServiceImpl
+import team.inreok.getiserver.domain.member.entity.type.RoleType
+import team.inreok.getiserver.domain.member.query.MemberRoleQueryPort
 import team.inreok.getiserver.global.discord.DiscordChannelResolver
 import java.time.LocalDateTime
 import java.util.Optional
@@ -49,7 +58,11 @@ import java.util.Optional
  * Strictness를 LENIENT로 둔 이유는 공통 Fixture(`givenActiveCompany` 등)가 여러 Test에서
  * 재사용되는데, 검증 실패를 확인하는 Test는 Stub까지 도달하기 전에 예외를 던져 사용되지 않은
  * Stub이 남기 때문이다.
+ *
+ * Job CRUD·상태 전이·File 연동(Issue #126)을 한 Class가 모두 검증해 detekt 기본 LargeClass
+ * 임계값을 넘는다. `ProgramServiceImplTest`가 이미 같은 이유로 Suppress한 전례를 따른다.
  */
+@Suppress("LargeClass")
 @ExtendWith(MockitoExtension::class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class JobServiceTest {
@@ -73,6 +86,12 @@ class JobServiceTest {
 
     @Mock
     private lateinit var jobBookmarkAccessor: JobBookmarkAccessor
+
+    @Mock
+    private lateinit var fileLinkPort: FileLinkPort
+
+    @Mock
+    private lateinit var memberRoleQueryPort: MemberRoleQueryPort
 
     @Captor
     private lateinit var jobCaptor: ArgumentCaptor<Job>
@@ -99,6 +118,8 @@ class JobServiceTest {
             jobAiAnalysisAccessor,
             jobApplicationEligibilityAccessor,
             jobBookmarkAccessor,
+            fileLinkPort,
+            memberRoleQueryPort,
         )
     }
 
@@ -398,6 +419,8 @@ class JobServiceTest {
         assertThat(job.deletedAt).isNotNull()
         // 실제 행을 지우지 않아야 북마크와 지원 이력이 보존된다.
         verify(jobRepository, never()).delete(anyJob())
+        // Storage Binary는 지우지 않고 연결만 해제한다(FileLinkPort.unlinkAllOf KDoc 참고).
+        verify(fileLinkPort).unlinkAllOf(FileOwnerType.JOB, 1L)
     }
 
     @Test
@@ -422,6 +445,168 @@ class JobServiceTest {
 
         assertThatThrownBy { service.changeStatus(1L, JobStatusUpdateRequest(JobStatus.PUBLISHED), REQUESTER_ID) }
             .isInstanceOf(JobNotFoundException::class.java)
+    }
+
+    // --- 첨부파일 ---
+
+    @Test
+    fun `등록 시 fileIds가 있으면 저장된 jobId로 FileLinkPort를 호출한다`() {
+        givenActiveCompany()
+        givenSaveAssignsId()
+
+        service.create(draftRequest(fileIds = listOf(1L, 2L)), createdByMemberId = REQUESTER_ID)
+
+        verify(fileLinkPort).validateAndLink(
+            requesterId = REQUESTER_ID,
+            fileIds = listOf(1L, 2L),
+            purpose = FilePurpose.JOB_ATTACHMENT,
+            ownerId = 1L,
+        )
+    }
+
+    @Test
+    fun `등록 시 fileIds가 비어 있으면 FileLinkPort를 호출하지 않는다`() {
+        givenActiveCompany()
+        givenSaveAssignsId()
+
+        service.create(draftRequest(), createdByMemberId = REQUESTER_ID)
+
+        verify(fileLinkPort, never()).validateAndLink(anyLong(), anyList(), anyPurpose(), anyLong())
+    }
+
+    @Test
+    fun `등록 시 타인이 업로드한 파일이면 FILE_NOT_OWNED로 등록이 실패한다`() {
+        givenActiveCompany()
+        givenSaveAssignsId()
+        given(
+            fileLinkPort.validateAndLink(
+                requesterId = REQUESTER_ID,
+                fileIds = listOf(1L),
+                purpose = FilePurpose.JOB_ATTACHMENT,
+                ownerId = 1L,
+            ),
+        ).willThrow(FileNotOwnedException(1L))
+
+        assertThatThrownBy { service.create(draftRequest(fileIds = listOf(1L)), createdByMemberId = REQUESTER_ID) }
+            .isInstanceOf(FileNotOwnedException::class.java)
+    }
+
+    @Test
+    fun `수정 시 fileIds를 전달하지 않으면 기존 첨부파일을 유지한다`() {
+        givenFoundNotDeleted(jobOf(status = JobStatus.DRAFT))
+        givenActiveCompany()
+
+        service.update(1L, JobUpdateRequest(title = "새 제목"), REQUESTER_ID)
+
+        verify(fileLinkPort, never()).unlinkAllOf(FileOwnerType.JOB, 1L)
+        verify(fileLinkPort, never()).validateAndLink(anyLong(), anyList(), anyPurpose(), anyLong())
+    }
+
+    @Test
+    fun `수정 시 fileIds를 전달하면 기존 연결을 해제한 뒤 다시 연결한다`() {
+        givenFoundNotDeleted(jobOf(status = JobStatus.DRAFT))
+        givenActiveCompany()
+
+        service.update(1L, JobUpdateRequest(fileIds = listOf(3L)), REQUESTER_ID)
+
+        val ordered = inOrder(fileLinkPort)
+        ordered.verify(fileLinkPort).unlinkAllOf(FileOwnerType.JOB, 1L)
+        ordered.verify(fileLinkPort).validateAndLink(
+            requesterId = REQUESTER_ID,
+            fileIds = listOf(3L),
+            purpose = FilePurpose.JOB_ATTACHMENT,
+            ownerId = 1L,
+        )
+    }
+
+    @Test
+    fun `수정 시 fileIds로 빈 배열을 전달하면 전체 해제만 하고 다시 연결하지 않는다`() {
+        givenFoundNotDeleted(jobOf(status = JobStatus.DRAFT))
+        givenActiveCompany()
+
+        service.update(1L, JobUpdateRequest(fileIds = emptyList()), REQUESTER_ID)
+
+        verify(fileLinkPort).unlinkAllOf(FileOwnerType.JOB, 1L)
+        verify(fileLinkPort, never()).validateAndLink(anyLong(), anyList(), anyPurpose(), anyLong())
+    }
+
+    @Test
+    fun `수정 시 타인이 업로드한 파일을 재전송하면 FILE_NOT_OWNED로 거부한다`() {
+        givenFoundNotDeleted(jobOf(status = JobStatus.DRAFT))
+        givenActiveCompany()
+        given(
+            fileLinkPort.validateAndLink(
+                requesterId = REQUESTER_ID,
+                fileIds = listOf(3L),
+                purpose = FilePurpose.JOB_ATTACHMENT,
+                ownerId = 1L,
+            ),
+        ).willThrow(FileNotOwnedException(3L))
+
+        assertThatThrownBy {
+            service.update(1L, JobUpdateRequest(fileIds = listOf(3L)), REQUESTER_ID)
+        }.isInstanceOf(FileNotOwnedException::class.java)
+    }
+
+    @Test
+    fun `공개 상태 공고의 상세 응답에는 첨부파일 목록이 담긴다`() {
+        val job = jobOf(status = JobStatus.PUBLISHED, createdByMemberId = 1L)
+        givenFoundNotDeleted(job)
+        givenActiveCompany()
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.JOB, 1L)).willReturn(listOf(fileSnapshotOf(5L)))
+
+        val response = service.getPublicDetail(1L, REQUESTER_ID)
+
+        assertThat(response.files).extracting("fileId").containsExactly(5L)
+    }
+
+    @Test
+    fun `공개 상태 공고는 조기 반환으로 findRoles를 호출하지 않는다`() {
+        val job = jobOf(status = JobStatus.PUBLISHED, createdByMemberId = 1L)
+        givenFoundNotDeleted(job)
+        givenActiveCompany()
+
+        service.getPublicDetail(1L, REQUESTER_ID)
+
+        verify(memberRoleQueryPort, never()).findRoles(anyLong())
+    }
+
+    @Test
+    fun `DRAFT 공고는 등록자·담당 교사·개발자가 아니면 상세 응답의 첨부파일 목록이 비어 있다`() {
+        val job = jobOf(status = JobStatus.DRAFT, createdByMemberId = 1L, managerMemberId = 2L)
+        given(jobRepository.findById(1L)).willReturn(Optional.of(job))
+        givenActiveCompany()
+        given(memberRoleQueryPort.findRoles(REQUESTER_ID)).willReturn(setOf())
+
+        val response = service.getForAdmin(1L, REQUESTER_ID)
+
+        assertThat(response.files).isEmpty()
+        verify(fileLinkPort, never()).linkedFilesOf(FileOwnerType.JOB, 1L)
+    }
+
+    @Test
+    fun `DRAFT 공고는 등록자가 상세 응답에서 첨부파일 목록을 볼 수 있다`() {
+        val job = jobOf(status = JobStatus.DRAFT, createdByMemberId = REQUESTER_ID)
+        given(jobRepository.findById(1L)).willReturn(Optional.of(job))
+        givenActiveCompany()
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.JOB, 1L)).willReturn(listOf(fileSnapshotOf(5L)))
+
+        val response = service.getForAdmin(1L, REQUESTER_ID)
+
+        assertThat(response.files).extracting("fileId").containsExactly(5L)
+    }
+
+    @Test
+    fun `DRAFT 공고는 개발자가 상세 응답에서 첨부파일 목록을 볼 수 있다`() {
+        val job = jobOf(status = JobStatus.DRAFT, createdByMemberId = 1L)
+        given(jobRepository.findById(1L)).willReturn(Optional.of(job))
+        givenActiveCompany()
+        given(memberRoleQueryPort.findRoles(REQUESTER_ID)).willReturn(setOf(RoleType.DEVELOPER))
+        given(fileLinkPort.linkedFilesOf(FileOwnerType.JOB, 1L)).willReturn(listOf(fileSnapshotOf(5L)))
+
+        val response = service.getForAdmin(1L, REQUESTER_ID)
+
+        assertThat(response.files).extracting("fileId").containsExactly(5L)
     }
 
     // --- 공개 상세와 조회수 ---
@@ -667,6 +852,11 @@ class JobServiceTest {
 
     private fun anyJob(): Job = any(Job::class.java) ?: newJob()
 
+    private fun anyPurpose(): FilePurpose = any(FilePurpose::class.java) ?: FilePurpose.JOB_ATTACHMENT
+
+    private fun fileSnapshotOf(fileId: Long) =
+        FileSnapshot(fileId = fileId, originalName = "첨부파일.pdf", contentType = "application/pdf", size = 1024L)
+
     private fun givenActiveCompany() {
         given(companyQuery.findActiveSummary(1L, REQUESTER_ID)).willReturn(companySummary)
     }
@@ -694,6 +884,7 @@ class JobServiceTest {
         capacity: Int? = null,
         location: String? = null,
         employmentType: String? = null,
+        fileIds: List<Long> = emptyList(),
     ) = JobCreateRequest(
         companyId = 1L,
         postingType = PostingType.MOU,
@@ -708,6 +899,7 @@ class JobServiceTest {
         capacity = capacity,
         location = location,
         employmentType = employmentType,
+        fileIds = fileIds,
     )
 
     private fun publishableRequest(
@@ -732,6 +924,8 @@ class JobServiceTest {
         externalUrl: String? = "https://example.com/apply",
         capacity: Int? = null,
         viewCount: Long = 0,
+        createdByMemberId: Long? = null,
+        managerMemberId: Long? = null,
     ) = Job(
         companyId = 1L,
         type = PostingType.MOU,
@@ -744,6 +938,8 @@ class JobServiceTest {
         bodyMarkdown = content
         this.externalUrl = externalUrl
         this.capacity = capacity
+        this.createdByMemberId = createdByMemberId
+        this.managerMemberId = managerMemberId
     }
 
     private companion object {
