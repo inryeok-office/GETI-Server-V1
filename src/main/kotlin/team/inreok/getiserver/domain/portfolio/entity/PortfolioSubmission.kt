@@ -37,6 +37,9 @@ class PortfolioSubmission(
     @Column(name = "portfolio_url", length = 2000)
     var portfolioUrl: String? = null
 
+    @Column(columnDefinition = "text")
+    var note: String? = null
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     var createdAt: LocalDateTime? = null
