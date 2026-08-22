@@ -20,6 +20,7 @@ import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
 import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.exception.MemberLoginNotAllowedException
 import team.inreok.getiserver.domain.member.exception.OAuthEmailAlreadyRegisteredException
+import team.inreok.getiserver.domain.member.exception.StaffSignupRejectedException
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.member.repository.MemberRoleRepository
 
@@ -113,13 +114,42 @@ class OAuthMemberPortImplTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = MemberStatus::class, names = ["REJECTED", "SUSPENDED", "WITHDRAWN"])
-    fun `로그인이 허용되지 않는 상태의 기존 회원은 Token 없이 거부된다`(status: MemberStatus) {
+    @EnumSource(value = MemberStatus::class, names = ["SUSPENDED", "WITHDRAWN"])
+    fun `정지_탈퇴 상태의 기존 회원은 사유 노출 없이 Token 없이 거부된다`(status: MemberStatus) {
         given(memberRepository.findByOauthProviderAndOauthSubject(OAuthProvider.GOOGLE, "subject-1"))
             .willReturn(member(id = 5L, status = status))
 
         assertThatThrownBy { port.findOrCreateByOAuth("google", "subject-1", "user@example.com") }
             .isInstanceOf(MemberLoginNotAllowedException::class.java)
+    }
+
+    @Test
+    fun `거절된 교직원이 재신청 없이 로그인하면 거절 사유를 담아 거부한다`() {
+        val rejected = member(id = 5L, status = MemberStatus.REJECTED).also { it.rejectionReason = "증빙 서류 미비" }
+        given(memberRepository.findByOauthProviderAndOauthSubject(OAuthProvider.GOOGLE, "subject-1"))
+            .willReturn(rejected)
+
+        assertThatThrownBy { port.findOrCreateByOAuth("google", "subject-1", "user@example.com") }
+            .isInstanceOf(StaffSignupRejectedException::class.java)
+            .hasMessage("증빙 서류 미비")
+        // 거부만 하고 상태는 그대로 REJECTED로 남는다(재신청이 아니므로 리셋하지 않는다).
+        assertThat(rejected.status).isEqualTo(MemberStatus.REJECTED)
+    }
+
+    @Test
+    fun `거절된 교직원이 재신청하면 승인 대기로 되돌리고 사유를 지운 뒤 로그인을 허용한다`() {
+        val rejected = member(id = 5L, status = MemberStatus.REJECTED).also { it.rejectionReason = "증빙 서류 미비" }
+        given(memberRepository.findByOauthProviderAndOauthSubject(OAuthProvider.GOOGLE, "subject-1"))
+            .willReturn(rejected)
+        given(memberRoleRepository.findAllByIdMemberId(5L)).willReturn(emptyList())
+
+        val result = port.findOrCreateByOAuth("google", "subject-1", "user@example.com", reapply = true)
+
+        assertThat(result.status).isEqualTo("PENDING")
+        assertThat(result.roles).isEmpty()
+        assertThat(result.isNewMember).isFalse()
+        assertThat(rejected.status).isEqualTo(MemberStatus.PENDING)
+        assertThat(rejected.rejectionReason).isNull()
     }
 
     @Test
