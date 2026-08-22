@@ -16,9 +16,8 @@ import team.inreok.getiserver.domain.member.repository.MajorRepository
 import team.inreok.getiserver.domain.member.repository.TechStackRepository
 
 /**
- * V5__seed_tech_stacks.sql이 실제로 tech_stacks에 Seed 데이터를 적재하는지 Testcontainers
- * PostgreSQL로 검증한다. majors는 실제 기관 전공명을 알 수 없어 이 PR에서 Seed하지 않았고,
- * 이 Gap이 회귀로 재발하지 않게 현재 상태(비어 있음)를 명시적으로 남긴다.
+ * V5__seed_tech_stacks.sql이 실제로 tech_stacks에, V31__seed_majors.sql이 majors에 각각
+ * Seed 데이터를 적재하는지 Testcontainers PostgreSQL로 검증한다(Issue #200).
  */
 @Testcontainers
 @DataJpaTest
@@ -39,8 +38,29 @@ class MemberSelectionMetadataIntegrationTest
         }
 
         @Test
-        fun `majors는 아직 Seed 데이터가 없다(알려진 Gap, 후속 Migration 필요)`() {
-            assertThat(majorRepository.findAll()).isEmpty()
+        fun `majors에는 V31 Seed Migration이 적재한 최종 확정 15개 값이 있다`() {
+            val majors = majorRepository.findAll()
+
+            assertThat(majors).allMatch { it.active }
+            assertThat(majors.map { it.name })
+                .doesNotContain("기능반")
+                .containsExactlyInAnyOrder(
+                    "백엔드",
+                    "프론트엔드",
+                    "디자인",
+                    "AI",
+                    "IoT",
+                    "DevOps",
+                    "클라우드 컴퓨팅",
+                    "모바일 앱 개발 (Flutter)",
+                    "네이티브 앱 개발 (Android)",
+                    "네이티브 앱 개발 (iOS)",
+                    "사이버 보안",
+                    "모바일 로보틱스",
+                    "IT 네트워크",
+                    "크로스 플랫폼 앱 개발 (React Native)",
+                    "기타",
+                )
         }
 
         companion object {
