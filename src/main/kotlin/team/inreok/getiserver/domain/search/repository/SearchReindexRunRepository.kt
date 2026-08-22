@@ -5,5 +5,7 @@ import team.inreok.getiserver.domain.search.entity.SearchReindexRun
 import team.inreok.getiserver.domain.search.entity.type.SearchReindexStatus
 
 interface SearchReindexRunRepository : JpaRepository<SearchReindexRun, Long> {
+    fun findFirstByOrderByCreatedAtDescIdDesc(): SearchReindexRun?
+
     fun existsByStatusIn(statuses: Collection<SearchReindexStatus>): Boolean
 }
