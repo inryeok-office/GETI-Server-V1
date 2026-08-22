@@ -81,7 +81,7 @@ fun toJobApplicationDraftResponse(
  * 최신 Version을 조회하지 않아, 이후 Form이 수정되어도 기존 지원서의 Schema Snapshot을 유지한다.
  * Form ID와 Version 중 하나만 누락된 데이터는 Snapshot 정합성 오류로 드러낸다.
  */
-fun formFieldResponsesOf(
+internal fun formFieldResponsesOf(
     objectMapper: ObjectMapper,
     formVersionRepository: FormVersionRepository,
     application: JobApplication,
