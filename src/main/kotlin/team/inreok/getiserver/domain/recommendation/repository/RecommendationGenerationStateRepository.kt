@@ -8,6 +8,8 @@ import team.inreok.getiserver.domain.recommendation.entity.RecommendationGenerat
 import java.time.LocalDateTime
 
 interface RecommendationGenerationStateRepository : JpaRepository<RecommendationGenerationState, Long> {
+    fun findFirstByOrderByUpdatedAtDescIdDesc(): RecommendationGenerationState?
+
     fun findByMemberId(memberId: Long): RecommendationGenerationState?
 
     /**
