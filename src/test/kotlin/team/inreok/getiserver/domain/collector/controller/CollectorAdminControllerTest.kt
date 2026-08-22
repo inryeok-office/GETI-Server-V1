@@ -293,6 +293,9 @@ class CollectorAdminControllerTest
                     status = CollectionRunStatus.SUCCESS,
                     successCount = 3,
                     failureCount = 0,
+                    createdCount = 1,
+                    updatedCount = 1,
+                    failedCount = 0,
                     partialQualityCount = 1,
                     startedAt = LocalDateTime.of(2026, 8, 3, 3, 0),
                     finishedAt = LocalDateTime.of(2026, 8, 3, 3, 5),
@@ -305,6 +308,9 @@ class CollectorAdminControllerTest
                 .perform(get("/api/v1/admin/collection-runs/1").with(authOf(1L, "DEVELOPER")))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.createdCount").value(1))
+                .andExpect(jsonPath("$.data.updatedCount").value(1))
+                .andExpect(jsonPath("$.data.failedCount").value(0))
                 .andExpect(jsonPath("$.data.partialQualityCount").value(1))
         }
 
