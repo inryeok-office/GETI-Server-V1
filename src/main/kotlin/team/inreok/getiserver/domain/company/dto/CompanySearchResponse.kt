@@ -38,11 +38,20 @@ data class CompanySummaryResponse(
         nullable = true,
     )
     val logoUrl: String?,
+    @param:Schema(description = "현재 모집 중인 공개 공고 수", example = "2")
+    val openJobCount: Long,
+    @param:Schema(description = "현재 모집 중인 MOU 공고 수", example = "1")
+    val activeMouJobCount: Long,
+    @param:Schema(description = "DRAFT를 제외한 누적 지원 건수", example = "24")
+    val applicationCount: Long,
 ) {
     companion object {
         fun from(
             company: Company,
             logoUrl: String?,
+            openJobCount: Long,
+            activeMouJobCount: Long,
+            applicationCount: Long,
         ): CompanySummaryResponse =
             CompanySummaryResponse(
                 companyId = requireNotNull(company.id) { "저장된 Company는 id를 가져야 합니다." },
@@ -50,6 +59,9 @@ data class CompanySummaryResponse(
                 companyType = company.type,
                 mouStatus = company.mouStatus,
                 logoUrl = logoUrl,
+                openJobCount = openJobCount,
+                activeMouJobCount = activeMouJobCount,
+                applicationCount = applicationCount,
             )
     }
 }
