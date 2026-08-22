@@ -1,11 +1,13 @@
 package team.inreok.getiserver.domain.application.service.impl
 
 import team.inreok.getiserver.domain.application.dto.ApplicationAnswer
+import team.inreok.getiserver.domain.application.dto.FormFieldResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationFileResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.JobApplicationStatusHistory
+import team.inreok.getiserver.domain.application.repository.FormVersionRepository
 import team.inreok.getiserver.domain.file.link.FileSnapshot
 import tools.jackson.databind.ObjectMapper
 
@@ -29,6 +31,9 @@ import tools.jackson.databind.ObjectMapper
  * [availableActions]는 반대로 학생 본인 상세 조회(`JobApplicationServiceImpl.getDetail`, Issue
  * #184)에서만 채워 넘긴다 -- `availableStudentActionNames`(`JobApplicationServiceImpl.kt`)가 계산하는
  * "학생이 다음에 수행할 수 있는 Action" 목록이라 교사·개발자용 조회에는 의미가 없다.
+ *
+ * [questions]는 학생용 응답 호출부가 지원서에 저장된 `formId`/`formVersion`으로 조회해 넘긴다.
+ * 교사·개발자 응답은 기존 계약을 유지하기 위해 기본값(emptyList)을 사용한다.
  */
 fun toJobApplicationDraftResponse(
     objectMapper: ObjectMapper,
@@ -39,6 +44,7 @@ fun toJobApplicationDraftResponse(
     managerMemberId: Long? = null,
     managerName: String? = null,
     availableActions: List<String> = emptyList(),
+    questions: List<FormFieldResponse> = emptyList(),
 ): JobApplicationDraftResponse =
     JobApplicationDraftResponse(
         applicationId = requireNotNull(application.id),
@@ -67,7 +73,29 @@ fun toJobApplicationDraftResponse(
         createdAt = requireNotNull(application.createdAt),
         updatedAt = requireNotNull(application.updatedAt),
         availableActions = availableActions,
+        questions = questions,
     )
+
+/**
+ * 지원서가 생성될 당시 저장한 Form Version의 문항 구조를 반환한다. Form의 currentVersion이나
+ * 최신 Version을 조회하지 않아, 이후 Form이 수정되어도 기존 지원서의 Schema Snapshot을 유지한다.
+ * Form ID와 Version 중 하나만 누락된 데이터는 Snapshot 정합성 오류로 드러낸다.
+ */
+fun formFieldResponsesOf(
+    objectMapper: ObjectMapper,
+    formVersionRepository: FormVersionRepository,
+    application: JobApplication,
+): List<FormFieldResponse> {
+    if (application.formId == null && application.formVersion == null) return emptyList()
+
+    val formId = requireNotNull(application.formId) { "지원서에 Form ID가 없습니다." }
+    val formVersion = requireNotNull(application.formVersion) { "지원서에 Form Version이 없습니다." }
+    val version =
+        formVersionRepository.findByFormIdAndVersion(formId, formVersion)
+            ?: error("지원서에 저장된 Form Version을 찾을 수 없습니다.")
+
+    return readFormFieldResponses(objectMapper, version.schemaData)
+}
 
 private fun FileSnapshot.toJobApplicationFileResponse(): JobApplicationFileResponse =
     JobApplicationFileResponse(
