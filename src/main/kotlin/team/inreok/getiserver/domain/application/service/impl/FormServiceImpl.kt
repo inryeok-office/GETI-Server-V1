@@ -251,5 +251,5 @@ class FormServiceImpl(
     private fun writeSchemas(schemas: List<FormFieldSchema>): String = objectMapper.writeValueAsString(schemas)
 
     private fun readSchemas(version: FormVersion): List<FormFieldSchema> =
-        objectMapper.readValue(version.schemaData, Array<FormFieldSchema>::class.java).toList()
+        readFormFieldSchemas(objectMapper, version.schemaData)
 }

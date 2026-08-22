@@ -13,13 +13,16 @@ import java.time.LocalDateTime
  * `status = DRAFT`면 아래 선택 Field가 비어 있어도 저장되고, `status = PUBLISHED`면 게시
  * 필수값을 모두 검증한다(`JobServiceImpl.validateForPublish`).
  *
- * `sourceId`, `formId`, `fileIds`, `targetGrades`(복수), `techStackIds`는 이번 범위에서
- * 제외했다(Issue #60). 해당 Column이나 연결 Table이 아직 없다.
+ * `sourceId`, `formId`, `targetGrades`(복수), `techStackIds`는 이번 범위에서 제외했다(Issue #60).
+ * 해당 Column이나 연결 Table이 아직 없다.
  *
  * `discordChannelKey`는 원시 Discord Snowflake가 아니라 **논리 채널 Key**다(Notification 후속
  * 요구사항 문서 §10, Issue #97). 운영 Channel Id를 API·DB에 노출하지 않기 위해 Program의
  * `discordChannelId`(원시 Snowflake, 기존 계약)와 다른 방식을 택했다. 생략하면 게시 시
  * 기본 채널을 쓴다.
+ *
+ * `fileIds`(첨부파일 연결)는 File 도메인의 공개 Port(`FileLinkPort`, Issue #85)로 소유권·목적·
+ * 상태·개수를 검증한 뒤 연결한다(Issue #126, `ProgramCreateRequest.fileIds`와 동일한 방식).
  */
 @Schema(description = "공고 등록·임시저장 요청")
 data class JobCreateRequest(
@@ -99,4 +102,11 @@ data class JobCreateRequest(
         maxLength = 255,
     )
     val discordChannelKey: String? = null,
+    @param:Schema(
+        description =
+            "연결할 첨부파일 ID 목록(선택). FilePurpose=JOB_ATTACHMENT로 업로드하고 본인이 " +
+                "소유한 파일만 연결할 수 있다. 개수 상한은 app.file.policies 설정을 따른다.",
+        example = "[1, 2]",
+    )
+    val fileIds: List<Long> = emptyList(),
 )

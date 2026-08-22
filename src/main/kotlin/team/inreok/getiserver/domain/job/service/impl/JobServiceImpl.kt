@@ -5,12 +5,18 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
+import team.inreok.getiserver.domain.file.entity.type.FilePurpose
+import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.file.link.FileSnapshot
 import team.inreok.getiserver.domain.job.access.JobAiAnalysisAccessor
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
 import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
+import team.inreok.getiserver.domain.job.access.canViewJobFiles
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
+import team.inreok.getiserver.domain.job.dto.JobFileResponse
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
 import team.inreok.getiserver.domain.job.dto.JobUpdateRequest
 import team.inreok.getiserver.domain.job.entity.Job
@@ -29,9 +35,15 @@ import team.inreok.getiserver.domain.job.service.JobService
 import team.inreok.getiserver.domain.job.service.PUBLIC_VISIBLE_STATUSES
 import team.inreok.getiserver.domain.job.service.validateCommon
 import team.inreok.getiserver.domain.job.service.validateForPublish
+import team.inreok.getiserver.domain.member.entity.type.RoleType
+import team.inreok.getiserver.domain.member.query.MemberRoleQueryPort
 import team.inreok.getiserver.global.discord.DiscordChannelResolver
 import java.time.LocalDateTime
 
+// Job CRUD·상태 관리·File 연동을 한 Service가 담당해(Issue #126) Public Method 개수가 detekt
+// 기본 TooManyFunctions 임계값을 넘는다. ProgramServiceImpl이 이미 같은 방식으로 Suppress한
+// 전례를 따른다.
+@Suppress("TooManyFunctions")
 @Service
 class JobServiceImpl(
     private val jobRepository: JobRepository,
@@ -41,6 +53,8 @@ class JobServiceImpl(
     private val jobAiAnalysisAccessor: JobAiAnalysisAccessor,
     private val jobApplicationEligibilityAccessor: JobApplicationEligibilityAccessor,
     private val jobBookmarkAccessor: JobBookmarkAccessor,
+    private val fileLinkPort: FileLinkPort,
+    private val memberRoleQueryPort: MemberRoleQueryPort,
 ) : JobService {
     @Transactional
     override fun create(
@@ -85,23 +99,34 @@ class JobServiceImpl(
         // @CreationTimestamp/@UpdateTimestamp는 Flush 시점에 채워진다. 응답의 createdAt/updatedAt이
         // null로 나가지 않도록 저장과 동시에 Flush한다(CompanyServiceImpl.create와 같은 이유).
         val saved = jobRepository.saveAndFlush(job)
+        val jobId = requireNotNull(saved.id)
+
+        // 저장 이후에만 연결한다 -- 연결 대상(ownerId)으로 쓸 jobId가 저장 전에는 없다
+        // (ProgramServiceImpl.create와 동일한 순서). 소유권·목적·상태·개수 검증은
+        // FileLinkPort.validateAndLink가 수행하며, 거부되면 예외가 Transaction을 되돌려 공고도
+        // 함께 만들어지지 않는다.
+        if (request.fileIds.isNotEmpty()) {
+            fileLinkPort.validateAndLink(
+                requesterId = createdByMemberId,
+                fileIds = request.fileIds,
+                purpose = FilePurpose.JOB_ATTACHMENT,
+                ownerId = jobId,
+            )
+        }
+
         // Transaction Commit 이후에만 실제로 전달된다(@TransactionalEventListener). 색인 동기화가
         // 실패해도 이 등록 자체를 Rollback하지 않는다(Issue #69, PostgreSQL이 원본 유지).
-        eventPublisher.publishEvent(JobChangedEvent(requireNotNull(saved.id)))
+        eventPublisher.publishEvent(JobChangedEvent(jobId))
         if (saved.status == JobStatus.PUBLISHED) {
-            eventPublisher.publishEvent(JobDiscordEvent(requireNotNull(saved.id), JobDiscordAction.PUBLISHED))
+            eventPublisher.publishEvent(JobDiscordEvent(jobId, JobDiscordAction.PUBLISHED))
         }
         return JobDetailResponse.from(
             saved,
             company,
-            aiAnalysis = jobAiAnalysisAccessor.findSnapshot(requireNotNull(saved.id)),
-            application =
-                applicationEligibilityOf(
-                    jobApplicationEligibilityAccessor,
-                    requireNotNull(saved.id),
-                    createdByMemberId,
-                ),
-            bookmarked = bookmarkedOf(jobBookmarkAccessor, requireNotNull(saved.id), createdByMemberId),
+            aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
+            application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, createdByMemberId),
+            bookmarked = bookmarkedOf(jobBookmarkAccessor, jobId, createdByMemberId),
+            files = jobFilesFor(saved, jobId, createdByMemberId),
         )
     }
 
@@ -117,6 +142,7 @@ class JobServiceImpl(
         // Discord 채널 Key만 같이 옮기지 않는 이유는 허용 목록 검증이 Service의 설정 의존성을
         // 필요로 하기 때문이다 -- 순수 함수로 분리한 applyUpdatableFields에는 넣을 수 없다.
         request.discordChannelKey?.let { job.discordChannelKey = requireAllowedDiscordChannelKey(it) }
+        applyFileIdsUpdate(jobId, requesterId, request)
 
         validateCommon(job)
         // 이미 공개된 공고라면 수정 후에도 게시 조건을 계속 만족해야 한다. 그렇지 않으면 본문이
@@ -137,6 +163,7 @@ class JobServiceImpl(
             aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
             application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
             bookmarked = bookmarkedOf(jobBookmarkAccessor, jobId, requesterId),
+            files = jobFilesFor(job, jobId, requesterId),
         )
     }
 
@@ -168,6 +195,12 @@ class JobServiceImpl(
             // 같은 Transaction에서 함께 바꿔 두 값이 어긋나지 않게 한다.
             JobStatus.DELETED -> {
                 job.deletedAt = now
+                // Storage Binary는 지우지 않는다(FileLinkPort.unlinkAllOf KDoc 참고) -- 연결만
+                // 해제해 이 공고가 더 이상 첨부파일을 "쓰고 있지 않은" 상태로 만든다. 물리 삭제는
+                // Cleanup(Phase 5)이 보존 기간을 보고 판단한다(Issue #126, ProgramServiceImpl과
+                // 동일한 결정). findNotDeleted가 이미 이 Job Row를 조회한 같은 Transaction 안에서
+                // 호출해 새 Transaction을 열지 않는다.
+                fileLinkPort.unlinkAllOf(FileOwnerType.JOB, jobId)
             }
 
             JobStatus.DRAFT -> {
@@ -185,6 +218,7 @@ class JobServiceImpl(
             aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
             application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
             bookmarked = bookmarkedOf(jobBookmarkAccessor, jobId, requesterId),
+            files = jobFilesFor(job, jobId, requesterId),
         )
     }
 
@@ -221,6 +255,7 @@ class JobServiceImpl(
             aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
             application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
             bookmarked = bookmarkedOf(jobBookmarkAccessor, jobId, requesterId),
+            files = jobFilesFor(job, jobId, requesterId),
         )
     }
 
@@ -243,6 +278,7 @@ class JobServiceImpl(
                 aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
                 application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
                 bookmarked = bookmarkedOf(jobBookmarkAccessor, jobId, requesterId),
+                files = jobFilesFor(job, jobId, requesterId),
             )
         jobRepository.incrementViewCount(jobId)
         return response
@@ -286,6 +322,62 @@ class JobServiceImpl(
             // 걸러내므로 실제로는 도달하지 않지만, 전이표를 한곳에서 읽을 수 있게 남겨둔다.
             JobStatus.DELETED -> emptySet()
         }
+
+    /**
+     * `fileIds`를 전달하지 않으면(null) 기존 첨부파일을 그대로 둔다. 전달하면(빈 List 포함) 그
+     * 목록을 최종 상태로 취급해 기존 연결을 모두 해제한 뒤 다시 연결한다(`JobUpdateRequest` KDoc,
+     * `ProgramServiceImpl.applyFileIdsUpdate`와 동일한 방식). 항상 먼저 `unlinkAllOf`로 끊는
+     * 이유는 `FileLinkPortImpl.verifyCount`가 "현재 연결된 개수 + 새로 연결할 개수"로 상한을
+     * 검사하기 때문이다 -- 먼저 끊지 않으면 교체가 아니라 추가로 계산되어 상한을 잘못 초과 판정한다.
+     */
+    private fun applyFileIdsUpdate(
+        jobId: Long,
+        requesterId: Long,
+        request: JobUpdateRequest,
+    ) {
+        val fileIds = request.fileIds ?: return
+        fileLinkPort.unlinkAllOf(FileOwnerType.JOB, jobId)
+        if (fileIds.isNotEmpty()) {
+            fileLinkPort.validateAndLink(
+                requesterId = requesterId,
+                fileIds = fileIds,
+                purpose = FilePurpose.JOB_ATTACHMENT,
+                ownerId = jobId,
+            )
+        }
+    }
+
+    /**
+     * DRAFT 상태에서 조회 권한이 없는 요청자에게는 빈 목록을 반환한다 -- `JobFileAccessChecker`의
+     * 다운로드 권한 판정과 같은 규칙(`canViewJobFiles`)을 써야 상세 응답이 실제 다운로드 가능
+     * 여부보다 더 많은 첨부파일 Metadata(파일명 등)를 흘리지 않는다.
+     *
+     * DEVELOPER 판정은 `JobFileAccessChecker.canDownload`와 동일하게 [memberRoleQueryPort]로
+     * DB에서 직접 조회한다(`ProgramServiceImpl.programFilesFor`와 동일한 이유 -- 두 판정 경로가
+     * 서로 다른 Role 출처를 쓰면 토큰 발급 이후 역할이 바뀐 사용자에게 다운로드 권한과 상세 응답의
+     * 파일 목록 노출 여부가 어긋날 수 있다).
+     */
+    private fun jobFilesFor(
+        job: Job,
+        jobId: Long,
+        requesterId: Long,
+    ): List<JobFileResponse> {
+        val isDeveloper = { RoleType.DEVELOPER in memberRoleQueryPort.findRoles(requesterId) }
+        return if (canViewJobFiles(job, requesterId, isDeveloper)) {
+            fileLinkPort.linkedFilesOf(FileOwnerType.JOB, jobId).map { it.toResponse() }
+        } else {
+            emptyList()
+        }
+    }
+
+    private fun FileSnapshot.toResponse(): JobFileResponse =
+        JobFileResponse(
+            fileId = fileId,
+            originalName = originalName,
+            contentType = contentType,
+            size = size,
+            downloadUrl = "/api/v1/files/$fileId/download",
+        )
 }
 
 // JobServiceImpl의 Method 개수를 detekt TooManyFunctions 한도 안에서 유지하기 위해 순수 함수로

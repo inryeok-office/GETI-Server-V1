@@ -1,5 +1,6 @@
 package team.inreok.getiserver.persistence
 
+import jakarta.persistence.EntityManager
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -42,6 +43,7 @@ class CollectorRepositoryIntegrationTest
         private val jobSourceRepository: JobSourceRepository,
         private val collectionRunRepository: CollectionRunRepository,
         private val collectionRunErrorRepository: CollectionRunErrorRepository,
+        private val entityManager: EntityManager,
     ) {
         private val now: LocalDateTime = LocalDateTime.of(2026, 8, 3, 12, 0)
 
@@ -121,6 +123,68 @@ class CollectorRepositoryIntegrationTest
             val recentOnly =
                 collectionRunRepository.search(null, null, now.minusHours(2), null, PageRequest.of(0, 20))
             assertThat(recentOnly.content).hasSize(2)
+        }
+
+        @Test
+        fun `신규 수집 실행의 생성 갱신 건수를 저장하고 다시 조회한다`() {
+            val mma = jobSourceRepository.findBySourceCode(JobSourceCode.MMA)!!
+            val saved =
+                CollectionRun(
+                    sourceId = mma.id!!,
+                    action = CollectorAction.SYNC,
+                    status = CollectionRunStatus.SUCCESS,
+                    startedAt = now,
+                ).apply {
+                    createdCount = 2
+                    updatedCount = 1
+                    successCount = 4
+                    failureCount = 0
+                    totalCount = 4
+                }.let(collectionRunRepository::saveAndFlush)
+
+            entityManager.clear()
+            val reloaded = collectionRunRepository.findById(saved.id!!).orElseThrow()
+
+            assertThat(reloaded.createdCount).isEqualTo(2)
+            assertThat(reloaded.updatedCount).isEqualTo(1)
+            assertThat(reloaded.successCount).isEqualTo(4)
+        }
+
+        @Test
+        fun `V30 이전 형식으로 저장된 실행은 생성 갱신 건수를 집계 불가 null로 조회한다`() {
+            val mma = jobSourceRepository.findBySourceCode(JobSourceCode.MMA)!!
+            entityManager
+                .createNativeQuery(
+                    """
+                    INSERT INTO collection_runs (
+                        source_id, action, status, total_count, success_count, failure_count,
+                        partial_quality_count, started_at, created_at, updated_at
+                    ) VALUES (
+                        :sourceId, 'SYNC', 'SUCCESS', 3, 3, 0, 0, :startedAt, :startedAt, :startedAt
+                    )
+                    """.trimIndent(),
+                ).setParameter("sourceId", mma.id!!)
+                .setParameter("startedAt", now)
+                .executeUpdate()
+            entityManager.flush()
+            entityManager.clear()
+
+            val historical = collectionRunRepository.findAll().single()
+
+            assertThat(historical.createdCount).isNull()
+            assertThat(historical.updatedCount).isNull()
+        }
+
+        @Test
+        fun `Migration은 생성 갱신 건수의 성공 건수 초과를 막는 Check Constraint를 만든다`() {
+            val constraintNames =
+                entityManager
+                    .createNativeQuery(
+                        "SELECT conname FROM pg_constraint WHERE conrelid = 'collection_runs'::regclass",
+                    ).resultList
+                    .map { value: Any? -> value.toString() }
+
+            assertThat(constraintNames).contains("ck_collection_runs_upsert_counts")
         }
 
         @Test
