@@ -108,6 +108,8 @@ class RecommendationControllerTest
                 bookmarked = false,
                 techStacks = emptyList(),
                 bookmarkCount = 0,
+                location = "서울특별시 중구",
+                employmentType = "인턴",
             )
 
         private fun recommendationItemOf() =
@@ -141,6 +143,8 @@ class RecommendationControllerTest
                 .andExpect(jsonPath("$.data.enabled").value(true))
                 .andExpect(jsonPath("$.data.status").value("READY"))
                 .andExpect(jsonPath("$.data.content[0].job.jobId").value(1))
+                .andExpect(jsonPath("$.data.content[0].job.location").value("서울특별시 중구"))
+                .andExpect(jsonPath("$.data.content[0].job.employmentType").value("인턴"))
                 .andExpect(jsonPath("$.data.content[0].score").value(82))
                 .andExpect(jsonPath("$.data.content[0].suitabilityLevel").value("RECOMMENDED"))
                 .andExpect(jsonPath("$.data.page").value(0))

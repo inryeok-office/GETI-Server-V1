@@ -44,6 +44,8 @@ internal fun buildRecommendationJobResponse(
     bookmarked = bookmarked,
     techStacks = techStacks,
     bookmarkCount = bookmarkCount,
+    location = job.location,
+    employmentType = job.employmentType,
 )
 
 /**
