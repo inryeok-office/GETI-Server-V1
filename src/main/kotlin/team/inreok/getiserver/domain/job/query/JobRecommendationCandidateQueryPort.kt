@@ -52,4 +52,8 @@ data class JobRecommendationCandidateSnapshot(
     val postingType: PostingType,
     val applicationMethod: ApplicationMethod,
     val viewCount: Long,
+    /** Job Summary의 근무지역이다. 입력되지 않았으면 null이다(Issue #223). */
+    val location: String? = null,
+    /** Job Summary의 고용형태다. 입력되지 않았으면 null이다(Issue #223). */
+    val employmentType: String? = null,
 )

@@ -39,5 +39,7 @@ class JobRecommendationCandidateQueryPortImpl(
             postingType = type,
             applicationMethod = applicationMethod,
             viewCount = viewCount,
+            location = location,
+            employmentType = employmentType,
         )
 }

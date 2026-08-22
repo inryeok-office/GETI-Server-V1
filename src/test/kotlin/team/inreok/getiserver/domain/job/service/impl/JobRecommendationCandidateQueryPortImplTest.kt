@@ -33,6 +33,8 @@ class JobRecommendationCandidateQueryPortImplTest {
             targetGrade = 3
             publishedAt = LocalDateTime.of(2026, 8, 1, 0, 0)
             recruitmentEndedAt = LocalDateTime.of(2026, 9, 1, 0, 0)
+            location = "서울특별시 중구"
+            employmentType = "인턴"
         }
 
     @Test
@@ -51,6 +53,8 @@ class JobRecommendationCandidateQueryPortImplTest {
         assertThat(result[0].postingType).isEqualTo(PostingType.GENERAL)
         assertThat(result[0].applicationMethod).isEqualTo(ApplicationMethod.INTERNAL)
         assertThat(result[0].viewCount).isEqualTo(0)
+        assertThat(result[0].location).isEqualTo("서울특별시 중구")
+        assertThat(result[0].employmentType).isEqualTo("인턴")
     }
 
     @Test
