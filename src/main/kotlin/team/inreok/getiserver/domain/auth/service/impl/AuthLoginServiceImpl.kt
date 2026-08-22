@@ -24,9 +24,10 @@ class AuthLoginServiceImpl(
         provider: String,
         code: String,
         state: String,
+        reapply: Boolean,
     ): OAuthLoginResponse {
         val userInfo = oAuthLoginService.exchangeCode(provider, code, state)
-        val member = oAuthMemberPort.findOrCreateByOAuth(provider, userInfo.subject, userInfo.email)
+        val member = oAuthMemberPort.findOrCreateByOAuth(provider, userInfo.subject, userInfo.email, reapply)
         // 콜백은 별도 기기 식별자를 받지 않는다. Refresh Token은 deviceIdentifier 없이 발급한다.
         val tokens = tokenService.issueFor(member.memberId, member.roles, deviceIdentifier = null)
         return OAuthLoginResponse(
