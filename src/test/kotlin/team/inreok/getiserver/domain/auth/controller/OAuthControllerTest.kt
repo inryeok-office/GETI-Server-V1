@@ -105,7 +105,7 @@ class OAuthControllerTest
                         memberId = 1L,
                         roles = listOf("TEACHER"),
                         status = "ACTIVE",
-                        isNewMember = false,
+                        newMember = false,
                     ),
                 )
             given(refreshTokenCookieFactory.create("refresh-token"))
@@ -126,7 +126,7 @@ class OAuthControllerTest
                 .andExpect(jsonPath("$.data.memberId").value(1))
                 .andExpect(jsonPath("$.data.roles[0]").value("TEACHER"))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.data.isNewMember").value(false))
+                .andExpect(jsonPath("$.data.newMember").value(false))
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("refreshToken=refresh-token")))
         }
 
@@ -231,7 +231,7 @@ class OAuthControllerTest
                         memberId = 1L,
                         roles = emptyList(),
                         status = "PENDING",
-                        isNewMember = false,
+                        newMember = false,
                     ),
                 )
             given(refreshTokenCookieFactory.create("refresh-token"))
@@ -297,7 +297,7 @@ class OAuthControllerTest
         }
 
         @Test
-        fun `콜백이 clientType=WEB으로 성공하면 Body 없이 302로 Frontend URL로 Redirect하고 Refresh Cookie는 그대로 설정한다`() {
+        fun `콜백이 clientType=WEB 기존회원으로 성공하면 Body 없이 302로 newMember=false를 붙여 Redirect하고 Refresh Cookie는 그대로 설정한다`() {
             given(oAuthClientTypeStore.consume("state-value")).willReturn(OAuthClientType.WEB)
             given(authLoginService.loginWithOAuth("google", "auth-code", "state-value"))
                 .willReturn(
@@ -308,7 +308,7 @@ class OAuthControllerTest
                         memberId = 1L,
                         roles = listOf("STUDENT"),
                         status = "ACTIVE",
-                        isNewMember = false,
+                        newMember = false,
                     ),
                 )
             given(refreshTokenCookieFactory.create("refresh-token"))
@@ -320,14 +320,52 @@ class OAuthControllerTest
                         .build(),
                 )
             given(
-                oAuthWebRedirectUriResolver.successUri(),
-            ).willReturn(URI.create("https://web.example.com/auth/callback"))
+                oAuthWebRedirectUriResolver.successUri(false),
+            ).willReturn(URI.create("https://web.example.com/auth/callback?newMember=false"))
 
             mockMvc
                 .perform(get("/api/v1/auth/google/callback").param("code", "auth-code").param("state", "state-value"))
                 .andExpect(status().isFound)
-                .andExpect(header().string(HttpHeaders.LOCATION, "https://web.example.com/auth/callback"))
-                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("refreshToken=refresh-token")))
+                .andExpect(
+                    header().string(HttpHeaders.LOCATION, "https://web.example.com/auth/callback?newMember=false"),
+                ).andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("refreshToken=refresh-token")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("HttpOnly")))
+                .andExpect(jsonPath("$").doesNotExist())
+        }
+
+        @Test
+        fun `콜백이 clientType=WEB 신규회원으로 성공하면 302로 newMember=true를 붙여 Redirect한다`() {
+            given(oAuthClientTypeStore.consume("state-value")).willReturn(OAuthClientType.WEB)
+            given(authLoginService.loginWithOAuth("dg", "auth-code", "state-value"))
+                .willReturn(
+                    OAuthLoginResponse(
+                        accessToken = "access-token",
+                        refreshToken = "refresh-token",
+                        accessTokenExpiresInSeconds = 1800,
+                        memberId = 2L,
+                        roles = emptyList(),
+                        status = "PENDING",
+                        newMember = true,
+                    ),
+                )
+            given(refreshTokenCookieFactory.create("refresh-token"))
+                .willReturn(
+                    ResponseCookie
+                        .from("refreshToken", "refresh-token")
+                        .httpOnly(true)
+                        .path("/api/v1/auth")
+                        .build(),
+                )
+            given(
+                oAuthWebRedirectUriResolver.successUri(true),
+            ).willReturn(URI.create("https://web.example.com/auth/callback?newMember=true"))
+
+            mockMvc
+                .perform(get("/api/v1/auth/dg/callback").param("code", "auth-code").param("state", "state-value"))
+                .andExpect(status().isFound)
+                .andExpect(
+                    header().string(HttpHeaders.LOCATION, "https://web.example.com/auth/callback?newMember=true"),
+                ).andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("refreshToken=refresh-token")))
                 .andExpect(jsonPath("$").doesNotExist())
         }
 

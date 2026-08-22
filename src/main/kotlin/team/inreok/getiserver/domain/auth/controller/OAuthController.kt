@@ -100,9 +100,9 @@ class OAuthController(
     // Provider가 사용자 동의 후 이 URL로 code/state를 붙여 Redirect한다. code/state를 교환해 회원을
     // 조회/생성하고 GETI 자체 Access/Refresh Token을 발급한다. authorize에서 clientType=WEB을 밝힌
     // 요청이면 JSON 대신 Frontend Callback URL로 302 Redirect한다(Issue #162) -- Access/Refresh
-    // Token은 URL에 담기지 않는다. Frontend는 이미 설정된 Refresh Token Cookie로
-    // POST /api/v1/auth/token/refresh를 호출해 Access Token을 얻고, 필요하면
-    // GET /api/v1/me/profile로 회원 상태(isNewMember/status에 해당하는 정보)를 조회한다.
+    // Token은 URL에 담기지 않고, 신규 회원 여부만 newMember Query Parameter로 전달한다. Frontend는
+    // 이미 설정된 Refresh Token Cookie로 POST /api/v1/auth/token/refresh를 호출해 Access Token을
+    // 얻고, 필요하면 GET /api/v1/me/profile로 회원 상태(status 등)를 조회한다.
     @Operation(
         summary = "OAuth 콜백 처리 및 로그인 완료",
         description = """
@@ -112,8 +112,9 @@ class OAuthController(
 
             authorize에서 clientType=WEB을 지정한 요청이면 Token/회원 정보를 Body에 담지 않고 대신
             302로 Frontend Callback URL로 Redirect한다(Body 없음, Token은 URL에도 담기지 않는다).
-            Frontend는 Cookie 기반 `POST /api/v1/auth/token/refresh`로 Access Token을 얻고,
-            `GET /api/v1/me/profile`로 회원 상태(최초 로그인·승인 대기 여부 판단)를 조회한다. 로그인
+            Web은 Body가 없으므로 신규 회원 여부는 성공 Redirect URL의 `newMember`(true/false) Query
+            Parameter로 전달한다. Frontend는 Cookie 기반 `POST /api/v1/auth/token/refresh`로 Access
+            Token을 얻고, `GET /api/v1/me/profile`로 회원 상태(승인 대기 여부 등)를 조회한다. 로그인
             자체가 실패해도(state 무효, Provider 실패 등) 같은 Callback URL로 `error={ErrorCode}` Query
             Parameter만 붙여 Redirect한다(Provider 원본 오류, Stack Trace, code, state는 포함하지 않는다).
 
@@ -188,7 +189,9 @@ class OAuthController(
             // 얻어야 하므로 Cookie 자체는 항상 설정한다.
             response.addHeader(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.create(login.refreshToken).toString())
             if (clientType == OAuthClientType.WEB) {
-                redirectTo(oAuthWebRedirectUriResolver.successUri())
+                // Web Callback은 Body가 없으므로 신규 회원 여부만 successUri의 newMember Query
+                // Parameter로 전달한다(Access/Refresh Token은 URL에 담지 않는다, Issue #162 후속).
+                redirectTo(oAuthWebRedirectUriResolver.successUri(login.newMember))
             } else {
                 ResponseEntity.ok(ApiResponse.of(login))
             }
