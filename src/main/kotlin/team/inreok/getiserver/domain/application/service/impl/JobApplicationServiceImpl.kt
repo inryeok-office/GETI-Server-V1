@@ -237,7 +237,13 @@ class JobApplicationServiceImpl(
         // 방금 생성한 초안이라 애초에 연결된 파일이 있을 수 없다(id가 이 저장 이전에는 없었다).
         // 불필요한 File 도메인 조회를 피하기 위해 빈 목록을 그대로 넘긴다(InquiryServiceImpl.create와
         // 동일한 판단, toJobApplicationDraftResponse KDoc 참고).
-        return toJobApplicationDraftResponse(objectMapper, saveNewApplication(application), files = emptyList())
+        val savedApplication = saveNewApplication(application)
+        return toJobApplicationDraftResponse(
+            objectMapper,
+            savedApplication,
+            files = emptyList(),
+            questions = formFieldResponsesOf(objectMapper, formVersionRepository, savedApplication),
+        )
     }
 
     @Transactional
@@ -259,7 +265,12 @@ class JobApplicationServiceImpl(
         request.answers?.let { application.answers = writeAnswers(it) }
 
         jobApplicationRepository.flush()
-        return toJobApplicationDraftResponse(objectMapper, application, currentFilesOf(fileLinkPort, application))
+        return toJobApplicationDraftResponse(
+            objectMapper,
+            application,
+            currentFilesOf(fileLinkPort, application),
+            questions = formFieldResponsesOf(objectMapper, formVersionRepository, application),
+        )
     }
 
     @Transactional
@@ -301,7 +312,12 @@ class JobApplicationServiceImpl(
         if (request.action == JobApplicationAction.SUBMIT || request.action == JobApplicationAction.RESUBMIT) {
             recordSubmissionSnapshot(jobApplicationSubmissionRepository, application)
         }
-        return toJobApplicationDraftResponse(objectMapper, application, currentFilesOf(fileLinkPort, application))
+        return toJobApplicationDraftResponse(
+            objectMapper,
+            application,
+            currentFilesOf(fileLinkPort, application),
+            questions = formFieldResponsesOf(objectMapper, formVersionRepository, application),
+        )
     }
 
     @Transactional(readOnly = true)
@@ -376,6 +392,7 @@ class JobApplicationServiceImpl(
             jobTitle = job?.title,
             companyName = job?.let { companyQuery.findActiveSummary(it.companyId, studentMemberId)?.name },
             availableActions = availableStudentActionNames(application.status),
+            questions = formFieldResponsesOf(objectMapper, formVersionRepository, application),
         )
     }
 
