@@ -7,6 +7,7 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
+import team.inreok.getiserver.domain.file.archive.FileArchiveContentEntry
 import team.inreok.getiserver.domain.file.archive.FileArchiveEntry
 import team.inreok.getiserver.domain.file.archive.FileArchiveProperties
 import team.inreok.getiserver.domain.file.entity.StoredFile
@@ -111,6 +112,22 @@ class FileArchivePortImplTest {
         port.writeZip(listOf(FileArchiveEntry(1L, "../../secret.pdf")), output)
 
         assertThat(readZipEntries(output).keys).containsExactly(".._.._secret.pdf")
+    }
+
+    @Test
+    fun `서버 생성 문서와 File을 하나의 ZIP으로 묶고 문서 Entry도 안전화한다`() {
+        val file = storedFileOf(id = 1L, name = "resume.pdf", content = "S".toByteArray())
+        givenFiles(file)
+        val output = ByteArrayOutputStream()
+
+        port.writeZip(
+            listOf(FileArchiveEntry(1L, "application-42_resume.pdf")),
+            listOf(FileArchiveContentEntry("../../application-42-profile.xlsx\u0000", "XLSX".toByteArray())),
+            output,
+        )
+
+        assertThat(readZipEntries(output).keys)
+            .containsExactlyInAnyOrder(".._.._application-42-profile.xlsx", "application-42_resume.pdf")
     }
 
     @Test

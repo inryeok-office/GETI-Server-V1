@@ -11,14 +11,21 @@ import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
+import team.inreok.getiserver.domain.application.dto.ApplicationExportMaterialType
+import team.inreok.getiserver.domain.application.entity.FormVersion
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.JobApplicationSubmission
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.exception.ApplicationReviewForbiddenException
 import team.inreok.getiserver.domain.application.exception.JobNotFoundException
+import team.inreok.getiserver.domain.application.repository.FormVersionRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationSubmissionRepository
+import team.inreok.getiserver.domain.application.service.ApplicationAnswersExportData
+import team.inreok.getiserver.domain.application.service.ApplicationExportDocumentWriter
+import team.inreok.getiserver.domain.application.service.ApplicationProfileExportData
 import team.inreok.getiserver.domain.application.service.JobApplicationExportService
+import team.inreok.getiserver.domain.file.archive.FileArchiveContentEntry
 import team.inreok.getiserver.domain.file.archive.FileArchiveEntry
 import team.inreok.getiserver.domain.file.archive.FileArchivePort
 import team.inreok.getiserver.domain.file.archive.FileArchiveResult
@@ -45,6 +52,9 @@ class JobApplicationExportServiceImplTest {
     private lateinit var jobApplicationSubmissionRepository: JobApplicationSubmissionRepository
 
     @Mock
+    private lateinit var formVersionRepository: FormVersionRepository
+
+    @Mock
     private lateinit var jobApplicationSnapshotQueryPort: JobApplicationSnapshotQueryPort
 
     @Mock
@@ -53,14 +63,19 @@ class JobApplicationExportServiceImplTest {
     @Mock
     private lateinit var fileArchivePort: FileArchivePort
 
+    @Mock
+    private lateinit var documentWriter: ApplicationExportDocumentWriter
+
     private val service: JobApplicationExportService by lazy {
         JobApplicationExportServiceImpl(
             jobApplicationRepository,
             jobApplicationSubmissionRepository,
+            formVersionRepository,
             jobApplicationSnapshotQueryPort,
             fileLinkPort,
             fileArchivePort,
             JsonMapper(),
+            documentWriter,
         )
     }
 
@@ -280,6 +295,68 @@ class JobApplicationExportServiceImplTest {
         org.mockito.Mockito
             .verify(fileArchivePort)
             .writeZip(entries, output)
+    }
+
+    @Test
+    fun `PROFILE과 ANSWERS는 제출 Snapshot과 제출 당시 Form Version으로 문서를 만든다`() {
+        val application =
+            applicationOf(id = 1L, applicantName = "홍길동").apply {
+                contactEmail = "application-snapshot@example.com"
+                contactPhone = "010-1111-2222"
+                applicantCohort = 2
+                applicantDepartment = "컴퓨터공학"
+            }
+        givenApplications(application)
+        givenJob(createdByMemberId = MANAGER_ID)
+        val submission =
+            submissionOf(applicationId = 1L, fileIds = emptyList()).apply {
+                formId = 10L
+                formVersion = 1
+                answers = """[{"fieldId":"motivation","value":"제출 답변"},{"fieldId":"resume","fileIds":[99]}]"""
+            }
+        given(jobApplicationSubmissionRepository.findLatestByApplicationIdIn(setOf(1L))).willReturn(listOf(submission))
+        given(formVersionRepository.findByFormIdIn(listOf(10L))).willReturn(
+            listOf(
+                FormVersion(
+                    formId = 10L,
+                    version = 1,
+                    schemaData =
+                        """[{"key":"motivation","type":"TEXTAREA","label":"지원 동기","description":null,"required":true,"order":0,"options":null,"filePolicy":null},{"key":"resume","type":"FILE","label":"이력서","description":null,"required":false,"order":1,"options":null,"filePolicy":{}}]""",
+                ),
+            ),
+        )
+        given(
+            documentWriter.writeProfile(
+                org.mockito.ArgumentMatchers.any(ApplicationProfileExportData::class.java)
+                    ?: ApplicationProfileExportData(1L, null, "", null, null, null),
+            ),
+        ).willReturn(
+            FileArchiveContentEntry("application-1-profile.xlsx", byteArrayOf(1)),
+        )
+        given(
+            documentWriter.writeAnswers(
+                org.mockito.ArgumentMatchers.any(ApplicationAnswersExportData::class.java)
+                    ?: ApplicationAnswersExportData(1L, emptyList()),
+            ),
+        ).willReturn(
+            FileArchiveContentEntry("application-1-answers.xlsx", byteArrayOf(2)),
+        )
+
+        val export =
+            service.buildExportMaterials(
+                JOB_ID,
+                MANAGER_ID,
+                isDeveloper = false,
+                materialTypes = setOf(ApplicationExportMaterialType.PROFILE, ApplicationExportMaterialType.ANSWERS),
+            )
+
+        assertThat(export.fileEntries).isEmpty()
+        assertThat(export.contentEntries.map { it.displayName })
+            .containsExactly("application-1-profile.xlsx", "application-1-answers.xlsx")
+        org.mockito.Mockito
+            .verify(formVersionRepository)
+            .findByFormIdIn(listOf(10L))
+        org.mockito.Mockito.verifyNoInteractions(fileLinkPort)
     }
 
     // Issue #203: applicationIds Filter는 Service의 In-Memory 필터가 아니라 Repository의 DB

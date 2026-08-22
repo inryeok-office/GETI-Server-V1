@@ -4,11 +4,18 @@ import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.application.dto.ApplicationAnswer
+import team.inreok.getiserver.domain.application.dto.ApplicationExportMaterialType
 import team.inreok.getiserver.domain.application.entity.JobApplicationSubmission
 import team.inreok.getiserver.domain.application.exception.ApplicationReviewForbiddenException
 import team.inreok.getiserver.domain.application.exception.JobNotFoundException
+import team.inreok.getiserver.domain.application.repository.FormVersionRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationSubmissionRepository
+import team.inreok.getiserver.domain.application.service.ApplicationAnswerExportRow
+import team.inreok.getiserver.domain.application.service.ApplicationAnswersExportData
+import team.inreok.getiserver.domain.application.service.ApplicationExportDocumentWriter
+import team.inreok.getiserver.domain.application.service.ApplicationProfileExportData
+import team.inreok.getiserver.domain.application.service.JobApplicationExport
 import team.inreok.getiserver.domain.application.service.JobApplicationExportService
 import team.inreok.getiserver.domain.file.archive.FileArchiveEntry
 import team.inreok.getiserver.domain.file.archive.FileArchivePort
@@ -24,11 +31,90 @@ import java.io.OutputStream
 class JobApplicationExportServiceImpl(
     private val jobApplicationRepository: JobApplicationRepository,
     private val jobApplicationSubmissionRepository: JobApplicationSubmissionRepository,
+    private val formVersionRepository: FormVersionRepository,
     private val jobApplicationSnapshotQueryPort: JobApplicationSnapshotQueryPort,
     private val fileLinkPort: FileLinkPort,
     private val fileArchivePort: FileArchivePort,
     private val objectMapper: ObjectMapper,
+    private val documentWriter: ApplicationExportDocumentWriter,
 ) : JobApplicationExportService {
+    @Transactional(readOnly = true)
+    override fun buildExportMaterials(
+        jobId: Long,
+        requesterMemberId: Long,
+        isDeveloper: Boolean,
+        applicationIds: List<Long>?,
+        materialTypes: Set<ApplicationExportMaterialType>,
+    ): JobApplicationExport {
+        requireManagerOrDeveloper(jobId, requesterMemberId, isDeveloper)
+        if (applicationIds != null && applicationIds.isEmpty()) return JobApplicationExport(emptyList(), emptyList())
+
+        val applications = findApplications(jobId, applicationIds)
+        val applicationIdsInResult = applications.mapNotNull { it.id }.toSet()
+        if (applicationIdsInResult.isEmpty()) return JobApplicationExport(emptyList(), emptyList())
+
+        val latestSubmissionByApplicationId =
+            jobApplicationSubmissionRepository
+                .findLatestByApplicationIdIn(applicationIdsInResult)
+                .associateBy { it.applicationId }
+        val submissions = latestSubmissionByApplicationId.values.toList()
+        val formVersions =
+            if (ApplicationExportMaterialType.ANSWERS in materialTypes) {
+                formVersionRepository
+                    .findByFormIdIn(submissions.mapNotNull { it.formId }.toList())
+                    .associateBy { it.formId to it.version }
+            } else {
+                emptyMap()
+            }
+
+        val fileEntries = mutableListOf<FileArchiveEntry>()
+        val contentEntries = mutableListOf<team.inreok.getiserver.domain.file.archive.FileArchiveContentEntry>()
+        applications.forEach { application ->
+            val applicationId = requireNotNull(application.id)
+            val submission = latestSubmissionByApplicationId[applicationId] ?: return@forEach
+            if (ApplicationExportMaterialType.PROFILE in materialTypes) {
+                contentEntries +=
+                    documentWriter.writeProfile(
+                        ApplicationProfileExportData(
+                            applicationId = applicationId,
+                            applicantName = application.applicantName,
+                            contactEmail = application.contactEmail,
+                            contactPhone = application.contactPhone,
+                            applicantCohort = application.applicantCohort,
+                            applicantDepartment = application.applicantDepartment,
+                        ),
+                    )
+            }
+            if (ApplicationExportMaterialType.ANSWERS in materialTypes) {
+                contentEntries +=
+                    documentWriter.writeAnswers(
+                        ApplicationAnswersExportData(
+                            applicationId = applicationId,
+                            rows = answerRows(submission, formVersions[submission.formId to submission.formVersion]),
+                        ),
+                    )
+            }
+            if (ApplicationExportMaterialType.ATTACHMENTS in materialTypes) {
+                val fileIds = fileIdsOf(submission)
+                if (fileIds.isNotEmpty()) {
+                    val snapshots = fileLinkPort.snapshotsOf(fileIds.toSet())
+                    val applicantLabel = application.applicantName ?: "지원자$applicationId"
+                    fileIds.forEach { fileId ->
+                        snapshots[fileId]?.let { snapshot ->
+                            fileEntries +=
+                                FileArchiveEntry(
+                                    fileId = fileId,
+                                    displayName =
+                                        "application-${applicationId}_${applicantLabel}_${snapshot.originalName}",
+                                )
+                        }
+                    }
+                }
+            }
+        }
+        return JobApplicationExport(fileEntries, contentEntries)
+    }
+
     @Transactional(readOnly = true)
     override fun buildExportEntries(
         jobId: Long,
@@ -122,6 +208,57 @@ class JobApplicationExportServiceImpl(
         // FileArchivePort.writeZip이 같은 상황(FileArchiveEmptyException)과 개수·용량 상한
         // 초과를 이미 판정하므로 같은 검증을 중복하지 않는다(Issue #154 참고).
         fileArchivePort.writeZip(entries, outputStream)
+    }
+
+    override fun writeZip(
+        export: JobApplicationExport,
+        outputStream: OutputStream,
+    ) {
+        fileArchivePort.writeZip(export.fileEntries, export.contentEntries, outputStream)
+    }
+
+    private fun findApplications(
+        jobId: Long,
+        applicationIds: List<Long>?,
+    ) = jobApplicationRepository
+        .search(
+            jobId = jobId,
+            status = null,
+            hasApplicantName = false,
+            applicantName = "",
+            cohort = null,
+            department = null,
+            hasJobFilter = false,
+            jobIds = emptySet(),
+            hasApplicationIds = applicationIds != null,
+            applicationIds = applicationIds ?: emptySet(),
+            pageable = Pageable.unpaged(),
+        ).content
+
+    private fun answerRows(
+        submission: JobApplicationSubmission,
+        formVersion: team.inreok.getiserver.domain.application.entity.FormVersion?,
+    ): List<ApplicationAnswerExportRow> {
+        if (formVersion == null) return emptyList()
+        val schemaByKey =
+            objectMapper
+                .readValue(
+                    formVersion.schemaData,
+                    Array<team.inreok.getiserver.domain.application.dto.FormFieldSchema>::class.java,
+                ).associateBy { it.key }
+        return objectMapper
+            .readValue(submission.answers, Array<ApplicationAnswer>::class.java)
+            .mapNotNull { answer ->
+                val schema = schemaByKey[answer.fieldId] ?: return@mapNotNull null
+                if (schema.type == team.inreok.getiserver.domain.application.entity.type.FormFieldType.FILE) {
+                    return@mapNotNull null
+                }
+                ApplicationAnswerExportRow(
+                    fieldId = answer.fieldId,
+                    question = schema.label,
+                    answer = answer.value?.let { if (it.isString) it.asString() else it.toString() }.orEmpty(),
+                )
+            }.sortedBy { schemaByKey.getValue(it.fieldId).order }
     }
 
     private fun fileIdsOf(submission: JobApplicationSubmission?): List<Long> {

@@ -59,6 +59,17 @@ interface FileArchivePort {
         entries: List<FileArchiveEntry>,
         outputStream: OutputStream,
     ): FileArchiveResult
+
+    /**
+     * [entries]의 Storage 파일과 이미 생성된 [contentEntries]를 하나의 ZIP으로 묶는다.
+     * Application 도메인이 생성한 XLSX 같은 문서도 File 도메인의 동일한 Entry 안전화·개수·용량
+     * 상한·ZIP 생성 경로를 사용하도록 하기 위한 확장 계약이다(Issue #218).
+     */
+    fun writeZip(
+        entries: List<FileArchiveEntry>,
+        contentEntries: List<FileArchiveContentEntry>,
+        outputStream: OutputStream,
+    ): FileArchiveResult
 }
 
 /**
@@ -73,6 +84,14 @@ interface FileArchivePort {
 data class FileArchiveEntry(
     val fileId: Long,
     val displayName: String,
+)
+
+/** ZIP에 직접 기록할 서버 생성 문서다. [displayName]은 사용자 입력을 포함할 수 있으므로
+ * 구현체가 Storage File과 동일한 방식으로 안전화한다. */
+@NamedInterface
+data class FileArchiveContentEntry(
+    val displayName: String,
+    val content: ByteArray,
 )
 
 @NamedInterface

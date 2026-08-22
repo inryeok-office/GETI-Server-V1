@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import team.inreok.getiserver.domain.application.dto.ApplicationExportMaterialType
 import team.inreok.getiserver.domain.application.service.JobApplicationExportService
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
 import java.io.OutputStream
@@ -38,9 +39,10 @@ class JobApplicationExportController(
         description = """
             대상 공고의 등록자·담당 교사·개발자만 호출할 수 있다. 지원자마다 가장 최근 제출
             Snapshot(재제출로 임시저장 중인 값이 아니라 실제로 SUBMIT/RESUBMIT된 시점의 답변)에
-            담긴 FILE 유형 답변의 첨부파일을 모아 `{지원자 이름}_{원본 파일명}` 형태의 항목으로
-            ZIP에 담는다. 응답 Content-Type은 application/zip이고 Content-Disposition으로
-            내려받을 파일명을 지정한다.
+            담긴 FILE 유형 답변의 첨부파일을 모아 ZIP에 담는다. PROFILE/ANSWERS를 선택하면
+            지원자별 XLSX 문서도 같은 ZIP에 담는다. 모든 Entry에는 안정적인 applicationId가
+            포함되며 사용자 제어 파일명은 ZIP Entry에서 안전화한다. 응답 Content-Type은
+            application/zip이고 Content-Disposition으로 내려받을 파일명을 지정한다.
 
             applicationIds를 지정하면 이 공고 지원자 중 선택된 지원서의 자료만 ZIP에 담는다
             (Issue #203). 지정하지 않으면 기존과 동일하게 이 공고의 전체 지원자가 대상이다(하위
@@ -77,6 +79,15 @@ class JobApplicationExportController(
         )
         @RequestParam(required = false)
         applicationIds: List<Long>?,
+        @Parameter(
+            description =
+                "ZIP에 포함할 자료 종류(선택, 쉼표 또는 반복 지정). PROFILE과 ANSWERS는 " +
+                    "지원자별 XLSX 문서로 생성되고 FILE 답변은 ATTACHMENTS로만 포함된다. " +
+                    "생략하면 ATTACHMENTS만 포함한다.",
+            example = "PROFILE,ANSWERS,ATTACHMENTS",
+        )
+        @RequestParam(required = false)
+        materialTypes: List<ApplicationExportMaterialType>?,
         response: HttpServletResponse,
     ) {
         val requesterMemberId = authentication.principal as Long
@@ -84,8 +95,16 @@ class JobApplicationExportController(
 
         // DB 조회(권한 판정 포함)를 먼저 끝내 여기서 예외가 나면 정상적인 JSON 오류 응답으로
         // 나가게 한다 -- 이 시점까지는 response에 아무것도 쓰지 않았다.
-        val entries =
-            jobApplicationExportService.buildExportEntries(jobId, requesterMemberId, isDeveloper, applicationIds)
+        val export =
+            jobApplicationExportService.buildExportMaterials(
+                jobId = jobId,
+                requesterMemberId = requesterMemberId,
+                isDeveloper = isDeveloper,
+                applicationIds = applicationIds,
+                materialTypes =
+                    materialTypes?.toSet()?.ifEmpty { setOf(ApplicationExportMaterialType.ATTACHMENTS) }
+                        ?: setOf(ApplicationExportMaterialType.ATTACHMENTS),
+            )
 
         // Content-Type/Content-Disposition을 여기서 미리 정하지 않는다 -- writeZip 내부의
         // 개수·용량 상한 검증(FileArchivePort.writeZip, Storage 접근 전)이나 entries가 비어
@@ -100,7 +119,7 @@ class JobApplicationExportController(
                 response.contentType = "application/zip"
                 response.setHeader("Content-Disposition", "attachment; filename=\"job-$jobId-applications.zip\"")
             }
-        jobApplicationExportService.writeZip(entries, deferredOutput)
+        jobApplicationExportService.writeZip(export, deferredOutput)
     }
 
     /**
