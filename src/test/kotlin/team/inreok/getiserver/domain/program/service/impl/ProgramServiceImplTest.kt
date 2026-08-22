@@ -56,7 +56,6 @@ import team.inreok.getiserver.domain.program.exception.InvalidCapacityException
 import team.inreok.getiserver.domain.program.exception.NotEnrolledException
 import team.inreok.getiserver.domain.program.exception.ProgramActionNotAvailableException
 import team.inreok.getiserver.domain.program.exception.ProgramClosedException
-import team.inreok.getiserver.domain.program.exception.ProgramDeletedException
 import team.inreok.getiserver.domain.program.exception.ProgramFormNotLinkableException
 import team.inreok.getiserver.domain.program.exception.ProgramFullException
 import team.inreok.getiserver.domain.program.exception.ProgramManageForbiddenException
@@ -637,14 +636,20 @@ class ProgramServiceImplTest {
     }
 
     @Test
-    fun `삭제된 프로그램 상세 조회는 PROGRAM_DELETED다`() {
+    fun `삭제된 프로그램 상세 조회는 삭제 일시를 반환한다`() {
         val program = programOf(status = ProgramStatus.DELETED, createdByMemberId = 7L)
         program.deletedAt = now
         given(programRepository.findById(1L)).willReturn(Optional.of(program))
 
-        assertThatThrownBy {
-            service.getDetail(1L, 1L)
-        }.isInstanceOf(ProgramDeletedException::class.java)
+        given(programTargetGradeRepository.findAllByIdProgramId(1L)).willReturn(emptyList())
+        given(memberApplicantSnapshotQueryPort.findById(1L)).willReturn(null)
+        given(programApplicationRepository.countByProgramIdAndStatus(1L, ProgramApplicationStatus.APPLIED))
+            .willReturn(0L)
+
+        val response = service.getDetail(1L, 1L)
+
+        assertThat(response.status).isEqualTo(ProgramStatus.DELETED)
+        assertThat(response.programDeletedAt).isEqualTo(now)
     }
 
     @Test
@@ -679,6 +684,32 @@ class ProgramServiceImplTest {
         val response = service.getDetail(1L, requesterMemberId = 99L)
 
         assertThat(response.location).isNull()
+    }
+
+    @Test
+    fun `프로그램 상세는 현재 요청자의 가장 최근 신청 이력 시각만 반환한다`() {
+        val program = programOf(status = ProgramStatus.PUBLISHED, createdByMemberId = 7L)
+        val submittedAt = now.minusHours(1)
+        val cancelledAt = now.minusMinutes(30)
+        val latestApplication =
+            ProgramApplication(programId = 1L, applicantMemberId = 1L).apply {
+                id = 2L
+                appliedAt = submittedAt
+                canceledAt = cancelledAt
+            }
+        given(programRepository.findById(1L)).willReturn(Optional.of(program))
+        given(
+            programApplicationRepository.findFirstByProgramIdAndApplicantMemberIdOrderByAppliedAtDescIdDesc(1L, 1L),
+        ).willReturn(latestApplication)
+
+        val response = service.getDetail(1L, requesterMemberId = 1L)
+
+        assertThat(response.applicationSubmittedAt).isEqualTo(submittedAt)
+        assertThat(response.applicationCancelledAt).isEqualTo(cancelledAt)
+        assertThat(response.programDeletedAt).isNull()
+        verify(
+            programApplicationRepository,
+        ).findFirstByProgramIdAndApplicantMemberIdOrderByAppliedAtDescIdDesc(1L, 1L)
     }
 
     @Test
