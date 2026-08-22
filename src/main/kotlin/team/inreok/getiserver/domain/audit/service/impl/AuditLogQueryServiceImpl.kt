@@ -152,12 +152,13 @@ class AuditLogQueryServiceImpl(
         )
     }
 
-    private fun JsonNode?.safeValue(field: String): String? {
-        if (field.contains(SENSITIVE_FIELD_PATTERN)) return null
-        if (this == null || isNull) return null
-        if (!isValueNode) return null
-        return maskDetail(asText())
-    }
+    private fun JsonNode?.safeValue(field: String): String? =
+        when {
+            field.contains(SENSITIVE_FIELD_PATTERN) -> null
+            this == null || isNull -> null
+            !isValueNode -> null
+            else -> maskDetail(asText())
+        }
 
     private fun maskDetail(value: String?): String? {
         if (value.isNullOrBlank()) return value
@@ -173,7 +174,8 @@ class AuditLogQueryServiceImpl(
         val TOKEN_PATTERN = Regex("(?i)(bearer\\s+|token[=: ]+)[A-Za-z0-9._~-]+")
         val SENSITIVE_FIELD_PATTERN =
             Regex(
-                "(?i)(authorization|jwt|refresh.?token|password|secret|oauth.?code|provider.?secret|raw.?body|file.?binary)",
+                "(?i)(authorization|jwt|refresh.?token|password|secret|" +
+                    "oauth.?code|provider.?secret|raw.?body|file.?binary)",
             )
     }
 }
