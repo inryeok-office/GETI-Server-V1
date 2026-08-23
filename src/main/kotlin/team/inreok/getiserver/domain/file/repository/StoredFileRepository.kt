@@ -1,6 +1,8 @@
 package team.inreok.getiserver.domain.file.repository
 
 import jakarta.persistence.LockModeType
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
@@ -63,4 +65,38 @@ interface StoredFileRepository : JpaRepository<StoredFile, Long> {
         purpose: FilePurpose,
         status: FileStatus,
     ): Long
+
+    /**
+     * 관리자 공통 파일 목록 조회다(Issue #225). 화면이 실제로 쓰는 "상태/용도 Filter"와 파일명
+     * 검색만 제공한다(과도한 Filter 추가 금지, Issue #225 요구사항). `:status`/`:purpose`는 null이면
+     * 조건을 적용하지 않는다(`JobApplicationRepository.search`와 동일한 관례).
+     *
+     * `:hasOriginalName`이 false면 이름 조건은 항상 참으로 취급된다(`InquiryRepository.searchForAdmin`
+     * KDoc의 `:hasQuery`와 동일한 이유 -- `:originalName`을 null로 바인딩하면 Type 추론 문제가
+     * 난다). `:originalName`은 Service 계층에서 LIKE Wildcard(%, _)를 미리 이스케이프해 전달한다
+     * (`domain.file.service.escapeLikePattern`).
+     *
+     * `FileStatus`(PENDING/FAILED/DELETED 포함)를 그대로 노출한다 -- 운영 화면은 업로드 중간
+     * 상태·고아 파일까지 확인할 수 있어야 하므로, 일반 사용자 조회(`isVisible()`)와 달리 상태로
+     * 걸러내지 않는다. 최신 업로드순(`id DESC`)으로 고정 정렬해 `pageable`의 Sort는 무시한다.
+     */
+    @Query(
+        """
+        SELECT f FROM StoredFile f
+        WHERE (:status IS NULL OR f.status = :status)
+          AND (:purpose IS NULL OR f.purpose = :purpose)
+          AND (
+            :hasOriginalName = FALSE
+            OR LOWER(f.originalName) LIKE LOWER(CONCAT('%', :originalName, '%')) ESCAPE '\'
+          )
+        ORDER BY f.id DESC
+        """,
+    )
+    fun searchForAdmin(
+        @Param("status") status: FileStatus?,
+        @Param("purpose") purpose: FilePurpose?,
+        @Param("hasOriginalName") hasOriginalName: Boolean,
+        @Param("originalName") originalName: String,
+        pageable: Pageable,
+    ): Page<StoredFile>
 }
