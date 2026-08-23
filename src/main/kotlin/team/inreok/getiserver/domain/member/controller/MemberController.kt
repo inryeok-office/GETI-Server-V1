@@ -40,8 +40,9 @@ class MemberController(
             memberId로 지정한 학생의 프로필을 조회한다. 대상이 학생(STUDENT)이 아니면 404로 처리한다.
             대상 프로필이 비공개(isPublic=false)일 때 응답 범위는 요청자 Role에 따라 다르다.
             학생이 조회하면 이름, 프로필 이미지, 기수, 학과만 내려주고 전공/기술스택/희망직무/
-            자기소개는 빈 값으로 응답한다(profileRestricted=true). 교사(TEACHER)와 개발자(DEVELOPER)는
-            학생 관리·상담 목적으로 비공개 프로필도 전체를 받는다(profileRestricted=false).
+            자기소개/links는 빈 값으로 응답한다(profileRestricted=true). 교사(TEACHER)와
+            개발자(DEVELOPER)는 학생 관리·상담 목적으로 비공개 프로필도 전체를 받는다
+            (profileRestricted=false).
         """,
     )
     @ApiResponses(
