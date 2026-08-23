@@ -43,6 +43,12 @@ data class ProgramDetailResponse(
     val applicationStartAt: LocalDateTime?,
     @param:Schema(description = "신청 종료 일시", nullable = true)
     val applicationEndAt: LocalDateTime?,
+    @param:Schema(description = "현재 요청자의 가장 최근 신청 이력 생성 일시", nullable = true)
+    val applicationSubmittedAt: LocalDateTime?,
+    @param:Schema(description = "현재 요청자의 가장 최근 신청 이력 취소 일시", nullable = true)
+    val applicationCancelledAt: LocalDateTime?,
+    @param:Schema(description = "프로그램 삭제 일시", nullable = true)
+    val programDeletedAt: LocalDateTime?,
     @param:Schema(description = "모집 정원", nullable = true)
     val capacity: Int?,
     @param:Schema(description = "현재 활성 신청 인원", example = "18")

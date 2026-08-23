@@ -13,6 +13,8 @@ import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryTar
 import java.time.LocalDateTime
 
 interface DiscordDeliveryRepository : JpaRepository<DiscordDelivery, Long> {
+    fun findFirstByOrderByUpdatedAtDescIdDesc(): DiscordDelivery?
+
     fun findByIdempotencyKey(idempotencyKey: String): DiscordDelivery?
 
     /**

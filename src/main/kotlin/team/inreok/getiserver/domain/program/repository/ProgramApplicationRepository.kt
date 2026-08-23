@@ -10,6 +10,11 @@ import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationStatu
 // 목록 조회용 Method(search 등)를 미리 추가하지 않았다(아직 필요하지 않은 조회 Method를 미리
 // 만들지 않는다는 원칙, docs/ai/coding-conventions.md).
 interface ProgramApplicationRepository : JpaRepository<ProgramApplication, Long> {
+    fun findFirstByProgramIdAndApplicantMemberIdOrderByAppliedAtDescIdDesc(
+        programId: Long,
+        applicantMemberId: Long,
+    ): ProgramApplication?
+
     fun findByProgramIdAndApplicantMemberIdAndStatus(
         programId: Long,
         applicantMemberId: Long,
