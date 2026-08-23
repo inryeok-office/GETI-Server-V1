@@ -9,6 +9,8 @@ interface FormVersionRepository : JpaRepository<FormVersion, Long> {
         version: Int,
     ): FormVersion?
 
+    fun findByFormIdIn(formIds: Collection<Long>): List<FormVersion>
+
     // Form 상세 조회는 항상 현재(최신) 버전의 필드 구조를 보여준다(요구사항 5.4절).
     fun findTopByFormIdOrderByVersionDesc(formId: Long): FormVersion?
 }

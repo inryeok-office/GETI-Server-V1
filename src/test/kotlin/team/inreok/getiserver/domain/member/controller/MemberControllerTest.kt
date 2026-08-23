@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.inreok.getiserver.domain.member.dto.MemberProfileLinkResponse
 import team.inreok.getiserver.domain.member.dto.MemberProfileResponse
 import team.inreok.getiserver.domain.member.dto.MemberSearchItemResponse
 import team.inreok.getiserver.domain.member.dto.MemberSearchResponse
@@ -70,6 +71,7 @@ class MemberControllerTest
                 techStacks = listOf("Kotlin"),
                 desiredJob = "Backend Developer",
                 bio = "비공개 자기소개",
+                links = listOf(MemberProfileLinkResponse(label = "기술 블로그", url = "https://blog.example.com")),
                 isPublic = false,
                 profileRestricted = false,
             )
@@ -87,6 +89,7 @@ class MemberControllerTest
                     techStacks = listOf("Kotlin", "Spring Boot"),
                     desiredJob = "Backend Developer",
                     bio = "안녕하세요",
+                    links = listOf(MemberProfileLinkResponse(label = "기술 블로그", url = "https://blog.example.com")),
                     isPublic = true,
                     profileRestricted = false,
                 ),
@@ -102,6 +105,8 @@ class MemberControllerTest
                 .andExpect(jsonPath("$.data.majors[0]").value("소프트웨어"))
                 .andExpect(jsonPath("$.data.techStacks.length()").value(2))
                 .andExpect(jsonPath("$.data.desiredJob").value("Backend Developer"))
+                .andExpect(jsonPath("$.data.links[0].label").value("기술 블로그"))
+                .andExpect(jsonPath("$.data.links[0].url").value("https://blog.example.com"))
                 .andExpect(jsonPath("$.data.isPublic").value(true))
                 .andExpect(jsonPath("$.data.profileRestricted").value(false))
         }

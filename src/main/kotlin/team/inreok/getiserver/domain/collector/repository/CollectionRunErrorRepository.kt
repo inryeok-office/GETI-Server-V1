@@ -5,4 +5,6 @@ import team.inreok.getiserver.domain.collector.entity.CollectionRunError
 
 interface CollectionRunErrorRepository : JpaRepository<CollectionRunError, Long> {
     fun findAllByRunIdOrderByOccurredAtAsc(runId: Long): List<CollectionRunError>
+
+    fun findFirstByRunIdOrderByOccurredAtDesc(runId: Long): CollectionRunError?
 }

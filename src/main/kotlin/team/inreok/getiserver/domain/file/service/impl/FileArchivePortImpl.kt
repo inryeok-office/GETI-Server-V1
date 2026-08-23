@@ -3,6 +3,7 @@ package team.inreok.getiserver.domain.file.service.impl
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.stereotype.Service
+import team.inreok.getiserver.domain.file.archive.FileArchiveContentEntry
 import team.inreok.getiserver.domain.file.archive.FileArchiveEntry
 import team.inreok.getiserver.domain.file.archive.FileArchivePort
 import team.inreok.getiserver.domain.file.archive.FileArchiveProperties
@@ -36,8 +37,14 @@ class FileArchivePortImpl(
     override fun writeZip(
         entries: List<FileArchiveEntry>,
         outputStream: OutputStream,
+    ): FileArchiveResult = writeZip(entries, emptyList(), outputStream)
+
+    override fun writeZip(
+        entries: List<FileArchiveEntry>,
+        contentEntries: List<FileArchiveContentEntry>,
+        outputStream: OutputStream,
     ): FileArchiveResult {
-        validateEntryCount(entries.size)
+        validateEntryCount(entries.size + contentEntries.size)
 
         // FileLinkPortImpl.snapshotsOf와 같은 이유로 빈 목록이면 조회 자체를 생략한다.
         val filesById =
@@ -50,9 +57,12 @@ class FileArchivePortImpl(
         // 존재하지 않거나 보이지 않는 상태의 fileId는 FileLinkPort.snapshotsOf와 같은 방식으로
         // 조용히 건너뛴다(§23) -- List - Set은 원래 순서를 보존한다.
         val notVisibleFileIds = entries.map { it.fileId } - visibleEntries.map { it.fileId }.toSet()
-        if (visibleEntries.isEmpty()) throw FileArchiveEmptyException()
+        if (visibleEntries.isEmpty() && contentEntries.isEmpty()) throw FileArchiveEmptyException()
 
-        validateTotalSize(visibleEntries.sumOf { filesById.getValue(it.fileId).sizeBytes })
+        validateTotalSize(
+            visibleEntries.sumOf { filesById.getValue(it.fileId).sizeBytes } +
+                contentEntries.sumOf { it.content.size.toLong() },
+        )
 
         val includedFileIds = mutableListOf<Long>()
         val failedFileIds = mutableListOf<Long>()
@@ -61,6 +71,12 @@ class FileArchivePortImpl(
         // UTF-8로 명시해야 한글 파일명이 Windows 탐색기/macOS Archive Utility 양쪽에서 깨지지
         // 않는다(Java 7+의 EFS Language Encoding Flag가 Charset이 UTF-8일 때 자동으로 켜진다).
         ZipOutputStream(outputStream, StandardCharsets.UTF_8).use { zip ->
+            for (entry in contentEntries) {
+                val entryName = uniqueEntryName(entry.displayName, usedEntryNames)
+                zip.putNextEntry(ZipEntry(entryName))
+                zip.write(entry.content)
+                zip.closeEntry()
+            }
             for (entry in visibleEntries) {
                 val file = filesById.getValue(entry.fileId)
                 val entryName = uniqueEntryName(entry.displayName, usedEntryNames)
@@ -72,7 +88,7 @@ class FileArchivePortImpl(
             }
         }
 
-        if (includedFileIds.isEmpty()) throw FileArchiveEmptyException()
+        if (includedFileIds.isEmpty() && contentEntries.isEmpty()) throw FileArchiveEmptyException()
         return FileArchiveResult(includedFileIds = includedFileIds, skippedFileIds = notVisibleFileIds + failedFileIds)
     }
 
@@ -132,7 +148,12 @@ class FileArchivePortImpl(
         rawName: String,
         usedEntryNames: MutableSet<String>,
     ): String {
-        val replaced = rawName.replace('/', '_').replace('\\', '_')
+        val replaced =
+            rawName
+                .replace('/', '_')
+                .replace('\\', '_')
+                .filterNot(Char::isISOControl)
+                .trim()
         // 경로 구분자를 없앤 뒤에도 "."/".."는 그 자체로 위험하다 -- 순진한 압축 해제 코드가
         // File(destDir, entryName)으로 바로 풀면 ".."는 destDir의 **부모** 경로로 해석된다(§23
         // ZIP Slip). 구분자가 아예 없어도 이 두 값만은 별도로 막아야 한다.

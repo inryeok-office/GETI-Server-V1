@@ -18,8 +18,14 @@ data class MemberProfileUpdateResponse(
     val desiredJob: String?,
     @param:Schema(description = "자기소개", nullable = true)
     val bio: String?,
-    @param:Schema(description = "GitHub URL", example = "https://github.com/example", nullable = true)
+    @param:Schema(
+        description = "GitHub URL. 하위 호환을 위해 유지하며 links와 별도로 관리된다.",
+        example = "https://github.com/example",
+        nullable = true,
+    )
     val githubUrl: String?,
+    @param:Schema(description = "블로그/포트폴리오 등 추가 링크 목록. 배열 순서가 표시 순서다.")
+    val links: List<MemberProfileLinkResponse>,
     @param:Schema(description = "프로필 공개 여부", example = "true")
     val isPublic: Boolean,
     @param:Schema(description = "프로필 이미지 URL. File 업로드 연동 전이라 항상 null.", nullable = true)
