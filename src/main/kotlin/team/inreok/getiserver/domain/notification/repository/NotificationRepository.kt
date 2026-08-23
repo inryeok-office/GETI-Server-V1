@@ -37,6 +37,19 @@ interface NotificationRepository : JpaRepository<Notification, Long> {
     fun countByRecipientMemberIdAndIsReadFalseAndDeletedAtIsNull(recipientMemberId: Long): Long
 
     /**
+     * Idempotency Identity(recipientMemberId + sourceEventType + sourceEventId, Issue #193)로
+     * 기존 알림을 찾는다. `NotificationServiceImpl.create`가 UNIQUE 제약 위반을 잡은 뒤 이미
+     * 존재하는 알림을 재사용할 때만 쓴다 — Soft Delete된 알림도 그대로 찾아야 하므로
+     * `deletedAt IS NULL` 조건을 걸지 않는다(삭제 여부와 무관하게 같은 원본 Event는 재생성하지
+     * 않는다는 확정 계약).
+     */
+    fun findByRecipientMemberIdAndSourceEventTypeAndSourceEventId(
+        recipientMemberId: Long,
+        sourceEventType: String,
+        sourceEventId: Long,
+    ): Notification?
+
+    /**
      * 읽지 않은 알림을 한 번의 UPDATE로 모두 읽음 처리하고 갱신 건수를 반환한다. 한 사용자의
      * 알림 건수에 상한이 없어 Entity를 모두 불러와 수정하는 방식은 쓰지 않는다.
      *

@@ -16,6 +16,12 @@ import team.inreok.getiserver.domain.application.repository.JobApplicationSubmis
  * 문자열로 받는다. 호출부가 이미 상태 전이(`applyJobApplicationAction`/
  * `applyJobApplicationAdminAction`)와 같은 Transaction 안에서 호출해야 원자성이 보장된다
  * (요구사항 "Transaction 일관성" 절 — 별도 Method로 다시 Transaction을 열지 않는다).
+ *
+ * 저장된 이력을 반환한다(Issue #193) -- `JobApplicationAdminServiceImpl.executeAction`이 이
+ * 이력의 [JobApplicationStatusHistory.id]를 `JobApplicationReviewedEvent.historyId`(Notification
+ * Idempotency의 `sourceEventId`)로 쓴다. 같은 지원서가 여러 번 검토되면(REQUEST_REVISION 뒤
+ * APPROVE 등) 매번 새 이력 Row가 생겨 id도 매번 달라지므로, 서로 다른 검토 결과가 하나의 알림으로
+ * 뭉개지지 않는다. 학생 Action 호출부(`JobApplicationServiceImpl`)는 반환값을 쓰지 않는다.
  */
 fun recordStatusHistory(
     jobApplicationStatusHistoryRepository: JobApplicationStatusHistoryRepository,
@@ -24,7 +30,7 @@ fun recordStatusHistory(
     action: String,
     actorMemberId: Long,
     reason: String?,
-) {
+): JobApplicationStatusHistory =
     jobApplicationStatusHistoryRepository.save(
         JobApplicationStatusHistory(
             applicationId = requireNotNull(application.id),
@@ -35,7 +41,6 @@ fun recordStatusHistory(
             reason = reason,
         ),
     )
-}
 
 // SUBMIT/RESUBMIT이 성공해 application.answers/submittedAt이 이미 확정된 뒤에만 호출해야 한다
 // (요구사항 "Snapshot" 절 — 제출 시점 답변을 그대로 고정).

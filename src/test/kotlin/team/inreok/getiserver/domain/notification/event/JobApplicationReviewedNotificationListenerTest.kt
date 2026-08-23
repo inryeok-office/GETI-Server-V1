@@ -34,7 +34,13 @@ class JobApplicationReviewedNotificationListenerTest {
     private fun eventOf(
         action: String,
         reason: String? = null,
-    ) = JobApplicationReviewedEvent(applicationId = 1L, studentMemberId = 42L, action = action, reason = reason)
+    ) = JobApplicationReviewedEvent(
+        applicationId = 1L,
+        studentMemberId = 42L,
+        action = action,
+        reason = reason,
+        historyId = 7L,
+    )
 
     @Test
     fun `ALLOW_EDIT은 수정 허용 알림으로 지원자에게 생성된다`() {
@@ -46,6 +52,15 @@ class JobApplicationReviewedNotificationListenerTest {
         assertThat(command.targetType).isEqualTo(NotificationTargetType.JOB_APPLICATION)
         assertThat(command.targetId).isEqualTo(1L)
         assertThat(command.title).contains("수정")
+    }
+
+    @Test
+    fun `historyId를 Idempotency의 sourceEventId로 그대로 전달한다`() {
+        listener.onJobApplicationReviewed(eventOf("APPROVE").copy(historyId = 99L))
+
+        val command = captureCommand()
+        assertThat(command.sourceEventType).isEqualTo("JobApplicationReviewedEvent")
+        assertThat(command.sourceEventId).isEqualTo(99L)
     }
 
     @Test
@@ -107,5 +122,7 @@ class JobApplicationReviewedNotificationListenerTest {
             type = NotificationType.SYSTEM,
             title = "",
             content = "",
+            sourceEventType = "",
+            sourceEventId = 0L,
         )
 }

@@ -49,6 +49,16 @@ class Notification(
     @Column(name = "target_id")
     var targetId: Long? = null
 
+    // Idempotency Identity의 나머지 두 축이다(recipientMemberId + 이 둘, Issue #193). 과거 Row에는
+    // 값이 없어(원본 Event를 다시 알 수 없다) DB Column은 nullable로 남아 있다 -- "새 알림 생성은
+    // 두 값을 필수로 요구한다"라는 규칙은 NotificationCreateCommand/NotificationServiceImpl.create가
+    // Kotlin 계약으로 강제하며, Entity/DB는 과거 Row와의 호환성을 위해 강제하지 않는다.
+    @Column(name = "source_event_type", length = 100)
+    var sourceEventType: String? = null
+
+    @Column(name = "source_event_id")
+    var sourceEventId: Long? = null
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     var createdAt: LocalDateTime? = null

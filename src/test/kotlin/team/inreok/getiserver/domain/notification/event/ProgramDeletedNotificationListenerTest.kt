@@ -50,6 +50,8 @@ class ProgramDeletedNotificationListenerTest {
             assertThat(command.targetType).isEqualTo(NotificationTargetType.PROGRAM)
             assertThat(command.targetId).isEqualTo(1L)
             assertThat(command.content).contains("여름 캠프")
+            assertThat(command.sourceEventType).isEqualTo("ProgramDeletedEvent")
+            assertThat(command.sourceEventId).isEqualTo(1L)
         }
     }
 
@@ -87,6 +89,8 @@ class ProgramDeletedNotificationListenerTest {
             type = NotificationType.PROGRAM_DELETED,
             title = "신청한 프로그램이 삭제되었습니다",
             content = "\"여름 캠프\" 프로그램이 삭제되어 신청이 더 이상 유효하지 않습니다.",
+            sourceEventType = "ProgramDeletedEvent",
+            sourceEventId = 1L,
             targetType = NotificationTargetType.PROGRAM,
             targetId = 1L,
         )

@@ -47,6 +47,11 @@ class MemberApprovalProcessedNotificationListener(
                     type = NotificationType.MEMBER_APPROVAL_RESULT,
                     title = if (event.approved) APPROVED_TITLE else REJECTED_TITLE,
                     content = contentOf(event),
+                    // 교직원 가입 승인/거절은 PENDING 회원에게만 한 번 일어나고(승인/거절 이후
+                    // 다시 PENDING으로 돌아가는 경로가 없다, MemberApprovalServiceImpl 참고) 한
+                    // 회원 생애주기에 최대 1건만 발행되므로 memberId 자체가 안정적인 식별자다.
+                    sourceEventType = SOURCE_EVENT_TYPE,
+                    sourceEventId = event.memberId,
                     targetType = NotificationTargetType.MEMBER_APPROVAL,
                     targetId = event.memberId,
                 ),
@@ -78,5 +83,9 @@ class MemberApprovalProcessedNotificationListener(
         private const val REJECTED_TITLE = "교직원 가입이 거절되었습니다"
         private const val APPROVED_CONTENT = "교직원 가입 신청이 승인되었습니다. 이제 교직원 기능을 사용할 수 있습니다."
         private const val REJECTED_CONTENT_WITHOUT_REASON = "교직원 가입 신청이 거절되었습니다."
+
+        // Notification Idempotency Identity(Issue #193)의 sourceEventType. 원본 Domain Event Class
+        // 이름을 그대로 쓴다(InquiryAnsweredNotificationListener와 같은 이유).
+        private const val SOURCE_EVENT_TYPE = "MemberApprovalProcessedEvent"
     }
 }
