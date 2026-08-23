@@ -151,6 +151,9 @@ class ProgramControllerTest
                 endAt = null,
                 applicationStartAt = null,
                 applicationEndAt = null,
+                applicationSubmittedAt = LocalDateTime.of(2026, 8, 1, 10, 0),
+                applicationCancelledAt = LocalDateTime.of(2026, 8, 2, 10, 0),
+                programDeletedAt = null,
                 capacity = null,
                 currentApplicants = 0,
                 remainingCapacity = null,
@@ -209,6 +212,17 @@ class ProgramControllerTest
                 .perform(get("/api/v1/programs/1").with(authOf(2L, "DEVELOPER")))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.data.location").value("장소"))
+        }
+
+        @Test
+        fun `상세 조회 응답은 현재 요청자의 신청 이력 시각을 반환한다`() {
+            given(programService.getDetail(anyLong(), anyLong())).willReturn(detailResponseWithFiles())
+
+            mockMvc
+                .perform(get("/api/v1/programs/1").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.applicationSubmittedAt").value("2026-08-01T10:00:00"))
+                .andExpect(jsonPath("$.data.applicationCancelledAt").value("2026-08-02T10:00:00"))
         }
 
         private fun summaryResponseWithLocation() =

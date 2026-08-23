@@ -112,7 +112,7 @@ class CoreDomainSchemaIntegrationTest
         private val auditLogRepository: AuditLogRepository,
     ) {
         @Test
-        fun `Flyway로 생성한 Schema에는 정확히 41개의 비즈니스 Table이 있다`() {
+        fun `Flyway로 생성한 Schema에는 정확히 42개의 비즈니스 Table이 있다`() {
             // persistence_probe는 integrationTest 전용 기술 검증 Table(V1__create_persistence_probe.sql)이며
             // GETI 비즈니스 Domain을 나타내지 않으므로 집계에서 제외한다. 최소 19개 Table ERD 기준
             // (docs/architecture/erd.md) 이후 Member 도메인 전공/기술 스택 정규화를 위해
@@ -137,7 +137,8 @@ class CoreDomainSchemaIntegrationTest
             // 1개 Table을 추가해 39개가 되었다(V23 Migration). Recommendation R4(Issue #160) 일일
             // 추천 Generation 상태 저장을 위해 recommendation_generation_states 1개 Table을
             // 추가해 40개가 되었다(V25 Migration). Portfolio Core Phase 1(수합 요청)에서 제출 대상
-            // 학생을 저장하는 portfolio_request_targets 1개 Table을 추가해 41개가 되었다(V27 Migration).
+            // 학생을 저장하는 portfolio_request_targets 1개 Table과 프로필 링크를 저장하는
+            // member_profile_links 1개 Table을 추가해 42개가 되었다(V27, V31 Migration).
             @Suppress("UNCHECKED_CAST")
             val tableCount =
                 entityManager
@@ -150,7 +151,7 @@ class CoreDomainSchemaIntegrationTest
                         """.trimIndent(),
                     ).singleResult as Number
 
-            assertThat(tableCount.toInt()).isEqualTo(41)
+            assertThat(tableCount.toInt()).isEqualTo(42)
         }
 
         @Test

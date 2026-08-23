@@ -38,6 +38,10 @@ data class MemberProfileResponse(
     val desiredJob: String?,
     @param:Schema(description = "자기소개. profileRestricted=true면 null.", nullable = true)
     val bio: String?,
+    @param:Schema(
+        description = "블로그/포트폴리오 등 추가 링크 목록. profileRestricted=true면 빈 배열. 배열 순서가 표시 순서다.",
+    )
+    val links: List<MemberProfileLinkResponse>,
     @param:Schema(description = "대상 회원이 설정한 프로필 공개 여부", example = "true")
     val isPublic: Boolean,
     @param:Schema(

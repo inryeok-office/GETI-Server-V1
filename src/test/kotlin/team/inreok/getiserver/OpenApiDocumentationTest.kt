@@ -142,6 +142,16 @@ class OpenApiDocumentationTest {
         }
     }
 
+    @Test
+    fun `프로그램 상세 응답 스키마는 신청·취소·삭제 이력 시각을 문서화한다`() {
+        val schema = fetchOpenApiDocument().get("components").get("schemas").get("ProgramDetailResponse")
+        val properties = schema.get("properties")
+
+        assertThat(properties.has("applicationSubmittedAt")).isTrue()
+        assertThat(properties.has("applicationCancelledAt")).isTrue()
+        assertThat(properties.has("programDeletedAt")).isTrue()
+    }
+
     private fun fetchOpenApiDocument(): JsonNode {
         val body =
             mockMvc

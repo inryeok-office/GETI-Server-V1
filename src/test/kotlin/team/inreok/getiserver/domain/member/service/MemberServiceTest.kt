@@ -4,10 +4,12 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyList
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.BDDMockito.given
+import org.mockito.Captor
 import org.mockito.Mock
 import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.never
@@ -20,6 +22,7 @@ import team.inreok.getiserver.domain.file.link.FileLinkPort
 import team.inreok.getiserver.domain.file.link.FileUrlPort
 import team.inreok.getiserver.domain.member.access.PrivilegedProfileViewer
 import team.inreok.getiserver.domain.member.entity.Member
+import team.inreok.getiserver.domain.member.entity.MemberProfileLink
 import team.inreok.getiserver.domain.member.entity.MemberRole
 import team.inreok.getiserver.domain.member.entity.MemberRoleId
 import team.inreok.getiserver.domain.member.entity.type.DepartmentType
@@ -29,6 +32,7 @@ import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.exception.MemberNotFoundException
 import team.inreok.getiserver.domain.member.exception.MemberProfileNotFoundException
 import team.inreok.getiserver.domain.member.exception.MemberProfileValidationException
+import team.inreok.getiserver.domain.member.repository.MemberProfileLinkRepository
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.member.repository.MemberRoleRepository
 import team.inreok.getiserver.domain.member.service.impl.MemberProfileImageServiceImpl
@@ -59,6 +63,12 @@ class MemberServiceTest {
     @Mock
     private lateinit var privilegedProfileViewer: PrivilegedProfileViewer
 
+    @Mock
+    private lateinit var memberProfileLinkRepository: MemberProfileLinkRepository
+
+    @Captor
+    private lateinit var linksCaptor: ArgumentCaptor<List<MemberProfileLink>>
+
     private val service: MemberService by lazy {
         // 프로필 이미지 Service는 Mock이 아니라 실제 구현을 쓴다. 이 Class의 Test가 검증하려는
         // 것은 연결/해제가 실제로 어떤 순서로 일어나는가이고, Mock으로 대체하면 그 동작이 사라진다.
@@ -68,6 +78,7 @@ class MemberServiceTest {
             memberSelectionQueryService,
             MemberProfileImageServiceImpl(fileLinkPort, fileUrlPort),
             privilegedProfileViewer,
+            memberProfileLinkRepository,
             JsonMapper(),
         )
     }
@@ -441,6 +452,197 @@ class MemberServiceTest {
         given(fileUrlPort.presignedImageUrls(REQUESTER_ID, listOf(FILE_ID))).willReturn(emptyMap())
 
         assertThat(service.getProfile(26L, REQUESTER_ID).profileImageUrl).isNull()
+    }
+
+    @Test
+    fun `links를 배열 순서대로 전체 교체하고 표시 순서로 응답한다`() {
+        val member = newMember(30L)
+        given(memberRepository.findById(30L)).willReturn(Optional.of(member))
+        given(memberProfileLinkRepository.findAllByMemberIdOrderByDisplayOrderAsc(30L)).willReturn(
+            listOf(
+                MemberProfileLink(memberId = 30L, label = "블로그", url = "https://blog.example.com", displayOrder = 0),
+                MemberProfileLink(
+                    memberId = 30L,
+                    label = "포트폴리오",
+                    url = "https://portfolio.example.com",
+                    displayOrder = 1,
+                ),
+            ),
+        )
+        val body =
+            JsonMapper().readTree(
+                """{"links":[{"label":"블로그","url":"https://blog.example.com"},
+                    |{"label":"포트폴리오","url":"https://portfolio.example.com"}]}
+                """.trimMargin().replace("\n", ""),
+            )
+
+        val result = service.updateProfile(30L, body)
+
+        verify(memberProfileLinkRepository).deleteAllByMemberId(30L)
+        verify(memberProfileLinkRepository).saveAll(linksCaptor.capture())
+        assertThat(linksCaptor.value.map { it.label }).containsExactly("블로그", "포트폴리오")
+        assertThat(linksCaptor.value.map { it.displayOrder }).containsExactly(0, 1)
+        assertThat(result.links.map { it.label }).containsExactly("블로그", "포트폴리오")
+    }
+
+    @Test
+    fun `links 필드를 보내지 않으면 기존 링크를 그대로 유지한다`() {
+        val member = newMember(31L)
+        given(memberRepository.findById(31L)).willReturn(Optional.of(member))
+        given(memberProfileLinkRepository.findAllByMemberIdOrderByDisplayOrderAsc(31L)).willReturn(
+            listOf(
+                MemberProfileLink(memberId = 31L, label = "블로그", url = "https://blog.example.com", displayOrder = 0),
+            ),
+        )
+        val body = JsonMapper().readTree("""{"bio":"안녕"}""")
+
+        val result = service.updateProfile(31L, body)
+
+        verify(memberProfileLinkRepository, never()).deleteAllByMemberId(anyLong())
+        verify(memberProfileLinkRepository, never()).saveAll(anyList<MemberProfileLink>())
+        assertThat(result.links.map { it.label }).containsExactly("블로그")
+    }
+
+    @Test
+    fun `links에 빈 배열을 보내면 전체 삭제한다`() {
+        val member = newMember(32L)
+        given(memberRepository.findById(32L)).willReturn(Optional.of(member))
+        val body = JsonMapper().readTree("""{"links":[]}""")
+
+        service.updateProfile(32L, body)
+
+        verify(memberProfileLinkRepository).deleteAllByMemberId(32L)
+        verify(memberProfileLinkRepository).saveAll(linksCaptor.capture())
+        assertThat(linksCaptor.value).isEmpty()
+    }
+
+    @Test
+    fun `links를 수정해도 githubUrl은 그대로 유지된다`() {
+        val member = newMember(33L).apply { githubUrl = "https://github.com/example" }
+        given(memberRepository.findById(33L)).willReturn(Optional.of(member))
+        val body = JsonMapper().readTree("""{"links":[]}""")
+
+        val result = service.updateProfile(33L, body)
+
+        assertThat(result.githubUrl).isEqualTo("https://github.com/example")
+    }
+
+    @Test
+    fun `links를 null로 보내면 PROFILE_VALIDATION_FAILED 예외를 던진다`() {
+        val member = newMember(34L)
+        given(memberRepository.findById(34L)).willReturn(Optional.of(member))
+        val body = JsonMapper().readTree("""{"links":null}""")
+
+        assertThatThrownBy { service.updateProfile(34L, body) }
+            .isInstanceOf(MemberProfileValidationException::class.java)
+    }
+
+    @Test
+    fun `links가 배열이 아니면 PROFILE_VALIDATION_FAILED 예외를 던진다`() {
+        val member = newMember(35L)
+        given(memberRepository.findById(35L)).willReturn(Optional.of(member))
+        val body = JsonMapper().readTree("""{"links":"https://example.com"}""")
+
+        assertThatThrownBy { service.updateProfile(35L, body) }
+            .isInstanceOf(MemberProfileValidationException::class.java)
+    }
+
+    @Test
+    fun `links 개수가 상한을 넘으면 PROFILE_VALIDATION_FAILED 예외를 던진다`() {
+        val member = newMember(36L)
+        given(memberRepository.findById(36L)).willReturn(Optional.of(member))
+        val tooMany =
+            (1..21).joinToString(",") { """{"label":"링크$it","url":"https://example.com/$it"}""" }
+        val body = JsonMapper().readTree("""{"links":[$tooMany]}""")
+
+        assertThatThrownBy { service.updateProfile(36L, body) }
+            .isInstanceOf(MemberProfileValidationException::class.java)
+    }
+
+    @Test
+    fun `links의 url이 http-https가 아니면 PROFILE_VALIDATION_FAILED 예외를 던진다`() {
+        val member = newMember(37L)
+        given(memberRepository.findById(37L)).willReturn(Optional.of(member))
+        val body = JsonMapper().readTree("""{"links":[{"label":"위험","url":"javascript:alert(1)"}]}""")
+
+        assertThatThrownBy { service.updateProfile(37L, body) }
+            .isInstanceOf(MemberProfileValidationException::class.java)
+    }
+
+    @Test
+    fun `links의 url에 Scheme이 없으면 PROFILE_VALIDATION_FAILED 예외를 던진다`() {
+        val member = newMember(38L)
+        given(memberRepository.findById(38L)).willReturn(Optional.of(member))
+        val body = JsonMapper().readTree("""{"links":[{"label":"상대경로","url":"/relative/path"}]}""")
+
+        assertThatThrownBy { service.updateProfile(38L, body) }
+            .isInstanceOf(MemberProfileValidationException::class.java)
+    }
+
+    @Test
+    fun `links의 label이 빈 값이면 PROFILE_VALIDATION_FAILED 예외를 던진다`() {
+        val member = newMember(39L)
+        given(memberRepository.findById(39L)).willReturn(Optional.of(member))
+        val body = JsonMapper().readTree("""{"links":[{"label":"","url":"https://example.com"}]}""")
+
+        assertThatThrownBy { service.updateProfile(39L, body) }
+            .isInstanceOf(MemberProfileValidationException::class.java)
+    }
+
+    @Test
+    fun `links의 label이 최대 길이를 넘으면 PROFILE_VALIDATION_FAILED 예외를 던진다`() {
+        val member = newMember(40L)
+        given(memberRepository.findById(40L)).willReturn(Optional.of(member))
+        val longLabel = "a".repeat(101)
+        val body = JsonMapper().readTree("""{"links":[{"label":"$longLabel","url":"https://example.com"}]}""")
+
+        assertThatThrownBy { service.updateProfile(40L, body) }
+            .isInstanceOf(MemberProfileValidationException::class.java)
+    }
+
+    @Test
+    fun `links 원소가 객체가 아니면 PROFILE_VALIDATION_FAILED 예외를 던진다`() {
+        val member = newMember(41L)
+        given(memberRepository.findById(41L)).willReturn(Optional.of(member))
+        val body = JsonMapper().readTree("""{"links":["https://example.com"]}""")
+
+        assertThatThrownBy { service.updateProfile(41L, body) }
+            .isInstanceOf(MemberProfileValidationException::class.java)
+    }
+
+    @Test
+    fun `내 프로필 조회는 links를 항상 포함한다`() {
+        val member = newMember(42L)
+        given(memberRepository.findById(42L)).willReturn(Optional.of(member))
+        given(memberRoleRepository.findAllByIdMemberId(42L)).willReturn(studentRole(42L))
+        given(memberProfileLinkRepository.findAllByMemberIdOrderByDisplayOrderAsc(42L)).willReturn(
+            listOf(
+                MemberProfileLink(memberId = 42L, label = "블로그", url = "https://blog.example.com", displayOrder = 0),
+            ),
+        )
+
+        val result = service.getMyProfile(42L)
+
+        assertThat(result.links.map { it.label }).containsExactly("블로그")
+    }
+
+    @Test
+    fun `비공개 프로필은 links도 노출하지 않는다`() {
+        val member =
+            Member(
+                oauthProvider = OAuthProvider.GOOGLE,
+                oauthSubject = "subject-43",
+                email = "student43@example.com",
+                status = MemberStatus.ACTIVE,
+                profilePublic = false,
+            ).apply { id = 43L }
+        given(memberRepository.findById(43L)).willReturn(Optional.of(member))
+        given(memberRoleRepository.findAllByIdMemberId(43L)).willReturn(studentRole(43L))
+
+        val result = service.getProfile(43L, REQUESTER_ID)
+
+        assertThat(result.links).isEmpty()
+        verify(memberProfileLinkRepository, never()).findAllByMemberIdOrderByDisplayOrderAsc(43L)
     }
 
     // Mockito Matcher는 null을 돌려주는데 Kotlin non-null Parameter라 NPE가 난다. 실제로는

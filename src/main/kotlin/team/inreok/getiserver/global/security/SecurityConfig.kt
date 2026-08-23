@@ -1,5 +1,3 @@
-@file:Suppress("ForbiddenComment")
-
 package team.inreok.getiserver.global.security
 
 import jakarta.servlet.http.HttpServletResponse
@@ -21,14 +19,12 @@ import team.inreok.getiserver.global.error.ErrorResponse
 import tools.jackson.databind.ObjectMapper
 
 /**
- * ⚠️ TEMPORARY: `securityFilterChain`의 HTTP Authorization Layer가 현재 전역 `permitAll`이다
- * (Frontend/API 연동 단계 지원, Issue #162 PR 본문 "임시 개발용 Security 전체 개방" 참고). 이
- * 상태에서는 CD로 배포된 환경의 모든 API가 Access Token 없이 호출 가능하다 -- 개발 연동 목적
- * 외(운영 서비스)로 이 상태를 유지하지 않는다. 기존 세부 Rule은 지우지 않고
- * [applyNormalSecurityRules]에 그대로 보존했다. 복구 방법: `authorize(anyRequest, permitAll)`
- * 한 줄을 지우고 `applyNormalSecurityRules()` 호출로 되돌린다.
+ * `securityFilterChain`의 HTTP Authorization Layer는 [applyNormalSecurityRules]가 선언하는 정상
+ * 정책을 그대로 적용한다(임시 전역 `permitAll` 개방은 Frontend/DG OAuth 연동이 진행되며 제거했다,
+ * Issue #162). 미인증 요청은 [jsonAuthenticationEntryPoint]가 401(UNAUTHORIZED)로, 역할이 부족한
+ * 요청은 [jsonAccessDeniedHandler]가 403(FORBIDDEN)으로 걸러낸다.
  *
- * 아래는 [applyNormalSecurityRules]가 (현재는 호출되지 않지만) 정의하는 정상 정책이다.
+ * 아래는 [applyNormalSecurityRules]가 정의하는 정상 정책이다.
  * `/api/v1/auth/session`, `/api/v1/auth/logout`,
  * `/api/v1/me/` 이하 모든 경로(Issue #50, 내 프로필/전공/기술스택), `/api/v1/members`(학생 이름
  * 검색·프로필 조회, Issue #50 후속), `/api/v1/companies`(기업 조회, Issue #56), `/api/v1/jobs`
@@ -83,16 +79,7 @@ class SecurityConfig(
             sessionManagement { sessionCreationPolicy = SessionCreationPolicy.STATELESS }
             httpBasic { disable() }
             formLogin { disable() }
-            authorizeHttpRequests {
-                // TEMPORARY(개발용 Security 전체 개방, Issue #162 PR 본문 "임시 개발용 Security
-                // 전체 개방" 참고): Frontend/API 연동을 위해 HTTP Authorization Layer 전체를
-                // permitAll로 연다. 기존 세부 Rule은 지우지 않고 applyNormalSecurityRules()에
-                // 그대로 보존했다 -- 연동이 끝나면 아래 한 줄을 지우고 `applyNormalSecurityRules()`
-                // 호출로 되돌리면 복구된다.
-                //
-                // TODO: Frontend 연동 완료 후 이 줄을 지우고 applyNormalSecurityRules()를 호출한다.
-                authorize(anyRequest, permitAll)
-            }
+            authorizeHttpRequests { applyNormalSecurityRules() }
             exceptionHandling {
                 authenticationEntryPoint = jsonAuthenticationEntryPoint()
                 accessDeniedHandler = jsonAccessDeniedHandler()
@@ -147,13 +134,11 @@ class SecurityConfig(
     }
 }
 
-// ⚠️ TEMPORARY: 이번 개발 단계에서는 securityFilterChain이 이 Method를 호출하지 않는다(대신 전역
-// permitAll, SecurityConfig Class KDoc 참고). Domain별 세부 Role/인증 Rule을 그대로 보존해 두는
-// 목적뿐이다 -- Frontend 연동이 끝나면 securityFilterChain의 `authorize(anyRequest, permitAll)`을
-// 지우고 `applyNormalSecurityRules()` 호출로 되돌리면 즉시 복구된다. Class 안에 두지 않고 File
-// 최상위 Extension Function으로 둔 이유는 detekt `TooManyFunctions`를 피하면서도 이 Method 자체가
-// SecurityConfig의 어떤 주입 필드도 쓰지 않는 순수 DSL 선언이기 때문이다.
-@Suppress("LongMethod", "unused")
+// Domain별 세부 Role/인증 Rule을 선언한다. securityFilterChain(운영)과 normalSecurityFilterChainForTest
+// (Controller 계약 Test)가 모두 이 Method를 호출한다. Class 안에 두지 않고 File 최상위 Extension
+// Function으로 둔 이유는 detekt `TooManyFunctions`를 피하면서도 이 Method 자체가 SecurityConfig의
+// 어떤 주입 필드도 쓰지 않는 순수 DSL 선언이기 때문이다.
+@Suppress("LongMethod")
 private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     // CORS Preflight(OPTIONS)에는 Authorization Header가 없어 authenticated에 막힌다. CORS가
     // 활성화되는 시점에 Cross-Origin의 /session·/logout이 막히지 않도록 먼저 허용한다(코드 리뷰 P2 반영).
@@ -236,6 +221,9 @@ private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     authorize("/api/v1/admin/collection-runs/**", hasRole("DEVELOPER"))
     // 검색 색인 운영(전체 재구축)은 개발자만 접근한다(Issue #69).
     authorize("/api/v1/admin/search-actions", hasRole("DEVELOPER"))
+    // 감사 로그는 운영·개인정보 변경 이력을 포함하므로 개발자만 조회한다(Issue #228).
+    authorize("/api/v1/admin/audit-logs", hasRole("DEVELOPER"))
+    authorize("/api/v1/admin/audit-logs/**", hasRole("DEVELOPER"))
     // 공고 조회(목록·상세)는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
     authorize("/api/v1/jobs", authenticated)
     authorize("/api/v1/jobs/**", authenticated)
@@ -277,6 +265,12 @@ private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     // File 도메인의 Service 계층이 별도로 판정한다(§16).
     authorize("/api/v1/files", authenticated)
     authorize("/api/v1/files/**", authenticated)
+    // 관리자 공통 파일 목록 조회(Issue #225)는 업로더·연결 대상 등 운영 정보를 포함하므로
+    // 개발자만 접근한다(Discord 전달 횡단 목록 "/api/v1/admin/discord-deliveries"와 같은 기준,
+    // Issue #206). "/api/v1/admin/files"는 "/api/v1/files" Prefix와 겹치지 않으므로 선언 순서와
+    // 무관하게 항상 이 규칙이 적용된다. 하위 경로가 없는 단일 Endpoint라 "/**" 형태는 추가하지
+    // 않는다.
+    authorize("/api/v1/admin/files", hasRole("DEVELOPER"))
     // 문의 관리(전체 목록·검색, 담당자 지정·해제, 상태 변경, 답변 등록)는 개발자만
     // 접근한다(요구사항 §51 권한 Matrix). Program에서 넓은 패턴이 먼저 선언되어
     // 학생 전용 API가 뚫렸던 사고(원본 실행 프롬프트 §3)를 반복하지 않도록, 구체적인
@@ -296,6 +290,8 @@ private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     // 알게 되어 바로 위 DEVELOPER 전용 규칙을 우회하는 셈이 된다. 하위 경로가 없는 단일
     // Endpoint라 "/**" 형태는 추가하지 않는다.
     authorize("/api/v1/admin/discord-deliveries", hasRole("DEVELOPER"))
+    // 정기 작업 운영 상태는 개발자만 접근한다(Issue #227).
+    authorize("/api/v1/admin/system/jobs", hasRole("DEVELOPER"))
     // 문의 등록·상세 조회는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
     // 상세 조회의 본인 소유권 검증(다른 사용자 문의 차단, 개발자는 예외)은 Role로 알
     // 수 없어 InquiryService가 별도로 수행한다. "/api/v1/admin/inquiries"는 이 Prefix와

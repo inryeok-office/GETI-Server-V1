@@ -63,6 +63,13 @@ class MemberProfileController(
             이미 등록된 이미지가 있으면 자동으로 교체된다. `null`을 보내면 이미지를 제거한다.
             URL 문자열을 받는 `profileImageUrl`은 요청 Field로 지원하지 않으며 보내면
             PROFILE_VALIDATION_FAILED로 거부된다(응답 Field로는 계속 존재한다).
+
+            `links`(블로그, 포트폴리오 등 추가 링크 목록)는 다른 Field와 달리 배열 자체로 세 가지
+            상태를 구분한다 — `links`를 아예 보내지 않으면 기존 목록을 유지하고, 빈 배열(`[]`)을
+            보내면 전체 삭제하며, 값이 있는 배열을 보내면 배열 순서(표시 순서)대로 전체 교체한다.
+            최대 20개까지 등록할 수 있고 각 원소는 `label`(최대 100자)과 `url`(최대 2000자,
+            http/https만 허용)을 모두 포함해야 한다. 기존 `githubUrl`은 `links`와 별도로 유지되는
+            독립된 Field라 `links`를 보내도 `githubUrl` 값에는 영향을 주지 않는다.
         """,
     )
     @ApiResponses(
@@ -71,7 +78,7 @@ class MemberProfileController(
             responseCode = "400",
             description =
                 "요청 값 형식 오류, 허용되지 않은 Field 포함, department 값 오류, " +
-                    "profileImageUrl 미지원 (PROFILE_VALIDATION_FAILED). " +
+                    "profileImageUrl 미지원, links 형식/개수/길이/scheme 오류 (PROFILE_VALIDATION_FAILED). " +
                     "profileImageFileId가 본인 파일이 아니면 403 FILE_NOT_OWNED, " +
                     "용도가 다르면 400 FILE_PURPOSE_MISMATCH로 거부된다.",
         ),
@@ -93,6 +100,19 @@ class MemberProfileController(
                 examples = [
                     ExampleObject(name = "bio만 수정", value = """{ "bio": "안녕하세요, 백엔드에 관심 있는 학생입니다." }"""),
                     ExampleObject(name = "phone을 명시적으로 삭제", value = """{ "phone": null }"""),
+                    ExampleObject(
+                        name = "links 전체 교체",
+                        value =
+                            """
+                            {
+                              "links": [
+                                { "label": "기술 블로그", "url": "https://blog.example.com/me" },
+                                { "label": "포트폴리오", "url": "https://portfolio.example.com" }
+                              ]
+                            }
+                            """,
+                    ),
+                    ExampleObject(name = "links 전체 삭제", value = """{ "links": [] }"""),
                 ],
             ),
         ],
@@ -121,12 +141,20 @@ private data class MemberProfileUpdateRequestExample(
     @param:Schema(description = "자기소개(최대 1000자)", nullable = true, example = "안녕하세요.", maxLength = 1000)
     val bio: String?,
     @param:Schema(
-        description = "GitHub URL(최대 500자)",
+        description = "GitHub URL(최대 500자). 하위 호환을 위해 유지하며 links와 별도로 관리된다.",
         nullable = true,
         example = "https://github.com/example",
         maxLength = 500,
     )
     val githubUrl: String?,
+    @param:Schema(
+        description =
+            "블로그/포트폴리오 등 추가 링크 목록(최대 20개, label/url 각 100자/2000자 이내, url은 " +
+                "http/https만 허용). 전달하지 않으면 기존 값을 유지하고, 빈 배열([])을 보내면 전체 " +
+                "삭제하며, 값이 있는 배열을 보내면 배열 순서대로 전체 교체한다.",
+        nullable = true,
+    )
+    val links: List<MemberProfileLinkRequestExample>?,
     @param:Schema(description = "프로필 공개 여부. 학생만 false로 설정할 수 있다.", nullable = true, example = "true")
     val isPublic: Boolean?,
     @param:Schema(
@@ -142,4 +170,17 @@ private data class MemberProfileUpdateRequestExample(
         nullable = true,
     )
     val profileImageUrl: String?,
+)
+
+// links 배열 원소 하나의 문서 전용 Schema. Production Class로 사용하지 않는다.
+@Schema(name = "MemberProfileLinkRequest", description = "프로필 링크 하나(Label + URL). 배열 순서가 그대로 표시 순서가 된다.")
+private data class MemberProfileLinkRequestExample(
+    @param:Schema(description = "링크 표시 이름(최대 100자)", example = "기술 블로그", maxLength = 100)
+    val label: String,
+    @param:Schema(
+        description = "링크 URL(최대 2000자, http/https만 허용)",
+        example = "https://blog.example.com/me",
+        maxLength = 2000,
+    )
+    val url: String,
 )
