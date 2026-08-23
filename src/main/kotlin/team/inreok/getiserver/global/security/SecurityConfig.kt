@@ -236,6 +236,9 @@ private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     authorize("/api/v1/admin/collection-runs/**", hasRole("DEVELOPER"))
     // 검색 색인 운영(전체 재구축)은 개발자만 접근한다(Issue #69).
     authorize("/api/v1/admin/search-actions", hasRole("DEVELOPER"))
+    // 감사 로그는 운영·개인정보 변경 이력을 포함하므로 개발자만 조회한다(Issue #228).
+    authorize("/api/v1/admin/audit-logs", hasRole("DEVELOPER"))
+    authorize("/api/v1/admin/audit-logs/**", hasRole("DEVELOPER"))
     // 공고 조회(목록·상세)는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
     authorize("/api/v1/jobs", authenticated)
     authorize("/api/v1/jobs/**", authenticated)
@@ -296,6 +299,8 @@ private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     // 알게 되어 바로 위 DEVELOPER 전용 규칙을 우회하는 셈이 된다. 하위 경로가 없는 단일
     // Endpoint라 "/**" 형태는 추가하지 않는다.
     authorize("/api/v1/admin/discord-deliveries", hasRole("DEVELOPER"))
+    // 정기 작업 운영 상태는 개발자만 접근한다(Issue #227).
+    authorize("/api/v1/admin/system/jobs", hasRole("DEVELOPER"))
     // 문의 등록·상세 조회는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
     // 상세 조회의 본인 소유권 검증(다른 사용자 문의 차단, 개발자는 예외)은 Role로 알
     // 수 없어 InquiryService가 별도로 수행한다. "/api/v1/admin/inquiries"는 이 Prefix와

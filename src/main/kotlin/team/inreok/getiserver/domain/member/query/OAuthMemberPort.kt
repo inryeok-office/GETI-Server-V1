@@ -20,13 +20,23 @@ interface OAuthMemberPort {
      *   [team.inreok.getiserver.domain.member.entity.type.OAuthProvider]로 매핑한다.
      * @param subject Provider가 발급한 사용자 고유 식별값.
      * @param email Provider UserInfo에서 조회한 이메일.
+     * @param reapply 거절된(REJECTED) 교직원의 재신청 요청이면 true다(Issue #229, intent=REAPPLY).
+     *   true이고 기존 회원이 REJECTED면 승인 대기(PENDING)로 되돌리고 거절 사유를 지운 뒤 로그인을
+     *   허용한다. false이고 REJECTED면 로그인을 막고 거절 사유를 전달한다
+     *   ([team.inreok.getiserver.domain.member.exception.StaffSignupRejectedException]). REJECTED가
+     *   아닌 회원에게는 영향이 없다.
      * @throws team.inreok.getiserver.domain.member.exception.OAuthEmailAlreadyRegisteredException
      *   같은 이메일이 다른 OAuth 계정으로 이미 가입된 경우.
+     * @throws team.inreok.getiserver.domain.member.exception.StaffSignupRejectedException
+     *   재신청이 아닌데 기존 회원이 REJECTED인 경우.
+     * @throws team.inreok.getiserver.domain.member.exception.MemberLoginNotAllowedException
+     *   기존 회원이 SUSPENDED/WITHDRAWN인 경우.
      */
     fun findOrCreateByOAuth(
         provider: String,
         subject: String,
         email: String,
+        reapply: Boolean = false,
     ): OAuthMemberIdentity
 
     /** 회원의 현재 Role 이름 목록이다. 회원이 없거나 Role이 없으면 빈 List. Token 재발급에 쓴다. */

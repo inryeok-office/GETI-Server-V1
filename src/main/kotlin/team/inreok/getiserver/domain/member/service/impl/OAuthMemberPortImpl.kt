@@ -12,6 +12,7 @@ import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
 import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.exception.MemberLoginNotAllowedException
 import team.inreok.getiserver.domain.member.exception.OAuthEmailAlreadyRegisteredException
+import team.inreok.getiserver.domain.member.exception.StaffSignupRejectedException
 import team.inreok.getiserver.domain.member.query.OAuthMemberIdentity
 import team.inreok.getiserver.domain.member.query.OAuthMemberPort
 import team.inreok.getiserver.domain.member.repository.MemberRepository
@@ -39,11 +40,12 @@ class OAuthMemberPortImpl(
         provider: String,
         subject: String,
         email: String,
+        reapply: Boolean,
     ): OAuthMemberIdentity {
         val oauthProvider = OAuthProvider.valueOf(provider.uppercase())
 
         memberRepository.findByOauthProviderAndOauthSubject(oauthProvider, subject)?.let { existing ->
-            return existingIdentity(existing)
+            return resolveExisting(existing, reapply)
         }
 
         // 같은 이메일이 다른 OAuth 계정으로 이미 가입돼 있으면 새 회원을 만들 수 없다(uk_members_email).
@@ -81,7 +83,8 @@ class OAuthMemberPortImpl(
                 val existing =
                     memberRepository.findByOauthProviderAndOauthSubject(oauthProvider, subject)
                         ?: throw OAuthEmailAlreadyRegisteredException(email)
-                return existingIdentity(existing)
+                // 동시 생성으로 방금 만들어진 회원은 PENDING/ACTIVE라 재신청 리셋 대상이 아니다(reapply=false).
+                return resolveExisting(existing, reapply = false)
             }
 
         val memberId = requireNotNull(saved.id) { "저장된 Member는 id를 가져야 합니다." }
@@ -104,8 +107,26 @@ class OAuthMemberPortImpl(
      * 기존 회원의 로그인 결과를 만든다. 로그인이 허용되지 않는 상태(REJECTED/SUSPENDED/WITHDRAWN)면
      * Token을 발급하지 않고 거부한다(Issue #104). 이렇게 하지 않으면 정지·탈퇴된 회원이 재로그인으로
      * 이전 Role이 담긴 유효 Token을 계속 받는다.
+     *
+     * REJECTED는 Issue #229에서 다르게 처리한다: 재신청(intent=REAPPLY, [reapply])이면 승인 대기
+     * (PENDING)로 되돌리고 거절 사유를 지운 뒤 로그인을 허용한다. 재신청이 아니면 로그인을 막되
+     * `/staff/signup`이 사유를 표시할 수 있도록 거절 사유를 담아 거부한다. 정지/탈퇴는 사유를 노출하지
+     * 않고 기존대로 [MemberLoginNotAllowedException]으로 막는다.
      */
-    private fun existingIdentity(member: Member): OAuthMemberIdentity {
+    private fun resolveExisting(
+        member: Member,
+        reapply: Boolean,
+    ): OAuthMemberIdentity {
+        if (member.status == MemberStatus.REJECTED) {
+            if (reapply) {
+                // OAuth로 신원을 다시 증명한 재신청이므로 안전하게 승인 대기로 되돌린다. 관리 Entity라
+                // 상태·사유 변경은 이 @Transactional Commit 시점에 Dirty Checking으로 반영된다.
+                member.status = MemberStatus.PENDING
+                member.rejectionReason = null
+                return identityOf(member, isNewMember = false)
+            }
+            throw StaffSignupRejectedException(member.rejectionReason)
+        }
         if (member.status !in LOGIN_ALLOWED_STATUSES) {
             throw MemberLoginNotAllowedException(member.status)
         }
