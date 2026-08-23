@@ -59,7 +59,7 @@ class AuthLoginServiceImplTest {
         assertThat(response.memberId).isEqualTo(7L)
         assertThat(response.roles).isEmpty()
         assertThat(response.status).isEqualTo("PENDING")
-        assertThat(response.isNewMember).isTrue()
+        assertThat(response.newMember).isTrue()
     }
 
     @Test
@@ -81,7 +81,7 @@ class AuthLoginServiceImplTest {
         val response = service.loginWithOAuth("google", "auth-code", "state-value")
 
         assertThat(response.roles).containsExactly("DEVELOPER")
-        assertThat(response.isNewMember).isFalse()
+        assertThat(response.newMember).isFalse()
     }
 
     @Test

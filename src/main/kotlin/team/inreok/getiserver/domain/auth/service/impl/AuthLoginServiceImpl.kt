@@ -37,7 +37,7 @@ class AuthLoginServiceImpl(
             memberId = member.memberId,
             roles = member.roles,
             status = member.status,
-            isNewMember = member.isNewMember,
+            newMember = member.isNewMember,
         )
     }
 }
