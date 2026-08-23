@@ -17,6 +17,11 @@ enum class NotificationErrorCode(
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 알림을 찾을 수 없습니다."),
     NOTIFICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 알림만 접근할 수 있습니다."),
     NOTIFICATION_ID_REQUIRED(HttpStatus.BAD_REQUEST, "단일 알림을 읽음 처리하려면 notificationId가 필요합니다."),
+
+    // 푸시 기기 등록·해제(Issue #189)에서 실제로 발생하는 Error Code다. 다른 사용자가 등록한
+    // 기기에 접근하면 위 NOTIFICATION_ACCESS_DENIED와 같은 이유로 404가 아니라 403을 돌려준다.
+    NOTIFICATION_DEVICE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 기기를 찾을 수 없습니다."),
+    NOTIFICATION_DEVICE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인이 등록한 기기만 해제할 수 있습니다."),
     ;
 
     override val code: String get() = name
