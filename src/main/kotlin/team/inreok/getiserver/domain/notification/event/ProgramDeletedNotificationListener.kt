@@ -73,9 +73,20 @@ class ProgramDeletedNotificationListener(
                 type = NotificationType.PROGRAM_DELETED,
                 title = "신청한 프로그램이 삭제되었습니다",
                 content = "\"${event.title}\" 프로그램이 삭제되어 신청이 더 이상 유효하지 않습니다.",
+                // DELETED는 종단 상태라(allowedTransitions(DELETED) == emptySet(),
+                // ProgramServiceImpl 참고) 한 프로그램은 생애주기에 최대 한 번만 삭제된다. 따라서
+                // programId 자체가 안정적인 식별자다.
+                sourceEventType = SOURCE_EVENT_TYPE,
+                sourceEventId = event.programId,
                 targetType = NotificationTargetType.PROGRAM,
                 targetId = event.programId,
             ),
         )
+    }
+
+    private companion object {
+        // Notification Idempotency Identity(Issue #193)의 sourceEventType. 원본 Domain Event Class
+        // 이름을 그대로 쓴다(InquiryAnsweredNotificationListener와 같은 이유).
+        const val SOURCE_EVENT_TYPE = "ProgramDeletedEvent"
     }
 }

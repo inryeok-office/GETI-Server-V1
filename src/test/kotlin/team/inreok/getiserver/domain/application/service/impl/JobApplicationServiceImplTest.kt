@@ -2,6 +2,7 @@ package team.inreok.getiserver.domain.application.service.impl
 
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentCaptor
@@ -13,6 +14,8 @@ import org.mockito.Mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
+import org.mockito.junit.jupiter.MockitoSettings
+import org.mockito.quality.Strictness
 import org.springframework.dao.DataIntegrityViolationException
 import team.inreok.getiserver.domain.application.dto.ApplicationAnswer
 import team.inreok.getiserver.domain.application.dto.CreateJobApplicationRequest
@@ -58,7 +61,16 @@ import tools.jackson.databind.json.JsonMapper
 import java.time.LocalDateTime
 import java.util.Optional
 
+/**
+ * Idempotency(Issue #193)로 `recordStatusHistory`가 저장된 이력을 반환하도록 바뀌면서 이 Class에
+ * `stubStatusHistorySave`/`dummyHistory`/`DEFAULT_HISTORY_ID`가 추가돼 detekt 기본 LargeClass
+ * 임계값을 넘는다. `JobServiceTest`/`ProgramServiceImplTest`가 이미 같은 이유로 Suppress한 전례를
+ * 따른다(이 Class는 이미 `JobApplicationFileSyncTest`/`JobApplicationServiceImplQueryTest`로 일부를
+ * 분리한 뒤에도 임계값에 근접해 있었다).
+ */
+@Suppress("LargeClass")
 @ExtendWith(MockitoExtension::class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class JobApplicationServiceImplTest {
     @Mock
     private lateinit var jobApplicationRepository: JobApplicationRepository
@@ -120,6 +132,31 @@ class JobApplicationServiceImplTest {
     }
 
     private val fixedTime = LocalDateTime.of(2026, 3, 1, 10, 0, 0)
+
+    // recordStatusHistory가 저장된 이력을 반환하도록 바뀌면서(Issue #193,
+    // JobApplicationAdminServiceImpl.executeAction의 historyId 사용과 같은 이유로 이 Class의
+    // Function 계약도 함께 바뀌었다) 상태 전이가 성공하는 모든 경로가 이 반환값을 실제로
+    // 역참조한다(Kotlin이 non-null 반환 Type Expression Body에 삽입하는 Null 검사, 반환값을 그대로
+    // 버려도 발생한다). Test마다 반복해서 Stub하지 않도록 기본 Stub을 여기 둔다.
+    @BeforeEach
+    fun stubStatusHistorySave() {
+        given(jobApplicationStatusHistoryRepository.save(any() ?: dummyHistory())).willAnswer { invocation ->
+            invocation.getArgument<JobApplicationStatusHistory>(0).apply { id = DEFAULT_HISTORY_ID }
+        }
+    }
+
+    private fun dummyHistory() =
+        JobApplicationStatusHistory(
+            applicationId = 0L,
+            fromStatus = JobApplicationStatus.DRAFT,
+            toStatus = JobApplicationStatus.DRAFT,
+            action = "",
+            actorMemberId = 0L,
+        )
+
+    private companion object {
+        const val DEFAULT_HISTORY_ID = 500L
+    }
 
     private fun jobOf(
         status: String = "PUBLISHED",

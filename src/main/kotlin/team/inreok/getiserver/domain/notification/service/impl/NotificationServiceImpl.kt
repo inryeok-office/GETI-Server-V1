@@ -1,9 +1,10 @@
 package team.inreok.getiserver.domain.notification.service.impl
 
+import org.hibernate.exception.ConstraintViolationException
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.notification.dto.NotificationCreateCommand
 import team.inreok.getiserver.domain.notification.dto.NotificationListResponse
@@ -25,6 +26,7 @@ import java.time.LocalDateTime
 class NotificationServiceImpl(
     private val notificationRepository: NotificationRepository,
     private val notificationTargetResolver: NotificationTargetResolver,
+    private val notificationInsertOperation: NotificationInsertOperation,
 ) : NotificationService {
     @Transactional(readOnly = true)
     override fun list(
@@ -130,32 +132,46 @@ class NotificationServiceImpl(
         notificationRepository.countByRecipientMemberIdAndIsReadFalseAndDeletedAtIsNull(memberId)
 
     /**
-     * 항상 새 Transaction에서 저장한다(Issue #118).
+     * 항상 새 Transaction에서 저장한다(Issue #118). 실제 Insert는 [NotificationInsertOperation]에
+     * 위임한다 -- `REQUIRES_NEW`가 필요한 이유와 이 Class를 분리한 이유는 그 KDoc 참고.
      *
-     * 이 Method의 유일한 호출자는 `@TransactionalEventListener(AFTER_COMMIT)` Listener들이다. 그
-     * 시점에는 원본 Transaction이 **이미 Commit됐지만 Thread에 아직 바인딩된 상태**라, 기본
-     * `REQUIRED`로 두면 새 Insert가 그 끝난 Transaction에 참여한다 -- 참여 Transaction은 스스로
-     * Commit하지 않고 바깥 Transaction은 이미 Commit을 마쳤으므로, 예외 하나 없이 Row가 사라진다
-     * (Issue #118이 보고한 "알림이 생성되지 않는" 증상의 직접 원인이다).
-     *
-     * `AFTER_COMMIT` Listener는 원본 Transaction이 Rollback되면 아예 실행되지 않으므로,
-     * `REQUIRES_NEW`로 바꿔도 "원본이 실패하면 알림도 없다"라는 일관성은 그대로 유지된다.
-     * 수신자가 여럿인 알림(프로그램 삭제 등)에서 한 건의 저장 실패가 나머지 수신자의 알림까지
-     * 되돌리지 않는 효과도 함께 얻는다.
+     * 같은 Idempotency Identity(recipientMemberId + sourceEventType + sourceEventId, Issue #193)로
+     * 이미 알림이 있으면 UNIQUE 제약(`uk_notifications_recipient_source_event`) 위반으로 Insert가
+     * 실패하는데, 이를 오류가 아니라 **조용한 No-op**으로 처리하고 기존 알림의 id를 그대로
+     * 돌려준다 -- 지금까지 어떤 호출자(4개 Listener)도 반환값을 쓰지 않지만, 이 Method의 계약
+     * ("항상 유효한 알림 id를 돌려준다")을 유지하기 위해서다. UNIQUE 제약과 무관한
+     * `DataIntegrityViolationException`(예: 다른 Column 길이 제한 위반)까지 "이미 존재함"으로
+     * 오판하면 실제 저장 실패가 조용히 묻히므로, 제약 이름을 확인해 이 Identity 충돌일 때만
+     * No-op으로 처리한다(`DiscordDeliveryServiceImpl.enqueue`/`JobNotificationServiceImpl
+     * .createDeliveryOrNull`과 같은 방식).
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    override fun create(command: NotificationCreateCommand): Long {
-        val notification =
-            Notification(
+    override fun create(command: NotificationCreateCommand): Long =
+        try {
+            notificationInsertOperation.insert(command)
+        } catch (ex: DataIntegrityViolationException) {
+            if (!isSourceEventDuplicate(ex)) throw ex
+            findExistingBySourceEvent(command) ?: throw ex
+        }
+
+    private fun findExistingBySourceEvent(command: NotificationCreateCommand): Long? =
+        notificationRepository
+            .findByRecipientMemberIdAndSourceEventTypeAndSourceEventId(
                 recipientMemberId = command.recipientMemberId,
-                type = command.type,
-                title = command.title,
-                content = command.content,
-            ).apply {
-                targetType = command.targetType
-                targetId = command.targetId
-            }
-        val saved = notificationRepository.save(notification)
-        return requireNotNull(saved.id) { "저장된 Notification은 id를 가져야 합니다." }
+                sourceEventType = command.sourceEventType,
+                sourceEventId = command.sourceEventId,
+            )?.id
+
+    private fun isSourceEventDuplicate(ex: DataIntegrityViolationException): Boolean {
+        val constraintName =
+            generateSequence<Throwable>(ex) { it.cause }
+                .filterIsInstance<ConstraintViolationException>()
+                .firstOrNull()
+                ?.constraintName
+        return constraintName?.equals(SOURCE_EVENT_UNIQUE_CONSTRAINT, ignoreCase = true) == true ||
+            ex.message?.contains(SOURCE_EVENT_UNIQUE_CONSTRAINT, ignoreCase = true) == true
+    }
+
+    private companion object {
+        const val SOURCE_EVENT_UNIQUE_CONSTRAINT = "uk_notifications_recipient_source_event"
     }
 }

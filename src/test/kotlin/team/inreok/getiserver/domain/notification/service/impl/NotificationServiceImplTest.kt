@@ -2,11 +2,13 @@ package team.inreok.getiserver.domain.notification.service.impl
 
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.hibernate.exception.ConstraintViolationException
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyLong
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.ArgumentMatchers.isNull
 import org.mockito.BDDMockito.given
 import org.mockito.Mock
@@ -16,6 +18,7 @@ import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
@@ -34,6 +37,7 @@ import team.inreok.getiserver.domain.notification.repository.NotificationReposit
 import team.inreok.getiserver.domain.notification.service.NotificationTargetAvailability
 import team.inreok.getiserver.domain.notification.service.NotificationTargetRef
 import team.inreok.getiserver.domain.notification.service.NotificationTargetResolver
+import java.sql.SQLException
 import java.time.LocalDateTime
 import java.util.Optional
 
@@ -49,7 +53,12 @@ class NotificationServiceImplTest {
     private val ownerMemberId = 1L
     private val otherMemberId = 2L
 
-    private fun service() = NotificationServiceImpl(notificationRepository, notificationTargetResolver)
+    private fun service() =
+        NotificationServiceImpl(
+            notificationRepository,
+            notificationTargetResolver,
+            NotificationInsertOperation(notificationRepository),
+        )
 
     private fun notification(
         id: Long,
@@ -100,6 +109,8 @@ class NotificationServiceImplTest {
                     type = NotificationType.PROGRAM_PUBLISHED,
                     title = "새 프로그램",
                     content = "모집이 시작되었습니다.",
+                    sourceEventType = "ProgramPublishedEvent",
+                    sourceEventId = 1L,
                     targetType = NotificationTargetType.PROGRAM,
                     targetId = 100L,
                 ),
@@ -130,11 +141,64 @@ class NotificationServiceImplTest {
                 type = NotificationType.SYSTEM,
                 title = "공지",
                 content = "점검 안내",
+                sourceEventType = "SystemNoticeEvent",
+                sourceEventId = 1L,
             ),
         )
 
         assertThat(captor.value.targetType).isNull()
         assertThat(captor.value.targetId).isNull()
+    }
+
+    @Test
+    fun `같은 Idempotency Identity로 UNIQUE 제약을 위반하면 예외 대신 기존 알림 id를 반환한다`() {
+        val command =
+            NotificationCreateCommand(
+                recipientMemberId = ownerMemberId,
+                type = NotificationType.INQUIRY_ANSWERED,
+                title = "문의 답변",
+                content = "답변이 등록되었습니다.",
+                sourceEventType = "InquiryAnsweredEvent",
+                sourceEventId = 55L,
+            )
+        val duplicateViolation =
+            DataIntegrityViolationException(
+                "duplicate",
+                ConstraintViolationException("duplicate", SQLException(), "uk_notifications_recipient_source_event"),
+            )
+        given(notificationRepository.save(any() ?: notification(1L)))
+            .willThrow(duplicateViolation)
+        given(
+            notificationRepository.findByRecipientMemberIdAndSourceEventTypeAndSourceEventId(
+                ownerMemberId,
+                "InquiryAnsweredEvent",
+                55L,
+            ),
+        ).willReturn(notification(9L))
+
+        val createdId = service().create(command)
+
+        assertThat(createdId).isEqualTo(9L)
+    }
+
+    @Test
+    fun `UNIQUE 제약과 무관한 저장 실패는 그대로 다시 던진다`() {
+        val command =
+            NotificationCreateCommand(
+                recipientMemberId = ownerMemberId,
+                type = NotificationType.INQUIRY_ANSWERED,
+                title = "문의 답변",
+                content = "답변이 등록되었습니다.",
+                sourceEventType = "InquiryAnsweredEvent",
+                sourceEventId = 55L,
+            )
+        val unrelatedViolation = DataIntegrityViolationException("column too long")
+        given(notificationRepository.save(any() ?: notification(1L)))
+            .willThrow(unrelatedViolation)
+
+        assertThatThrownBy { service().create(command) }.isSameAs(unrelatedViolation)
+        verify(notificationRepository, never())
+            .findByRecipientMemberIdAndSourceEventTypeAndSourceEventId(anyLong(), anyString(), anyLong())
     }
 
     // ---------- 목록 ----------

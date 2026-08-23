@@ -19,6 +19,14 @@ import org.springframework.modulith.NamedInterface
  * DECISION_REQUIRED로 확인된 결과, 학생 Action(SUBMIT/RESUBMIT/REQUEST_EDIT)에 대한 담당 교사
  * 알림은 이번 Phase 범위에 포함하지 않는다(사용자 확인 완료) -- 이 Event는 교사 검토 Action에서만
  * 발행된다.
+ *
+ * [historyId]는 Notification Idempotency(Issue #193)의 `sourceEventId`로 쓰인다 -- 발행 시점에
+ * 이 값이 없어(기존에는 `applicationId`/`studentMemberId`/`action`/`reason`뿐이었다) 발행 측에
+ * 새로 추가했다(`recordStatusHistory`가 저장한 [team.inreok.getiserver.domain.application.entity
+ * .JobApplicationStatusHistory.id]를 그대로 담는다). `applicationId`만으로는 안정적인 식별자가
+ * 되지 못한다 -- 같은 지원서가 REQUEST_REVISION 뒤 APPROVE처럼 여러 번 검토될 수 있는데, 그때마다
+ * 서로 다른 검토 결과 알림이 나가야 하기 때문이다(같은 Event의 재처리가 아니라 서로 다른 상태
+ * 전이). 이력 Row는 상태가 바뀔 때마다 하나씩 새로 생겨(Update/삭제 없음) 이 조건을 만족한다.
  */
 @NamedInterface
 data class JobApplicationReviewedEvent(
@@ -28,4 +36,7 @@ data class JobApplicationReviewedEvent(
     val action: String,
     /** REQUEST_REVISION/REJECT에서만 값이 있다(`JobApplicationAdminActionRequest` 계약과 동일). */
     val reason: String?,
+    /** 이 검토로 새로 생긴 `JobApplicationStatusHistory`의 id. Notification Idempotency Identity의
+     * `sourceEventId`로 쓰인다. */
+    val historyId: Long,
 )

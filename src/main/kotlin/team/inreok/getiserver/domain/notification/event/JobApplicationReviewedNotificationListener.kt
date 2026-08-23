@@ -50,6 +50,11 @@ class JobApplicationReviewedNotificationListener(
                     type = NotificationType.JOB_APPLICATION_STATUS_CHANGED,
                     title = titleOf(event.action),
                     content = contentOf(event),
+                    // historyId는 이 검토로 새로 생긴 JobApplicationStatusHistory Row의 id다
+                    // (JobApplicationReviewedEvent KDoc 참고). applicationId만 쓰면 같은 지원서의
+                    // 서로 다른 검토 결과(REQUEST_REVISION 뒤 APPROVE 등)가 하나로 뭉개진다.
+                    sourceEventType = SOURCE_EVENT_TYPE,
+                    sourceEventId = event.historyId,
                     targetType = NotificationTargetType.JOB_APPLICATION,
                     targetId = event.applicationId,
                 ),
@@ -110,4 +115,10 @@ class JobApplicationReviewedNotificationListener(
         base: String,
         reason: String?,
     ): String = if (reason == null) base else "$base 사유: $reason"
+
+    private companion object {
+        // Notification Idempotency Identity(Issue #193)의 sourceEventType. 원본 Domain Event Class
+        // 이름을 그대로 쓴다(InquiryAnsweredNotificationListener와 같은 이유).
+        const val SOURCE_EVENT_TYPE = "JobApplicationReviewedEvent"
+    }
 }

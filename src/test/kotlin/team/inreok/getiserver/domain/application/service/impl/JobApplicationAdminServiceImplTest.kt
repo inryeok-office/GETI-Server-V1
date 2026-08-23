@@ -2,6 +2,7 @@ package team.inreok.getiserver.domain.application.service.impl
 
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentCaptor
@@ -12,6 +13,8 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
+import org.mockito.junit.jupiter.MockitoSettings
+import org.mockito.quality.Strictness
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
@@ -44,7 +47,15 @@ import tools.jackson.databind.json.JsonMapper
 import java.time.LocalDateTime
 import java.util.Optional
 
+/**
+ * Idempotency(Issue #193)로 `recordStatusHistory`가 저장된 이력을 반환하도록 바뀌면서 이 Class에
+ * `stubStatusHistorySave`/`dummyHistory`/`DEFAULT_HISTORY_ID`가 추가돼 detekt 기본 LargeClass
+ * 임계값을 넘는다. `JobServiceTest`/`ProgramServiceImplTest`가 이미 같은 이유로 Suppress한 전례를
+ * 따른다.
+ */
+@Suppress("LargeClass")
 @ExtendWith(MockitoExtension::class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class JobApplicationAdminServiceImplTest {
     @Mock
     private lateinit var jobApplicationRepository: JobApplicationRepository
@@ -85,6 +96,30 @@ class JobApplicationAdminServiceImplTest {
     }
 
     private val fixedTime = LocalDateTime.of(2026, 3, 1, 10, 0, 0)
+
+    // recordStatusHistory가 저장된 이력을 반환하도록 바뀌면서(Issue #193, JobApplicationReviewedEvent
+    // .historyId) executeAction의 모든 성공 경로가 이 반환값의 id를 사용한다. 개별 Test마다 Stub을
+    // 반복하지 않도록 기본 Stub을 여기 둔다(Test마다 Strict Stubbing 위반이 나지 않도록 Class
+    // 전체를 LENIENT로 둔 이유이기도 하다).
+    @BeforeEach
+    fun stubStatusHistorySave() {
+        given(jobApplicationStatusHistoryRepository.save(any() ?: dummyHistory())).willAnswer { invocation ->
+            invocation.getArgument<JobApplicationStatusHistory>(0).apply { id = DEFAULT_HISTORY_ID }
+        }
+    }
+
+    private companion object {
+        const val DEFAULT_HISTORY_ID = 500L
+    }
+
+    private fun dummyHistory() =
+        JobApplicationStatusHistory(
+            applicationId = 0L,
+            fromStatus = JobApplicationStatus.DRAFT,
+            toStatus = JobApplicationStatus.DRAFT,
+            action = "",
+            actorMemberId = 0L,
+        )
 
     private fun applicationOf(
         id: Long = 1L,
@@ -537,7 +572,13 @@ class JobApplicationAdminServiceImplTest {
         )
 
         verify(eventPublisher).publishEvent(
-            JobApplicationReviewedEvent(applicationId = 1L, studentMemberId = 7L, action = "APPROVE", reason = null),
+            JobApplicationReviewedEvent(
+                applicationId = 1L,
+                studentMemberId = 7L,
+                action = "APPROVE",
+                reason = null,
+                historyId = DEFAULT_HISTORY_ID,
+            ),
         )
     }
 
@@ -566,6 +607,7 @@ class JobApplicationAdminServiceImplTest {
                 studentMemberId = 7L,
                 action = "REQUEST_REVISION",
                 reason = "포트폴리오 링크를 추가해주세요.",
+                historyId = DEFAULT_HISTORY_ID,
             ),
         )
     }
@@ -592,7 +634,13 @@ class JobApplicationAdminServiceImplTest {
     // Kotlin non-null 파라미터에 bare any()를 쓰면 null 반환으로 NPE가 나므로 non-null Fallback을 둔다
     // (OAuthMemberPortImplTest.anyMember와 동일한 판단).
     private fun dummyEvent() =
-        JobApplicationReviewedEvent(applicationId = 0L, studentMemberId = 0L, action = "", reason = null)
+        JobApplicationReviewedEvent(
+            applicationId = 0L,
+            studentMemberId = 0L,
+            action = "",
+            reason = null,
+            historyId = 0L,
+        )
 
     @Test
     fun `담당 교사가 APPROVE하면 APPROVED로 전이한다`() {
