@@ -265,6 +265,12 @@ private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     // File 도메인의 Service 계층이 별도로 판정한다(§16).
     authorize("/api/v1/files", authenticated)
     authorize("/api/v1/files/**", authenticated)
+    // 관리자 공통 파일 목록 조회(Issue #225)는 업로더·연결 대상 등 운영 정보를 포함하므로
+    // 개발자만 접근한다(Discord 전달 횡단 목록 "/api/v1/admin/discord-deliveries"와 같은 기준,
+    // Issue #206). "/api/v1/admin/files"는 "/api/v1/files" Prefix와 겹치지 않으므로 선언 순서와
+    // 무관하게 항상 이 규칙이 적용된다. 하위 경로가 없는 단일 Endpoint라 "/**" 형태는 추가하지
+    // 않는다.
+    authorize("/api/v1/admin/files", hasRole("DEVELOPER"))
     // 문의 관리(전체 목록·검색, 담당자 지정·해제, 상태 변경, 답변 등록)는 개발자만
     // 접근한다(요구사항 §51 권한 Matrix). Program에서 넓은 패턴이 먼저 선언되어
     // 학생 전용 API가 뚫렸던 사고(원본 실행 프롬프트 §3)를 반복하지 않도록, 구체적인
