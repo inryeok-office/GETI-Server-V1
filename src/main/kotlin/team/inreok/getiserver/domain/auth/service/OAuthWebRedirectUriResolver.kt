@@ -26,9 +26,18 @@ class OAuthWebRedirectUriResolver(
         if (callbackRedirectUrl.isBlank()) throw OAuthWebRedirectNotConfiguredException()
     }
 
-    fun successUri(): URI {
+    /**
+     * 성공 Redirect URI를 만든다. Web Callback은 Body가 없으므로 신규 회원 여부를 URL의
+     * `newMember` Query Parameter로만 전달한다(Issue #162 후속). Access/Refresh Token은 절대
+     * URL에 담지 않는다 -- Refresh Token은 [OAuthController]가 HttpOnly Cookie로만 내려준다.
+     */
+    fun successUri(newMember: Boolean): URI {
         requireConfigured()
-        return URI.create(callbackRedirectUrl)
+        return UriComponentsBuilder
+            .fromUriString(callbackRedirectUrl)
+            .queryParam("newMember", newMember)
+            .build(true)
+            .toUri()
     }
 
     fun failureUri(errorCode: String): URI {
