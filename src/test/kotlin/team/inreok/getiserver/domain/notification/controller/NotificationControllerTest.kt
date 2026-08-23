@@ -6,6 +6,7 @@ import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyBoolean
 import org.mockito.ArgumentMatchers.anyLong
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.BDDMockito.given
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
@@ -23,21 +24,30 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.inreok.getiserver.domain.notification.dto.NotificationDeviceRegisterRequest
+import team.inreok.getiserver.domain.notification.dto.NotificationDeviceResponse
 import team.inreok.getiserver.domain.notification.dto.NotificationListResponse
 import team.inreok.getiserver.domain.notification.dto.NotificationReadRequest
 import team.inreok.getiserver.domain.notification.dto.NotificationReadResponse
 import team.inreok.getiserver.domain.notification.dto.NotificationReadScope
+import team.inreok.getiserver.domain.notification.dto.NotificationSettingResponse
 import team.inreok.getiserver.domain.notification.dto.NotificationSummaryResponse
 import team.inreok.getiserver.domain.notification.dto.UnreadNotificationCountResponse
 import team.inreok.getiserver.domain.notification.entity.type.NotificationTargetType
 import team.inreok.getiserver.domain.notification.entity.type.NotificationTargetUnavailableReason
 import team.inreok.getiserver.domain.notification.entity.type.NotificationType
+import team.inreok.getiserver.domain.notification.entity.type.PushPlatform
 import team.inreok.getiserver.domain.notification.exception.NotificationAccessDeniedException
+import team.inreok.getiserver.domain.notification.exception.NotificationDeviceAccessDeniedException
+import team.inreok.getiserver.domain.notification.exception.NotificationDeviceNotFoundException
 import team.inreok.getiserver.domain.notification.exception.NotificationIdRequiredException
 import team.inreok.getiserver.domain.notification.exception.NotificationNotFoundException
+import team.inreok.getiserver.domain.notification.service.NotificationDeviceService
 import team.inreok.getiserver.domain.notification.service.NotificationService
+import team.inreok.getiserver.domain.notification.service.NotificationSettingService
 import team.inreok.getiserver.global.security.JwtTokenProvider
 import team.inreok.getiserver.global.web.WebPageableConfig
 import java.time.LocalDateTime
@@ -56,6 +66,12 @@ class NotificationControllerTest
     ) {
         @MockitoBean
         private lateinit var notificationService: NotificationService
+
+        @MockitoBean
+        private lateinit var notificationDeviceService: NotificationDeviceService
+
+        @MockitoBean
+        private lateinit var notificationSettingService: NotificationSettingService
 
         @MockitoBean
         private lateinit var jwtTokenProvider: JwtTokenProvider
@@ -77,6 +93,10 @@ class NotificationControllerTest
         // 채운다(ProgramControllerTest.anyActionRequest()와 같은 이유).
         private fun anyReadRequest(): NotificationReadRequest =
             any(NotificationReadRequest::class.java) ?: NotificationReadRequest(NotificationReadScope.ALL)
+
+        private fun anyDeviceRegisterRequest(): NotificationDeviceRegisterRequest =
+            any(NotificationDeviceRegisterRequest::class.java)
+                ?: NotificationDeviceRegisterRequest("device-key-1", "push-token-1", PushPlatform.ANDROID)
 
         private val summary =
             NotificationSummaryResponse(
@@ -452,4 +472,158 @@ class NotificationControllerTest
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body)
                 .with(studentAuth())
+
+        // ---------- 푸시 기기 등록/갱신 ----------
+
+        private val deviceRegisterBody =
+            """{ "deviceKey": "device-key-1", "pushToken": "push-token-1", "platform": "ANDROID" }"""
+
+        @Test
+        fun `기기를 등록하면 201이고 pushToken은 응답에 없다`() {
+            given(notificationDeviceService.register(anyLong(), anyDeviceRegisterRequest()))
+                .willReturn(
+                    NotificationDeviceResponse(
+                        deviceKey = "device-key-1",
+                        platform = PushPlatform.ANDROID,
+                        updatedAt = LocalDateTime.of(2026, 8, 20, 10, 0),
+                    ),
+                )
+
+            mockMvc
+                .perform(
+                    post("/api/v1/notifications/devices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deviceRegisterBody)
+                        .with(studentAuth()),
+                ).andExpect(status().isCreated)
+                .andExpect(jsonPath("$.data.deviceKey").value("device-key-1"))
+                .andExpect(jsonPath("$.data.platform").value("ANDROID"))
+                .andExpect(jsonPath("$.data.pushToken").doesNotExist())
+        }
+
+        @Test
+        fun `deviceKey가 비어 있으면 400이다`() {
+            mockMvc
+                .perform(
+                    post("/api/v1/notifications/devices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "deviceKey": "", "pushToken": "push-token-1", "platform": "ANDROID" }""")
+                        .with(studentAuth()),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+
+            verify(notificationDeviceService, never()).register(anyLong(), anyDeviceRegisterRequest())
+        }
+
+        @Test
+        fun `인증 없이 기기를 등록하면 401이다`() {
+            mockMvc
+                .perform(
+                    post("/api/v1/notifications/devices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deviceRegisterBody),
+                ).andExpect(status().isUnauthorized)
+
+            verify(notificationDeviceService, never()).register(anyLong(), anyDeviceRegisterRequest())
+        }
+
+        // ---------- 푸시 기기 해제 ----------
+
+        @Test
+        fun `본인의 기기를 해제하면 204이고 응답 본문이 없다`() {
+            mockMvc
+                .perform(delete("/api/v1/notifications/devices/device-key-1").with(studentAuth()))
+                .andExpect(status().isNoContent)
+                .andExpect { result -> assertThat(result.response.contentAsString).isEmpty() }
+
+            verify(notificationDeviceService).unregister(memberId, "device-key-1")
+        }
+
+        @Test
+        fun `다른 회원이 등록한 기기를 해제하면 403이다`() {
+            org.mockito.BDDMockito
+                .willThrow(NotificationDeviceAccessDeniedException())
+                .given(notificationDeviceService)
+                .unregister(anyLong(), anyString())
+
+            mockMvc
+                .perform(delete("/api/v1/notifications/devices/device-key-1").with(studentAuth()))
+                .andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.error.code").value("NOTIFICATION_DEVICE_ACCESS_DENIED"))
+        }
+
+        @Test
+        fun `등록되지 않은 기기를 해제하면 404다`() {
+            org.mockito.BDDMockito
+                .willThrow(NotificationDeviceNotFoundException("no-such-device"))
+                .given(notificationDeviceService)
+                .unregister(anyLong(), anyString())
+
+            mockMvc
+                .perform(delete("/api/v1/notifications/devices/no-such-device").with(studentAuth()))
+                .andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.error.code").value("NOTIFICATION_DEVICE_NOT_FOUND"))
+        }
+
+        @Test
+        fun `인증 없이 기기를 해제하면 401이다`() {
+            mockMvc
+                .perform(delete("/api/v1/notifications/devices/device-key-1"))
+                .andExpect(status().isUnauthorized)
+
+            verify(notificationDeviceService, never()).unregister(anyLong(), anyString())
+        }
+
+        // ---------- 푸시 알림 설정 조회 ----------
+
+        @Test
+        fun `푸시 알림 설정을 조회할 수 있다`() {
+            given(notificationSettingService.getSettings(memberId))
+                .willReturn(NotificationSettingResponse(pushEnabled = true))
+
+            mockMvc
+                .perform(get("/api/v1/notifications/settings").with(studentAuth()))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.pushEnabled").value(true))
+        }
+
+        @Test
+        fun `인증 없이 설정을 조회하면 401이다`() {
+            mockMvc
+                .perform(get("/api/v1/notifications/settings"))
+                .andExpect(status().isUnauthorized)
+
+            verify(notificationSettingService, never()).getSettings(anyLong())
+        }
+
+        // ---------- 푸시 알림 설정 변경 ----------
+
+        @Test
+        fun `푸시 알림 설정을 변경할 수 있다`() {
+            given(notificationSettingService.updateSettings(anyLong(), anyBoolean()))
+                .willReturn(NotificationSettingResponse(pushEnabled = false))
+
+            mockMvc
+                .perform(
+                    patch("/api/v1/notifications/settings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "pushEnabled": false }""")
+                        .with(studentAuth()),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.pushEnabled").value(false))
+
+            verify(notificationSettingService).updateSettings(memberId, false)
+        }
+
+        @Test
+        fun `인증 없이 설정을 변경하면 401이다`() {
+            mockMvc
+                .perform(
+                    patch("/api/v1/notifications/settings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "pushEnabled": false }"""),
+                ).andExpect(status().isUnauthorized)
+
+            verify(notificationSettingService, never()).updateSettings(anyLong(), anyBoolean())
+        }
     }
