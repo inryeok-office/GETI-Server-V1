@@ -10,6 +10,10 @@ import team.inreok.getiserver.domain.notification.entity.Notification
 import team.inreok.getiserver.domain.notification.entity.type.NotificationType
 import java.time.LocalDateTime
 
+// V35 Migration이 추가한 각 Partial Index(idx_notifications_deleted_at_retention/
+// idx_notifications_unread_retention/idx_notifications_read_retention)와 정확히 같은 WHERE 조건을
+// 써야 Query Planner가 그 Index를 탄다(NotificationRetentionCleanupServiceImpl 참고).
+
 interface NotificationRepository : JpaRepository<Notification, Long> {
     /**
      * 내 알림 목록이다. `:isRead`, `:type`은 null이면 조건을 적용하지 않는다(ProgramRepository
@@ -71,4 +75,55 @@ interface NotificationRepository : JpaRepository<Notification, Long> {
         @Param("memberId") memberId: Long,
         @Param("readAt") readAt: LocalDateTime,
     ): Int
+
+    /**
+     * Soft Delete된 지 오래된 알림(Retention #194 확정 계약: `deletedAt` 기준 30일)의 id다. 이후
+     * [deleteAllByIdInBatch]로 Hard Delete한다. 상한(`pageable`)을 넘는 만큼은 다음 Scheduler
+     * 실행에서 이어서 처리된다.
+     */
+    @Query(
+        """
+        SELECT n.id FROM Notification n
+        WHERE n.deletedAt IS NOT NULL AND n.deletedAt <= :cutoff
+        ORDER BY n.id ASC
+        """,
+    )
+    fun findExpiredSoftDeletedIds(
+        @Param("cutoff") cutoff: LocalDateTime,
+        pageable: Pageable,
+    ): List<Long>
+
+    /**
+     * 읽은 지 오래된(아직 Soft Delete 안 된) 알림의 id다(Retention #194 확정 계약: `readAt` 기준
+     * 180일 -- `isRead=true`인 Row는 항상 `readAt`이 함께 채워져 있다는 전제는
+     * [team.inreok.getiserver.domain.notification.entity.Notification.markAsRead]와
+     * `NotificationRepository.markAllAsRead`가 보장한다).
+     */
+    @Query(
+        """
+        SELECT n.id FROM Notification n
+        WHERE n.deletedAt IS NULL AND n.isRead = true AND n.readAt <= :cutoff
+        ORDER BY n.id ASC
+        """,
+    )
+    fun findExpiredReadIds(
+        @Param("cutoff") cutoff: LocalDateTime,
+        pageable: Pageable,
+    ): List<Long>
+
+    /**
+     * 읽지 않은 채로 오래된(아직 Soft Delete 안 된) 알림의 id다(Retention #194 확정 계약:
+     * `createdAt` 기준 365일).
+     */
+    @Query(
+        """
+        SELECT n.id FROM Notification n
+        WHERE n.deletedAt IS NULL AND n.isRead = false AND n.createdAt <= :cutoff
+        ORDER BY n.id ASC
+        """,
+    )
+    fun findExpiredUnreadIds(
+        @Param("cutoff") cutoff: LocalDateTime,
+        pageable: Pageable,
+    ): List<Long>
 }
