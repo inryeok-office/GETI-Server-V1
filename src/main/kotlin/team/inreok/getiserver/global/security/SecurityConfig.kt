@@ -1,5 +1,3 @@
-@file:Suppress("ForbiddenComment")
-
 package team.inreok.getiserver.global.security
 
 import jakarta.servlet.http.HttpServletResponse
@@ -21,14 +19,12 @@ import team.inreok.getiserver.global.error.ErrorResponse
 import tools.jackson.databind.ObjectMapper
 
 /**
- * ⚠️ TEMPORARY: `securityFilterChain`의 HTTP Authorization Layer가 현재 전역 `permitAll`이다
- * (Frontend/API 연동 단계 지원, Issue #162 PR 본문 "임시 개발용 Security 전체 개방" 참고). 이
- * 상태에서는 CD로 배포된 환경의 모든 API가 Access Token 없이 호출 가능하다 -- 개발 연동 목적
- * 외(운영 서비스)로 이 상태를 유지하지 않는다. 기존 세부 Rule은 지우지 않고
- * [applyNormalSecurityRules]에 그대로 보존했다. 복구 방법: `authorize(anyRequest, permitAll)`
- * 한 줄을 지우고 `applyNormalSecurityRules()` 호출로 되돌린다.
+ * `securityFilterChain`의 HTTP Authorization Layer는 [applyNormalSecurityRules]가 선언하는 정상
+ * 정책을 그대로 적용한다(임시 전역 `permitAll` 개방은 Frontend/DG OAuth 연동이 진행되며 제거했다,
+ * Issue #162). 미인증 요청은 [jsonAuthenticationEntryPoint]가 401(UNAUTHORIZED)로, 역할이 부족한
+ * 요청은 [jsonAccessDeniedHandler]가 403(FORBIDDEN)으로 걸러낸다.
  *
- * 아래는 [applyNormalSecurityRules]가 (현재는 호출되지 않지만) 정의하는 정상 정책이다.
+ * 아래는 [applyNormalSecurityRules]가 정의하는 정상 정책이다.
  * `/api/v1/auth/session`, `/api/v1/auth/logout`,
  * `/api/v1/me/` 이하 모든 경로(Issue #50, 내 프로필/전공/기술스택), `/api/v1/members`(학생 이름
  * 검색·프로필 조회, Issue #50 후속), `/api/v1/companies`(기업 조회, Issue #56), `/api/v1/jobs`
@@ -83,16 +79,7 @@ class SecurityConfig(
             sessionManagement { sessionCreationPolicy = SessionCreationPolicy.STATELESS }
             httpBasic { disable() }
             formLogin { disable() }
-            authorizeHttpRequests {
-                // TEMPORARY(개발용 Security 전체 개방, Issue #162 PR 본문 "임시 개발용 Security
-                // 전체 개방" 참고): Frontend/API 연동을 위해 HTTP Authorization Layer 전체를
-                // permitAll로 연다. 기존 세부 Rule은 지우지 않고 applyNormalSecurityRules()에
-                // 그대로 보존했다 -- 연동이 끝나면 아래 한 줄을 지우고 `applyNormalSecurityRules()`
-                // 호출로 되돌리면 복구된다.
-                //
-                // TODO: Frontend 연동 완료 후 이 줄을 지우고 applyNormalSecurityRules()를 호출한다.
-                authorize(anyRequest, permitAll)
-            }
+            authorizeHttpRequests { applyNormalSecurityRules() }
             exceptionHandling {
                 authenticationEntryPoint = jsonAuthenticationEntryPoint()
                 accessDeniedHandler = jsonAccessDeniedHandler()
@@ -147,13 +134,11 @@ class SecurityConfig(
     }
 }
 
-// ⚠️ TEMPORARY: 이번 개발 단계에서는 securityFilterChain이 이 Method를 호출하지 않는다(대신 전역
-// permitAll, SecurityConfig Class KDoc 참고). Domain별 세부 Role/인증 Rule을 그대로 보존해 두는
-// 목적뿐이다 -- Frontend 연동이 끝나면 securityFilterChain의 `authorize(anyRequest, permitAll)`을
-// 지우고 `applyNormalSecurityRules()` 호출로 되돌리면 즉시 복구된다. Class 안에 두지 않고 File
-// 최상위 Extension Function으로 둔 이유는 detekt `TooManyFunctions`를 피하면서도 이 Method 자체가
-// SecurityConfig의 어떤 주입 필드도 쓰지 않는 순수 DSL 선언이기 때문이다.
-@Suppress("LongMethod", "unused")
+// Domain별 세부 Role/인증 Rule을 선언한다. securityFilterChain(운영)과 normalSecurityFilterChainForTest
+// (Controller 계약 Test)가 모두 이 Method를 호출한다. Class 안에 두지 않고 File 최상위 Extension
+// Function으로 둔 이유는 detekt `TooManyFunctions`를 피하면서도 이 Method 자체가 SecurityConfig의
+// 어떤 주입 필드도 쓰지 않는 순수 DSL 선언이기 때문이다.
+@Suppress("LongMethod")
 private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     // CORS Preflight(OPTIONS)에는 Authorization Header가 없어 authenticated에 막힌다. CORS가
     // 활성화되는 시점에 Cross-Origin의 /session·/logout이 막히지 않도록 먼저 허용한다(코드 리뷰 P2 반영).

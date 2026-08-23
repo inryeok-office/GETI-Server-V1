@@ -7,10 +7,15 @@ import team.inreok.getiserver.domain.auth.exception.OAuthWebRedirectNotConfigure
 
 class OAuthWebRedirectUriResolverTest {
     @Test
-    fun `설정된 URL이 있으면 successUri는 그대로 반환한다`() {
+    fun `설정된 URL이 있으면 successUri는 newMember Query Parameter를 붙여 반환한다`() {
         val resolver = OAuthWebRedirectUriResolver("https://web.example.com/auth/callback")
 
-        assertThat(resolver.successUri().toString()).isEqualTo("https://web.example.com/auth/callback")
+        assertThat(
+            resolver.successUri(true).toString(),
+        ).isEqualTo("https://web.example.com/auth/callback?newMember=true")
+        assertThat(
+            resolver.successUri(false).toString(),
+        ).isEqualTo("https://web.example.com/auth/callback?newMember=false")
     }
 
     @Test
@@ -34,7 +39,7 @@ class OAuthWebRedirectUriResolverTest {
     fun `설정이 비어 있으면 successUri도 예외를 던진다`() {
         val resolver = OAuthWebRedirectUriResolver("")
 
-        assertThatThrownBy { resolver.successUri() }
+        assertThatThrownBy { resolver.successUri(false) }
             .isInstanceOf(OAuthWebRedirectNotConfiguredException::class.java)
     }
 
