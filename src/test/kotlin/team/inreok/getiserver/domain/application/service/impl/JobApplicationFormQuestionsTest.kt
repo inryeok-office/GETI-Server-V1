@@ -17,6 +17,7 @@ import team.inreok.getiserver.domain.application.entity.Form
 import team.inreok.getiserver.domain.application.entity.FormVersion
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.JobApplicationForm
+import team.inreok.getiserver.domain.application.entity.JobApplicationStatusHistory
 import team.inreok.getiserver.domain.application.entity.type.FormFieldType
 import team.inreok.getiserver.domain.application.entity.type.FormStatus
 import team.inreok.getiserver.domain.application.entity.type.FormType
@@ -178,6 +179,13 @@ class JobApplicationFormQuestionsTest {
         given(jobApplicationRepository.findByIdForUpdate(1L)).willReturn(application)
         given(formVersionRepository.findByFormIdAndVersion(10L, 1)).willReturn(formVersionOf())
         given(fileLinkPort.linkedFilesOf(FileOwnerType.JOB_APPLICATION, 1L)).willReturn(emptyList())
+        // recordStatusHistory가 저장된 이력을 반환하도록 바뀌면서(Issue #193) executeAction이 이
+        // 반환값을 실제로 역참조한다(JobApplicationAdminServiceImplTest.stubStatusHistorySave와
+        // 같은 이유). 이 Test는 questions 매핑이 관심사라 이력 자체는 검증하지 않는다.
+        given(jobApplicationStatusHistoryRepository.save(any(JobApplicationStatusHistory::class.java)))
+            .willAnswer { invocation ->
+                invocation.getArgument<JobApplicationStatusHistory>(0).apply { id = 999L }
+            }
 
         val result =
             service.executeAction(

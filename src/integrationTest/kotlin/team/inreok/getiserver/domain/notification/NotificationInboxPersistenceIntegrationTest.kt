@@ -26,6 +26,7 @@ import team.inreok.getiserver.domain.notification.exception.NotificationNotFound
 import team.inreok.getiserver.domain.notification.repository.NotificationRepository
 import team.inreok.getiserver.domain.notification.service.NotificationService
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 인앱 알림 Inbox의 조회·읽음·삭제가 실제 PostgreSQL에서 의도대로 동작하는지 검증한다(Issue #187).
@@ -229,6 +230,12 @@ class NotificationInboxPersistenceIntegrationTest {
         pageSize: Int = PAGE_SIZE,
     ) = PageRequest.of(pageNumber, pageSize)
 
+    // 이 Test는 같은 recipientMemberId로 알림을 여러 건 만드는 경우가 많다(정렬·Pagination 검증
+    // 등). Idempotency UNIQUE 제약(recipientMemberId + sourceEventType + sourceEventId)에 걸리지
+    // 않도록 호출마다 다른 sourceEventId를 준다 -- 이 Test의 관심사는 Idempotency 자체가 아니라
+    // 조회·읽음·삭제이므로 "서로 다른 알림"을 표현하기만 하면 된다.
+    private val sourceEventIdSequence = AtomicLong()
+
     private fun create(
         recipientMemberId: Long,
         type: NotificationType,
@@ -239,6 +246,8 @@ class NotificationInboxPersistenceIntegrationTest {
                 type = type,
                 title = "제목",
                 content = "내용",
+                sourceEventType = "NotificationInboxPersistenceIntegrationTest",
+                sourceEventId = sourceEventIdSequence.incrementAndGet(),
             ),
         )
 

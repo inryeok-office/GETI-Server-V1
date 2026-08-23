@@ -42,6 +42,8 @@ class MemberApprovalProcessedNotificationListenerTest {
         assertThat(command.targetId).isEqualTo(42L)
         assertThat(command.title).contains("승인")
         assertThat(command.content).contains("승인")
+        assertThat(command.sourceEventType).isEqualTo("MemberApprovalProcessedEvent")
+        assertThat(command.sourceEventId).isEqualTo(42L)
     }
 
     @Test
@@ -93,5 +95,7 @@ class MemberApprovalProcessedNotificationListenerTest {
             type = NotificationType.SYSTEM,
             title = "",
             content = "",
+            sourceEventType = "",
+            sourceEventId = 0L,
         )
 }

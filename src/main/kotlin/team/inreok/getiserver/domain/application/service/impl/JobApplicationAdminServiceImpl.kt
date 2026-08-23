@@ -165,14 +165,15 @@ class JobApplicationAdminServiceImpl(
         jobApplicationRepository.flush()
         // 상태 변경(flush)과 이력 저장이 같은 Transaction(@Transactional) 안에서 원자적으로
         // 처리된다(요구사항 "Transaction 일관성" 절, Issue #133).
-        recordStatusHistory(
-            jobApplicationStatusHistoryRepository,
-            application,
-            fromStatus,
-            request.action.name,
-            requesterMemberId,
-            request.reason,
-        )
+        val history =
+            recordStatusHistory(
+                jobApplicationStatusHistoryRepository,
+                application,
+                fromStatus,
+                request.action.name,
+                requesterMemberId,
+                request.reason,
+            )
         // 지원자에게 검토 결과를 알린다(Issue #135). 상태 전이·이력 기록과 같은 Transaction 안에서
         // 발행해, 검토 Action이 Rollback되면 알림도 만들어지지 않도록 한다(실제 알림 생성은
         // domain.notification의 AFTER_COMMIT Listener가 담당, JobApplicationReviewedEvent KDoc 참고).
@@ -182,6 +183,7 @@ class JobApplicationAdminServiceImpl(
                 studentMemberId = application.applicantMemberId,
                 action = request.action.name,
                 reason = request.reason,
+                historyId = requireNotNull(history.id) { "저장된 JobApplicationStatusHistory는 id를 가져야 합니다." },
             ),
         )
         return toJobApplicationDraftResponse(
