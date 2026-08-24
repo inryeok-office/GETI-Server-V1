@@ -158,7 +158,7 @@ class CoreDomainSchemaIntegrationTest
                         """.trimIndent(),
                     ).singleResult as Number
 
-            assertThat(tableCount.toInt()).isEqualTo(44)
+            assertThat(tableCount.toInt()).isEqualTo(45)
         }
 
         @Test
