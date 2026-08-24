@@ -106,6 +106,20 @@ interface MemberJobPreferenceRepository :
         pageable: Pageable,
     ): Page<MemberJobPreference>
 
+    /** `JOB_CLOSED` 알림(Issue #191)의 수신자를 찾기 위한 조회다. [jobId]를 북마크한(관심 있는)
+     * 회원 id만 돌려준다 -- Job이 소유한 대상 학년 등으로 Broadcast하지 않고, 실제 북마크 관계가
+     * 있는 회원에게만 알린다는 확정 정책([team.inreok.getiserver.domain.recommendation.query.JobBookmarkAudienceQueryPort]
+     * 참고)을 그대로 따른다. */
+    @Query(
+        """
+        SELECT p.memberId FROM MemberJobPreference p
+        WHERE p.jobId = :jobId AND p.bookmarked = true
+        """,
+    )
+    fun findMemberIdsByJobIdAndBookmarkedTrue(
+        @Param("jobId") jobId: Long,
+    ): List<Long>
+
     /** Job Summary의 `bookmarkCount` Field(Issue #196)를 위한 Batch 집계다. Job별로 개별 COUNT
      * Query를 날리면 목록 항목 수만큼 Query가 늘어나(N+1) `jobIds`를 한 번에 묶어 GROUP BY로
      * 가져온다(`ProgramApplicationRepository.countActiveApplicantsByProgramIds`와 같은 관례).
