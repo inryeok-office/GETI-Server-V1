@@ -113,6 +113,21 @@ class CompanyQueryIntegrationTest
         }
 
         @Test
+        fun `검색어 없이 반복 조회해도 500 오류가 발생하지 않는다`() {
+            // Issue #257: pgjdbc는 동일한 SQL을 같은 Connection에서 prepareThreshold(기본 5회)
+            // 이상 실행하면 Server-Side Prepared Statement로 전환한다. :query가 null일 때
+            // Parameter 타입을 명확히 알 수 없으면 이 시점에 PostgreSQL이 bytea로 잘못 추론해
+            // "function lower(bytea) does not exist"로 Query가 실패한다. 단 한 번의 호출로는
+            // 재현되지 않으므로(Threshold 도달 전) 같은 Connection에서 반복 호출해 검증한다.
+            persist("반복조회기업")
+
+            repeat(10) {
+                val result = companyRepository.search(null, null, null, null, pageable)
+                assertThat(result.content.map { it.name }).containsExactly("반복조회기업")
+            }
+        }
+
+        @Test
         fun `삭제된 기업은 단건 조회에서도 제외한다`() {
             val deleted = persist("삭제된기업", deletedAt = LocalDateTime.now())
 
