@@ -1,6 +1,7 @@
 package team.inreok.getiserver.domain.notification.service.impl
 
 import org.hibernate.exception.ConstraintViolationException
+import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
@@ -20,6 +21,7 @@ import team.inreok.getiserver.domain.notification.exception.NotificationNotFound
 import team.inreok.getiserver.domain.notification.repository.NotificationRepository
 import team.inreok.getiserver.domain.notification.service.NotificationService
 import team.inreok.getiserver.domain.notification.service.NotificationTargetResolver
+import team.inreok.getiserver.domain.notification.service.PushDeliveryService
 import java.time.LocalDateTime
 
 @Service
@@ -27,7 +29,10 @@ class NotificationServiceImpl(
     private val notificationRepository: NotificationRepository,
     private val notificationTargetResolver: NotificationTargetResolver,
     private val notificationInsertOperation: NotificationInsertOperation,
+    private val pushDeliveryService: PushDeliveryService,
 ) : NotificationService {
+    private val log = LoggerFactory.getLogger(NotificationServiceImpl::class.java)
+
     @Transactional(readOnly = true)
     override fun list(
         memberId: Long,
@@ -147,7 +152,20 @@ class NotificationServiceImpl(
      */
     override fun create(command: NotificationCreateCommand): Long =
         try {
-            notificationInsertOperation.insert(command)
+            val notificationId = notificationInsertOperation.insert(command)
+            // 방금 새로 만든 알림에만 Push를 예약한다 -- 아래 UNIQUE 제약으로 기존 알림을 재사용한
+            // 경우(같은 알림이 이미 존재)는 이미 한 번 예약이 끝났으므로 다시 보내지 않는다.
+            //
+            // Push 발송은 인앱 알림 생성의 부가 기능이다(Issue #190) -- 예약 중 어떤 오류가 나도
+            // 이미 만든 알림 id를 그대로 돌려주고 이 Method가 실패한 것처럼 보이지 않게 한다
+            // (`InquiryAnsweredNotificationListener` 등 4개 Listener가 `create` 호출을
+            // `runCatching`으로 감싸는 것과 같은 원칙).
+            runCatching {
+                pushDeliveryService.enqueueForNotification(notificationId, command.recipientMemberId, command.type)
+            }.onFailure { ex ->
+                log.error("Push 전달 예약 중 처리되지 않은 오류(notificationId={})", notificationId, ex)
+            }
+            notificationId
         } catch (ex: DataIntegrityViolationException) {
             if (!isSourceEventDuplicate(ex)) throw ex
             findExistingBySourceEvent(command) ?: throw ex

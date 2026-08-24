@@ -10,6 +10,16 @@ interface NotificationDeviceRepository : JpaRepository<NotificationDevice, Long>
     fun findByDeviceKey(deviceKey: String): NotificationDevice?
 
     /**
+     * 회원이 등록한 모든 기기의 id다(Issue #190). Push 전달을 예약할 때 이 id만 있으면 되고, 실제
+     * 발송 시점에는 `PushDeliveryServiceImpl`이 [findById]로 최신 `pushToken`을 다시 조회한다
+     * (Token은 재등록으로 언제든 바뀔 수 있어 예약 시점 값을 그대로 쓰지 않는다).
+     */
+    @Query("SELECT d.id FROM NotificationDevice d WHERE d.memberId = :memberId")
+    fun findIdsByMemberId(
+        @Param("memberId") memberId: Long,
+    ): List<Long>
+
+    /**
      * 기기 등록·재등록·소유권 이전을 원자적으로 Upsert한다
      * (`RecommendationPreferenceRepository.upsert`와 같은 이유·같은 방식).
      *
