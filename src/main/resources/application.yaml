@@ -257,6 +257,27 @@ app:
       default-program-channel-key: program-notice
       # 문의 접수 알림은 사용자가 채널을 선택하지 않고 이 Key로 고정된다(요구사항 §9).
       inquiry-channel-key: inquiry-alert
+  # 모바일 Push Provider 연동 설정이다(Issue #190). FCM HTTP v1 API 하나로 iOS/Android를 모두
+  # 처리한다(별도 APNs 직접 연동 없음, PushProvider KDoc 참고).
+  push:
+    fcm:
+      # service-account-key가 비어 있으면 isConfigured()가 false를 반환해 애플리케이션 기동과
+      # 알림 생성 API는 그대로 정상 동작하고 Push만 PENDING으로 쌓인다(Fail-Fast 아님, Discord
+      # Bot과 같은 방식). Secret에는 안전하지 않은 기본값을 주지 않는다.
+      enabled: ${PUSH_FCM_ENABLED:false}
+      # Google Service Account JSON Key 문서 전체(project_id/client_email/private_key 포함)를
+      # 그대로 담은 값이다. 절대 이 파일이나 Test Fixture에 실제 값을 적지 않는다.
+      service-account-key: ${PUSH_FCM_SERVICE_ACCOUNT_KEY:}
+      connect-timeout-ms: 3000
+      read-timeout-ms: 8000
+    delivery:
+      # Push는 사용자에게 실시간에 가깝게 도착해야 하는 알림이라 Discord Bot Worker(60초)보다
+      # 촘촘히 돈다(PushDeliveryRetryPolicy의 첫 백오프 30초와 어울리는 주기).
+      sweep-interval-ms: 15000
+      stale-processing-threshold-ms: 120000
+      # 자동 재시도 최대 횟수(Issue #190 확정 계약: 기본 최대 3회).
+      max-retry-count: 3
+      batch-size: 100
   # /actuator/info의 "deployment" 필드(DeploymentInfoContributor)가 사용하는 배포 메타데이터다.
   # CD가 Docker Build/Runtime 시점에 APP_VERSION/APP_GIT_SHA/APP_BUILD_TIME/APP_ENVIRONMENT를
   # 주입한다(docs/development/cd.md 참고). version의 "0.0.1-SNAPSHOT" 기본값은 build.gradle.kts의

@@ -112,7 +112,7 @@ class CoreDomainSchemaIntegrationTest
         private val auditLogRepository: AuditLogRepository,
     ) {
         @Test
-        fun `Flyway로 생성한 Schema에는 정확히 44개의 비즈니스 Table이 있다`() {
+        fun `Flyway로 생성한 Schema에는 정확히 45개의 비즈니스 Table이 있다`() {
             // persistence_probe는 integrationTest 전용 기술 검증 Table(V1__create_persistence_probe.sql)이며
             // GETI 비즈니스 Domain을 나타내지 않으므로 집계에서 제외한다. 최소 19개 Table ERD 기준
             // (docs/architecture/erd.md) 이후 Member 도메인 전공/기술 스택 정규화를 위해
@@ -142,7 +142,10 @@ class CoreDomainSchemaIntegrationTest
             // 되었다(V33 Migration). Push 기기 등록·해제 및 알림 설정(Issue #189)을 위해
             // notification_devices, notification_settings 2개 Table을 추가해 44개가 되었다(V36
             // Migration -- V33은 같은 시점에 병합된 다른 PR(#238, 회원 프로필 링크)이 먼저
-            // 선점해 충돌을 피하려 V34/V35(다른 진행 중 PR)를 건너뛰고 V36을 사용했다).
+            // 선점해 충돌을 피하려 V34/V35(다른 진행 중 PR)를 건너뛰고 V36을 사용했다). FCM/APNs
+            // Push Provider 연동(Issue #190)의 Push Delivery 상태·재시도 관리를 위해
+            // push_deliveries 1개 Table을 추가해 45개가 되었다(V37 Migration -- V35는 같은 시점에
+            // 진행 중인 다른 PR(#194, 알림 보관 기한 정리)이 선점해 건너뛰었다).
             @Suppress("UNCHECKED_CAST")
             val tableCount =
                 entityManager
@@ -155,7 +158,7 @@ class CoreDomainSchemaIntegrationTest
                         """.trimIndent(),
                     ).singleResult as Number
 
-            assertThat(tableCount.toInt()).isEqualTo(44)
+            assertThat(tableCount.toInt()).isEqualTo(45)
         }
 
         @Test

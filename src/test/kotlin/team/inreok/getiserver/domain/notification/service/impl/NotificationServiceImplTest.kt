@@ -37,6 +37,7 @@ import team.inreok.getiserver.domain.notification.repository.NotificationReposit
 import team.inreok.getiserver.domain.notification.service.NotificationTargetAvailability
 import team.inreok.getiserver.domain.notification.service.NotificationTargetRef
 import team.inreok.getiserver.domain.notification.service.NotificationTargetResolver
+import team.inreok.getiserver.domain.notification.service.PushDeliveryService
 import java.sql.SQLException
 import java.time.LocalDateTime
 import java.util.Optional
@@ -50,6 +51,9 @@ class NotificationServiceImplTest {
     @Mock
     private lateinit var notificationTargetResolver: NotificationTargetResolver
 
+    @Mock
+    private lateinit var pushDeliveryService: PushDeliveryService
+
     private val ownerMemberId = 1L
     private val otherMemberId = 2L
 
@@ -58,6 +62,7 @@ class NotificationServiceImplTest {
             notificationRepository,
             notificationTargetResolver,
             NotificationInsertOperation(notificationRepository),
+            pushDeliveryService,
         )
 
     private fun notification(
@@ -179,6 +184,85 @@ class NotificationServiceImplTest {
         val createdId = service().create(command)
 
         assertThat(createdId).isEqualTo(9L)
+    }
+
+    @Test
+    fun `새 알림을 만들면 Push 전달을 예약한다`() {
+        given(notificationRepository.save(any() ?: notification(1L)))
+            .willAnswer { invocation -> invocation.getArgument<Notification>(0).apply { id = 7L } }
+
+        service().create(
+            NotificationCreateCommand(
+                recipientMemberId = ownerMemberId,
+                type = NotificationType.JOB_PUBLISHED,
+                title = "새 공고",
+                content = "새 공고가 등록되었습니다.",
+                sourceEventType = "JobPublishedEvent",
+                sourceEventId = 1L,
+            ),
+        )
+
+        verify(pushDeliveryService).enqueueForNotification(7L, ownerMemberId, NotificationType.JOB_PUBLISHED)
+    }
+
+    @Test
+    fun `Idempotency로 기존 알림을 재사용하면 Push를 다시 예약하지 않는다`() {
+        val command =
+            NotificationCreateCommand(
+                recipientMemberId = ownerMemberId,
+                type = NotificationType.INQUIRY_ANSWERED,
+                title = "문의 답변",
+                content = "답변이 등록되었습니다.",
+                sourceEventType = "InquiryAnsweredEvent",
+                sourceEventId = 55L,
+            )
+        val duplicateViolation =
+            DataIntegrityViolationException(
+                "duplicate",
+                ConstraintViolationException("duplicate", SQLException(), "uk_notifications_recipient_source_event"),
+            )
+        given(notificationRepository.save(any() ?: notification(1L))).willThrow(duplicateViolation)
+        given(
+            notificationRepository.findByRecipientMemberIdAndSourceEventTypeAndSourceEventId(
+                ownerMemberId,
+                "InquiryAnsweredEvent",
+                55L,
+            ),
+        ).willReturn(notification(9L))
+
+        service().create(command)
+
+        verify(pushDeliveryService, never()).enqueueForNotification(
+            anyLong(),
+            anyLong(),
+            any() ?: NotificationType.SYSTEM,
+        )
+    }
+
+    @Test
+    fun `Push 예약 중 오류가 나도 알림 생성은 그대로 성공한다`() {
+        // Push는 알림 생성의 부가 기능이다(Issue #190) -- Push 실패가 원본 알림 생성을 실패로
+        // 만들면 안 된다(Business Transaction과 독립).
+        given(notificationRepository.save(any() ?: notification(1L)))
+            .willAnswer { invocation -> invocation.getArgument<Notification>(0).apply { id = 7L } }
+        org.mockito.BDDMockito
+            .willThrow(RuntimeException("FCM 설정 오류"))
+            .given(pushDeliveryService)
+            .enqueueForNotification(anyLong(), anyLong(), any() ?: NotificationType.SYSTEM)
+
+        val createdId =
+            service().create(
+                NotificationCreateCommand(
+                    recipientMemberId = ownerMemberId,
+                    type = NotificationType.JOB_PUBLISHED,
+                    title = "새 공고",
+                    content = "새 공고가 등록되었습니다.",
+                    sourceEventType = "JobPublishedEvent",
+                    sourceEventId = 1L,
+                ),
+            )
+
+        assertThat(createdId).isEqualTo(7L)
     }
 
     @Test
