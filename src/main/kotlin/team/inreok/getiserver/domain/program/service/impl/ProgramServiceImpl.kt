@@ -38,6 +38,8 @@ import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationEligi
 import team.inreok.getiserver.domain.program.entity.type.ProgramApplicationStatus
 import team.inreok.getiserver.domain.program.entity.type.ProgramStatus
 import team.inreok.getiserver.domain.program.entity.type.ProgramType
+import team.inreok.getiserver.domain.program.event.ProgramApplicationAppliedEvent
+import team.inreok.getiserver.domain.program.event.ProgramApplicationCanceledEvent
 import team.inreok.getiserver.domain.program.event.ProgramDeletedEvent
 import team.inreok.getiserver.domain.program.event.ProgramDiscordAction
 import team.inreok.getiserver.domain.program.event.ProgramDiscordEvent
@@ -73,8 +75,10 @@ import java.time.LocalDateTime
 // 1~3 범위) Public Method 6개 + Private Helper가 detekt 기본 TooManyFunctions 임계값(11)을
 // 넘는다. JobApplicationEligibility.kt가 이미 같은 방식으로 ReturnCount를 Suppress한 전례를
 // 따른다(docs/development/code-quality.md가 "@Suppress를 쓰지 않았다"고 적은 시점 이후 실제
-// 코드에 추가된 관례, AGENTS.md 우선순위상 실제 코드가 그 문서보다 우선한다).
-@Suppress("TooManyFunctions")
+// 코드에 추가된 관례, AGENTS.md 우선순위상 실제 코드가 그 문서보다 우선한다). Issue #191이
+// apply()/cancel()에 신청·취소 알림 Event 발행을 추가하면서 LargeClass 임계값도 넘겼다 --
+// Service를 여러 Class로 쪼개는 것은 이 Issue 범위를 벗어난 구조 변경이라 같은 방식으로 Suppress한다.
+@Suppress("TooManyFunctions", "LargeClass")
 @Service
 class ProgramServiceImpl(
     private val programRepository: ProgramRepository,
@@ -512,10 +516,19 @@ class ProgramServiceImpl(
                 }
             }
         val saved = saveNewApplication(application)
+        val savedApplicationId = requireNotNull(saved.id)
+        eventPublisher.publishEvent(
+            ProgramApplicationAppliedEvent(
+                programId = programId,
+                applicationId = savedApplicationId,
+                applicantMemberId = studentMemberId,
+                programTitle = program.title,
+            ),
+        )
 
         val newCurrentApplicants = currentApplicants + 1
         return ProgramApplicationActionResponse(
-            applicationId = requireNotNull(saved.id),
+            applicationId = savedApplicationId,
             programId = programId,
             status = saved.status,
             currentApplicants = newCurrentApplicants,
@@ -548,6 +561,14 @@ class ProgramServiceImpl(
         application.status = ProgramApplicationStatus.CANCELED
         application.canceledAt = now
         programApplicationRepository.flush()
+        eventPublisher.publishEvent(
+            ProgramApplicationCanceledEvent(
+                programId = programId,
+                applicationId = requireNotNull(application.id),
+                applicantMemberId = studentMemberId,
+                programTitle = program.title,
+            ),
+        )
 
         val currentApplicants = activeApplicantCount(programId)
         return ProgramApplicationActionResponse(

@@ -125,6 +125,45 @@ interface MemberRepository : JpaRepository<Member, Long> {
         @Param("role") role: RoleType,
     ): List<Long>
 
+    // Notification Producer(JOB_PUBLISHED/PROGRAM_PUBLISHED, Issue #191)가 게시 알림 대상 학생을
+    // 찾을 때 쓴다. RecommendationAudienceQueryPortImpl과 달리 후보 memberId 집합을 미리 좁혀오지
+    // 않고 전체 재학생 중에서 바로 찾는다(공고·프로그램 게시는 특정 학생 집합이 아니라 "그 조건을
+    // 만족하는 모든 재학생"이 대상이기 때문). 학년 조건이 없는 경우(전 학년 대상)는
+    // [findIdsByStatusAndAcademicStatusAndRole]을 따로 둬 호출한다 -- 빈 Collection을 IN 절에
+    // 바인딩하면 Hibernate가 예외를 던지므로, 학년 필터가 없을 때는 이 Query 자체를 호출하지 않는
+    // 방식으로 피한다(NotificationAudienceQueryPortImpl 참고).
+    @Query(
+        """
+        SELECT m.id FROM Member m
+        WHERE m.status = :status
+          AND m.academicStatus = :academicStatus
+          AND m.grade IN :targetGrades
+          AND EXISTS (SELECT 1 FROM MemberRole mr WHERE mr.id.memberId = m.id AND mr.id.role = :role)
+        """,
+    )
+    fun findIdsByStatusAndAcademicStatusAndRoleAndGradeIn(
+        @Param("status") status: MemberStatus,
+        @Param("academicStatus") academicStatus: AcademicStatus,
+        @Param("role") role: RoleType,
+        @Param("targetGrades") targetGrades: Set<Int>,
+    ): List<Long>
+
+    // [findIdsByStatusAndAcademicStatusAndRoleAndGradeIn]과 조건은 같지만 학년 필터가 없다(전 학년
+    // 대상 공고·프로그램).
+    @Query(
+        """
+        SELECT m.id FROM Member m
+        WHERE m.status = :status
+          AND m.academicStatus = :academicStatus
+          AND EXISTS (SELECT 1 FROM MemberRole mr WHERE mr.id.memberId = m.id AND mr.id.role = :role)
+        """,
+    )
+    fun findIdsByStatusAndAcademicStatusAndRole(
+        @Param("status") status: MemberStatus,
+        @Param("academicStatus") academicStatus: AcademicStatus,
+        @Param("role") role: RoleType,
+    ): List<Long>
+
     // 관리자 담당자 선택 Dropdown용 회원 목록 조회(AdminMemberQueryServiceImpl, Issue #182)에 쓴다.
     // :status/:role은 호출 측(Service)이 ACTIVE/조회 대상 Role로 고정해 전달한다. 이름 오름차순으로
     // 정렬하고(동명이인은 id로 안정 정렬), Dropdown 용도라 Pagination 없이 전체를 돌려준다.
