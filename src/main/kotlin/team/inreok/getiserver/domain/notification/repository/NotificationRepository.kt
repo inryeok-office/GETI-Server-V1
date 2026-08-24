@@ -10,9 +10,10 @@ import team.inreok.getiserver.domain.notification.entity.Notification
 import team.inreok.getiserver.domain.notification.entity.type.NotificationType
 import java.time.LocalDateTime
 
-// V35 Migration이 추가한 각 Partial Index(idx_notifications_deleted_at_retention/
-// idx_notifications_unread_retention/idx_notifications_read_retention)와 정확히 같은 WHERE 조건을
-// 써야 Query Planner가 그 Index를 탄다(NotificationRetentionCleanupServiceImpl 참고).
+// V38 Migration(V35에서 재번호화, Migration 버전 충돌 수정 -- Issue #251)이 추가한 각 Partial
+// Index(idx_notifications_deleted_at_retention/idx_notifications_unread_retention/
+// idx_notifications_read_retention)와 정확히 같은 WHERE 조건을 써야 Query Planner가 그 Index를
+// 탄다(NotificationRetentionCleanupServiceImpl 참고).
 
 interface NotificationRepository : JpaRepository<Notification, Long> {
     /**
