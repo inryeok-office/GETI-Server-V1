@@ -132,11 +132,12 @@ class MemberProfileControllerTest
 
         @Test
         fun `내 프로필을 수정하면 200과 함께 변경된 프로필을 반환한다`() {
-            val requestBody = """{"bio":"안녕하세요"}"""
+            val requestBody = """{"cohort":10,"bio":"안녕하세요"}"""
             given(memberService.updateProfile(1L, objectMapper.readTree(requestBody))).willReturn(
                 MemberProfileUpdateResponse(
                     memberId = 1L,
                     name = "홍길동",
+                    cohort = 10,
                     department = DepartmentType.SW_DEVELOPMENT,
                     phone = "010-0000-0000",
                     desiredJob = "Backend Developer",
@@ -157,6 +158,7 @@ class MemberProfileControllerTest
                         .content(requestBody),
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.data.memberId").value(1))
+                .andExpect(jsonPath("$.data.cohort").value(10))
                 .andExpect(jsonPath("$.data.bio").value("안녕하세요"))
                 .andExpect(jsonPath("$.data.links[0].label").value("기술 블로그"))
                 .andExpect(jsonPath("$.data.isPublic").value(true))
@@ -169,6 +171,7 @@ class MemberProfileControllerTest
                 MemberProfileUpdateResponse(
                     memberId = 1L,
                     name = "홍길동",
+                    cohort = 10,
                     department = DepartmentType.SW_DEVELOPMENT,
                     phone = "010-0000-0000",
                     desiredJob = "Backend Developer",

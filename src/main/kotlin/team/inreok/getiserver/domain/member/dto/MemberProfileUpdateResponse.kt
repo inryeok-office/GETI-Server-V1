@@ -10,6 +10,8 @@ data class MemberProfileUpdateResponse(
     val memberId: Long,
     @param:Schema(description = "이름", example = "홍길동")
     val name: String,
+    @param:Schema(description = "기수", example = "10", nullable = true)
+    val cohort: Int?,
     @param:Schema(description = "학과", nullable = true)
     val department: DepartmentType?,
     @param:Schema(description = "전화번호", example = "010-1234-5678", nullable = true)

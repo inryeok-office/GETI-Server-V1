@@ -267,6 +267,41 @@ class MemberServiceTest {
     }
 
     @Test
+    fun `cohort를 저장하고 응답에 반환한다`() {
+        val member = newMember(5L).apply { cohort = 9 }
+        given(memberRepository.findById(5L)).willReturn(Optional.of(member))
+        val body = JsonMapper().readTree("""{"cohort":10}""")
+
+        val result = service.updateProfile(5L, body)
+
+        assertThat(member.cohort).isEqualTo(10)
+        assertThat(result.cohort).isEqualTo(10)
+    }
+
+    @Test
+    fun `cohort에 null을 보내면 값을 지운다`() {
+        val member = newMember(6L).apply { cohort = 9 }
+        given(memberRepository.findById(6L)).willReturn(Optional.of(member))
+        val body = JsonMapper().readTree("""{"cohort":null}""")
+
+        val result = service.updateProfile(6L, body)
+
+        assertThat(member.cohort).isNull()
+        assertThat(result.cohort).isNull()
+    }
+
+    @Test
+    fun `cohort가 정수가 아니면 PROFILE_VALIDATION_FAILED 예외를 던진다`() {
+        val member = newMember(7L)
+        given(memberRepository.findById(7L)).willReturn(Optional.of(member))
+        val body = JsonMapper().readTree("""{"cohort":"10"}""")
+
+        assertThatThrownBy { service.updateProfile(7L, body) }
+            .isInstanceOf(MemberProfileValidationException::class.java)
+            .hasMessage("cohort는 정수여야 합니다.")
+    }
+
+    @Test
     fun `PATCH Body에 알 수 없는 Field가 있으면 PROFILE_VALIDATION_FAILED 예외를 던진다`() {
         val body = JsonMapper().readTree("""{"nickname":"별명"}""")
 
