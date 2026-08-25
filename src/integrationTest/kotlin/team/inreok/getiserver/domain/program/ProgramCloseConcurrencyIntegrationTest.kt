@@ -26,7 +26,6 @@ import team.inreok.getiserver.domain.program.entity.type.ProgramType
 import team.inreok.getiserver.domain.program.repository.ProgramRepository
 import team.inreok.getiserver.domain.program.service.ProgramCloseService
 import java.time.LocalDateTime
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -112,20 +111,25 @@ class ProgramCloseConcurrencyIntegrationTest {
         val executor = Executors.newFixedThreadPool(threadCount)
         val ready = CountDownLatch(threadCount)
         val start = CountDownLatch(1)
-        val results = ConcurrentLinkedQueue<Boolean>()
 
-        repeat(threadCount) {
-            executor.submit {
-                ready.countDown()
-                start.await()
-                results.add(programCloseService.closeIfExpired(programId, now))
+        // executor.submit(Runnable)이 반환하는 Future를 버리면(원래 코드) Thread 안에서 던진
+        // 예외가 조용히 삼켜진다 -- 5개 Thread가 전부 실패해도 Assertion은 그냥
+        // "expected 1 but was 0"만 보여줘 원인을 알 수 없다(GETI-Server-V1 CI에서 실제로 관측된
+        // 산발적 실패, Issue #260 조사 중 발견). Future<Boolean>으로 받아 .get()을 호출해
+        // 실제 예외가 Test 실패에 그대로 드러나게 한다.
+        val futures =
+            (1..threadCount).map {
+                executor.submit<Boolean> {
+                    ready.countDown()
+                    start.await()
+                    programCloseService.closeIfExpired(programId, now)
+                }
             }
-        }
         ready.await()
         start.countDown()
         executor.shutdown()
         check(executor.awaitTermination(30, TimeUnit.SECONDS)) { "동시 마감 Thread가 제한 시간 안에 끝나지 않았습니다." }
-        return results.toList()
+        return futures.map { it.get() }
     }
 
     private fun statusOf(programId: Long): ProgramStatus = programRepository.findById(programId).orElseThrow().status
