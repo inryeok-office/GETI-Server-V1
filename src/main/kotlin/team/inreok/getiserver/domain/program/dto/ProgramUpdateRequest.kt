@@ -81,6 +81,11 @@ data class ProgramUpdateRequest(
         nullable = true,
     )
     val fileIds: List<Long>? = null,
-    @param:Schema(description = "변경 요약. 게시된 프로그램 신청자 알림 내용에 포함된다.", nullable = true)
+    @param:Schema(
+        description =
+            "변경 요약. 신청자 알림 연동이 아직 구현되지 않아(Phase 6) 현재는 값을 저장·전달하지 " +
+                "않고 무시한다 -- 필드 자체는 향후 알림 연동을 위해 남겨둔다.",
+        nullable = true,
+    )
     val changeSummary: String? = null,
 )
