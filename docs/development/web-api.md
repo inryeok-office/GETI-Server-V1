@@ -229,6 +229,29 @@ Runtime Image(`eclipse-temurin:25.0.3_9-jre-alpine`)에는 `curl`이 없고 Alpi
 
 이번 PR에서는 springdoc(OpenAPI) 도입을 보류했다. 현재 저장소에는 Test 전용 Controller 외의 실제 API Endpoint가 하나도 없어, 지금 시점에 OpenAPI UI/JSON을 추가해도 문서화할 실제 API가 없다. 첫 실제 Domain Controller가 추가되는 PR에서 `springdoc-openapi-starter-webmvc-ui`(Spring Boot 4.1/Jackson 3.x와 호환되는 Version을 그 시점에 다시 확인) 도입 여부를 재검토한다.
 
+## 프로필 이미지 파일 업로드 정책
+
+Frontend가 프로필 이미지 선택 UI와 오류 처리를 구현할 때 적용할 현재 Backend 기본 정책은 다음과 같다. 기준 Source는 [`application.yaml`](../../src/main/resources/application.yaml)의 `app.file.policies.PROFILE_IMAGE`이며, 아래 값은 환경별 설정으로 Override될 수 있다.
+
+| 항목 | 현재 정책 |
+| --- | --- |
+| 업로드 Endpoint | `POST /api/v1/files` (`multipart/form-data`, part `file`, query `purpose=PROFILE_IMAGE`) |
+| 허용 확장자 | `png`, `jpg`, `jpeg`, `webp` |
+| 허용 MIME | `image/png`, `image/jpeg`, `image/webp` |
+| 최대 파일 크기 | 5 MiB (`5,242,880` bytes) |
+| 프로필 연결 개수 | 최대 1개 (`max-count: 1`) |
+| SVG | 허용하지 않음 |
+
+서버는 파일명 확장자와 Client가 선언한 `Content-Type`만 신뢰하지 않고 파일 내용에서 MIME을 탐지해 정책과 비교한다. 업로드에 성공하면 응답의 `data.fileId`를 사용해 `PATCH /api/v1/me/profile`의 `profileImageFileId`로 연결한다. 프로필 연결은 업로드한 본인 파일이며 `PROFILE_IMAGE` 용도인 경우에만 허용된다.
+
+대표 오류 계약은 다음과 같다.
+
+- `413 FILE_TOO_LARGE`: 허용된 파일 크기를 초과했다.
+- `415 FILE_TYPE_NOT_ALLOWED`: 확장자 또는 탐지된 파일 형식이 허용되지 않는다.
+- `415 MIME_MISMATCH`: 확장자와 실제 파일 형식이 일치하지 않는다.
+
+현재 `application.yaml`의 숫자와 목록은 Repository에 반영된 기본 설정이며 최종 Product 정책 결정과는 별개다. 정책을 변경할 때는 설정, 이 문서, OpenAPI 설명 및 관련 Test를 함께 갱신한다. 환경별 Override가 적용된 Runtime에서는 실제 적용 설정이 이 기본값과 다를 수 있다.
+
 ## Validation
 
 - Request DTO의 `@field:` Bean Validation Annotation으로 요청 형식을 검증한다(Domain 규칙 검증과는 별개).
