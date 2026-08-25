@@ -115,10 +115,15 @@ Application 계층은 `S3Client`·`PutObjectRequest` 같은 SDK Type을 직접 �
 
 설정은 `app.file.storage.*`다.
 
-| Profile | endpoint | path-style | 자격증명 |
-| --- | --- | --- | --- |
-| `local` | `http://localhost:9000`(MinIO) | `true` | `access-key`/`secret-key` 명시 → Static |
-| 운영(`prod`) | 비움(AWS 기본) | `false` | **선언하지 않음** → `DefaultCredentialsProvider`(EC2 IAM Role) |
+| Profile | endpoint | public-endpoint | path-style | 자격증명 |
+| --- | --- | --- | --- | --- |
+| `local`(Host에서 `bootRun`) | `http://localhost:9000`(MinIO) | 비움 → `endpoint` 그대로 사용 | `true` | `access-key`/`secret-key` 명시 → Static |
+| `local`/`develop`(`docker compose --profile app`) | `http://minio:9000`(Compose 내부 DNS) | `http://localhost:${MINIO_API_PORT:-9000}` | `true` | `access-key`/`secret-key` 명시 → Static |
+| 운영(`prod`) | 비움(AWS 기본) | 비움 → `endpoint` 그대로 사용(AWS 기본) | `false` | **선언하지 않음** → `DefaultCredentialsProvider`(EC2 IAM Role) |
+
+`endpoint`는 `S3Client`(서버가 직접 호출하는 PutObject/GetObject/DeleteObject)가 쓰고, `public-endpoint`는 `S3Presigner`(Presigned URL 서명)가 쓴다. 둘을 분리하는 이유는 Presigned URL을 실제로 여는 주체가 서버가 아니라 **외부 Client**(Browser, GETI-Client-V1의 `next dev` 등)이기 때문이다. 앱을 `docker compose --profile app`으로 Container 안에서 실행하면 `endpoint=http://minio:9000`인데, `minio`는 Compose 내부 DNS 이름이라 Container 밖의 Client는 이 이름을 해석하지 못한다 — `public-endpoint`가 없던 이전에는 Presigned URL에도 그대로 `minio:9000`이 찍혀 다운로드/이미지 표시가 전부 실패했다. Host에서 `bootRun`으로 실행할 때는 `endpoint` 자체가 이미 `localhost:9000`이라 이 문제가 없다.
+
+`docker compose --profile app`으로 배포하는 CD의 `develop` 환경은 아직 `public-endpoint`가 실제로 외부에서 닿는 값을 가리키지 않는다 — `compose.yaml`의 `minio` Service가 MinIO API Port(9000)를 `127.0.0.1`에만 Bind해 서버 밖에서는 애초에 접근할 수 없기 때문이다(로컬 1인 개발 환경 전용 기본값). EC2 등 실제 배포 환경에서 Presigned URL을 외부 Client가 열 수 있게 하려면 MinIO(또는 대체 Object Storage)를 공개적으로 도달 가능하게 만드는 별도 인프라 결정이 필요하다(DECISION_REQUIRED, EC2 Metadata hop limit과 같은 성격의 코드로 해결할 수 없는 선행 조건, Issue #255 참고).
 
 운영에서 자격증명을 선언하지 않는 것이 핵심이다. 장기 Access Key를 서버·Secret·Compose 어디에도 두지 않는다. 다만 앱이 **Container 안**에서 돌기 때문에 **EC2 Metadata hop limit이 2 이상이어야** IMDS에 닿는다. 기본값 1이면 자격증명 획득에 실패해 모든 S3 호출이 실패하며, 이것은 코드로 해결할 수 없는 인프라 선행 조건이다([`docs/file/file-domain-plan.md`](../file/file-domain-plan.md) §14.3).
 
