@@ -58,6 +58,9 @@ class MemberProfileController(
             그대로 유지하고, `null`을 명시적으로 보내면 값을 지운다. 허용되지 않은 Field가 포함되면
             요청 전체를 거부한다.
 
+            `cohort`는 기수(Integer)를 받으며, 보내지 않으면 기존 값을 유지하고 `null`을 보내면
+            값을 지운다.
+
             프로필 이미지는 `profileImageFileId`로 지정한다 — `POST /api/v1/files`에
             purpose=PROFILE_IMAGE로 업로드해 받은 File ID다. 본인이 올린 파일만 연결할 수 있고,
             이미 등록된 이미지가 있으면 자동으로 교체된다. `null`을 보내면 이미지를 제거한다.
@@ -132,6 +135,8 @@ class MemberProfileController(
 // 문서 전용 Class이며 Production Class로 사용하지 않는다.
 @Schema(name = "MemberProfileUpdateRequest", description = "내 프로필 부분 수정 요청. 전달하지 않은 Field는 유지되고, null은 값을 지운다.")
 private data class MemberProfileUpdateRequestExample(
+    @param:Schema(description = "기수(Integer)", nullable = true, example = "10")
+    val cohort: Int?,
     @param:Schema(description = "학과", nullable = true, example = "SW_DEVELOPMENT")
     val department: DepartmentType?,
     @param:Schema(description = "전화번호(최대 30자)", nullable = true, example = "010-1234-5678", maxLength = 30)
