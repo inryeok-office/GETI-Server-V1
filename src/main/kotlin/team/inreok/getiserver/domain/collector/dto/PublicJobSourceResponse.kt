@@ -2,12 +2,15 @@ package team.inreok.getiserver.domain.collector.dto
 
 import io.swagger.v3.oas.annotations.media.Schema
 import team.inreok.getiserver.domain.collector.entity.JobSource
+import team.inreok.getiserver.domain.collector.entity.type.JobSourceCode
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceType
 
 @Schema(description = "공개 공고 출처 목록 항목. 관리자용 목록과 달리 승인 상태·설정 여부·인증키 관련 정보를 포함하지 않는다.")
 data class PublicJobSourceResponse(
     @param:Schema(description = "수집원 ID")
     val sourceId: Long,
+    @param:Schema(description = "공고 검색 sourceName에 전달할 안정 식별자", example = "SARAMIN")
+    val sourceCode: JobSourceCode,
     @param:Schema(description = "수집원 이름")
     val name: String,
     @param:Schema(description = "수집원 유형")
@@ -19,6 +22,7 @@ data class PublicJobSourceResponse(
         fun from(source: JobSource): PublicJobSourceResponse =
             PublicJobSourceResponse(
                 sourceId = requireNotNull(source.id),
+                sourceCode = source.sourceCode,
                 name = source.name,
                 sourceType = source.sourceType,
                 active = source.enabled,

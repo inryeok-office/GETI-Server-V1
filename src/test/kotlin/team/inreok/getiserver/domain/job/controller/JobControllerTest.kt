@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.inreok.getiserver.domain.company.query.CompanySummary
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
@@ -32,7 +33,7 @@ import java.time.LocalDateTime
 // 목록/검색(GET /api/v1/jobs)은 Issue #69에서 domain.search.controller.JobSearchController로
 // 옮겨졌다 — 이 Class는 상세 조회만 다룬다(JobController.kt의 Class 주석 참고).
 @WebMvcTest(controllers = [JobController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class JobControllerTest
     @Autowired
@@ -60,7 +61,7 @@ class JobControllerTest
 
         @Test
         fun `공개 상세를 조회하면 200과 증가된 조회수를 반환한다`() {
-            given(jobService.getPublicDetail(1L)).willReturn(detailResponse(viewCount = 11))
+            given(jobService.getPublicDetail(1L, 1L)).willReturn(detailResponse(viewCount = 11))
 
             mockMvc
                 .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
@@ -68,12 +69,60 @@ class JobControllerTest
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.jobId").value(1))
                 .andExpect(jsonPath("$.data.viewCount").value(11))
+                .andExpect(jsonPath("$.data.sourceName").value("MMA"))
                 .andExpect(jsonPath("$.data.company.companyId").value(1))
+                .andExpect(
+                    jsonPath("$.data.company.logoUrl").value("https://storage.example/company-logo?signature=test"),
+                )
+        }
+
+        @Test
+        fun `기업에 로고가 없으면 응답의 company logoUrl은 null이다`() {
+            given(jobService.getPublicDetail(1L, 1L))
+                .willReturn(detailResponse(viewCount = 11, company = CompanySummary(1L, "인력개발원")))
+
+            mockMvc
+                .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.company.logoUrl").doesNotExist())
+        }
+
+        @Test
+        fun `공개 상세 응답에 근무지역과 고용형태가 포함된다`() {
+            given(jobService.getPublicDetail(1L, 1L)).willReturn(detailResponse(viewCount = 11))
+
+            mockMvc
+                .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.location").value("서울특별시 중구"))
+                .andExpect(jsonPath("$.data.employmentType").value("인턴"))
+        }
+
+        @Test
+        fun `공개 상세 응답에 요청자 기준 북마크 여부가 포함된다`() {
+            given(jobService.getPublicDetail(1L, 1L)).willReturn(detailResponse(viewCount = 11, bookmarked = true))
+
+            mockMvc
+                .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.bookmarked").value(true))
+        }
+
+        @Test
+        fun `근무지역과 고용형태가 없는 공고는 두 Field가 null이다`() {
+            given(jobService.getPublicDetail(1L, 1L))
+                .willReturn(detailResponse(viewCount = 11, location = null, employmentType = null))
+
+            mockMvc
+                .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.location").doesNotExist())
+                .andExpect(jsonPath("$.data.employmentType").doesNotExist())
         }
 
         @Test
         fun `없거나 삭제된 공고를 조회하면 404를 반환한다`() {
-            willThrow(JobNotFoundException(1L)).given(jobService).getPublicDetail(anyLong())
+            willThrow(JobNotFoundException(1L)).given(jobService).getPublicDetail(anyLong(), anyLong())
 
             mockMvc
                 .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
@@ -83,7 +132,7 @@ class JobControllerTest
 
         @Test
         fun `공개되지 않은 공고를 조회하면 403을 반환한다`() {
-            willThrow(JobNotVisibleException(1L)).given(jobService).getPublicDetail(anyLong())
+            willThrow(JobNotVisibleException(1L)).given(jobService).getPublicDetail(anyLong(), anyLong())
 
             mockMvc
                 .perform(get("/api/v1/jobs/1").with(authOf(1L, "STUDENT")))
@@ -100,25 +149,49 @@ class JobControllerTest
 
         // --- Fixture ---
 
-        private fun detailResponse(viewCount: Long) =
-            JobDetailResponse(
-                jobId = 1L,
-                title = "2026 상반기 백엔드 채용",
-                postingType = PostingType.MOU,
-                applicationMethod = ApplicationMethod.EXTERNAL,
-                status = JobStatus.PUBLISHED,
-                company = CompanySummary(1L, "인력개발원"),
-                content = "## 모집 부문",
-                externalUrl = "https://example.com/apply",
-                startDate = null,
-                endDate = null,
-                targetGrade = 3,
-                capacity = 2,
-                firstComeServed = false,
-                viewCount = viewCount,
-                publishedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
-                closedAt = null,
-                createdAt = LocalDateTime.of(2026, 7, 20, 10, 0),
-                updatedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
-            )
+        private fun detailResponse(
+            viewCount: Long,
+            company: CompanySummary? = CompanySummary(1L, "인력개발원", logoUrl = LOGO_URL),
+            location: String? = "서울특별시 중구",
+            employmentType: String? = "인턴",
+            bookmarked: Boolean = false,
+        ) = JobDetailResponse(
+            jobId = 1L,
+            title = "2026 상반기 백엔드 채용",
+            postingType = PostingType.MOU,
+            applicationMethod = ApplicationMethod.EXTERNAL,
+            status = JobStatus.PUBLISHED,
+            company = company,
+            content = "## 모집 부문",
+            externalUrl = "https://example.com/apply",
+            startDate = null,
+            endDate = null,
+            targetGrade = 3,
+            capacity = 2,
+            location = location,
+            employmentType = employmentType,
+            sourceName = "MMA",
+            firstComeServed = false,
+            viewCount = viewCount,
+            publishedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
+            closedAt = null,
+            createdAt = LocalDateTime.of(2026, 7, 20, 10, 0),
+            updatedAt = LocalDateTime.of(2026, 7, 25, 9, 0),
+            aiAnalysis = null,
+            application =
+                JobApplicationEligibilityAccessSnapshot(
+                    canApply = true,
+                    eligibilityReason = "AVAILABLE",
+                    eligibilityMessage = "지원 가능한 공고입니다.",
+                    applicationId = null,
+                    applicationStatus = null,
+                    availableActions = listOf("CREATE_DRAFT"),
+                ),
+            bookmarked = bookmarked,
+            files = emptyList(),
+        )
+
+        private companion object {
+            private const val LOGO_URL = "https://storage.example/company-logo?signature=test"
+        }
     }

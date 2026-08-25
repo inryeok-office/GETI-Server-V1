@@ -19,8 +19,25 @@ data class FileStorageProperties(
     /** Bucket 이름. 운영에서는 기본값 없이 환경 변수로만 주입해 미설정 시 기동을 거부한다. */
     val bucket: String,
     val region: String,
-    /** S3 Compatible Endpoint. 비어 있으면 AWS 기본 Endpoint를 쓴다(운영). */
+    /**
+     * `S3Client`(PutObject/GetObject/DeleteObject 등 서버 내부 호출)가 쓰는 Endpoint. 비어 있으면
+     * AWS 기본 Endpoint를 쓴다(운영). `docker compose --profile app`처럼 앱이 Container 안에서
+     * 도는 환경에서는 Compose Service 이름(`http://minio:9000`)을 쓴다 -- 이 값은 Container
+     * 내부에서만 해석되는 이름이라 [publicEndpoint]와 분리해야 한다.
+     */
     val endpoint: String? = null,
+    /**
+     * `S3Presigner`(Presigned URL 서명)가 쓰는 Endpoint. 비어 있으면 [endpoint]를 그대로 쓴다.
+     *
+     * Presigned URL은 서버가 아니라 **외부 Client(Browser 등)** 가 직접 접속해야 하므로, 앱이
+     * Container 안에서 도는 환경(`endpoint=http://minio:9000`)에서는 Client가 해석할 수 없는
+     * 내부 DNS 이름이 그대로 URL에 남아 다운로드가 실패한다. 개발자가 `docker compose --profile
+     * app`(App까지 Container로 실행)과 `next dev`(Client는 Host에서 실행)를 함께 쓰는 로컬
+     * 구성에서는 이 값을 `http://localhost:${MINIO_API_PORT:-9000}`로 분리해 해결한다. 운영
+     * 환경([FileStorageProperties]의 `endpoint`가 비어 AWS 기본 Endpoint를 쓰는 경우)은 원래
+     * Client가 도달 가능한 Endpoint라 이 값이 필요 없다.
+     */
+    val publicEndpoint: String? = null,
     /** MinIO는 Path Style(`http://host/bucket/key`)이 필요하다. AWS S3는 false. */
     val pathStyleAccess: Boolean = false,
     val accessKey: String? = null,
@@ -48,6 +65,9 @@ data class FileStorageProperties(
 
     /** 자격증명을 명시했는지. false면 `DefaultCredentialsProvider`(운영 IAM Role)를 쓴다. */
     fun hasStaticCredentials(): Boolean = !accessKey.isNullOrBlank() && !secretKey.isNullOrBlank()
+
+    /** `S3Presigner`가 실제로 쓸 Endpoint. [publicEndpoint]가 없으면 [endpoint]로 대체한다. */
+    fun resolvedPublicEndpoint(): String? = publicEndpoint?.takeIf { it.isNotBlank() } ?: endpoint
 
     companion object {
         /** 명세 §17의 DECISION_REQUIRED 잠정값. 확정되면 설정으로 덮어쓴다. */

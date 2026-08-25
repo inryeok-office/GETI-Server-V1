@@ -33,6 +33,8 @@ enum class FileErrorCode(
     FILE_ALREADY_LINKED(HttpStatus.CONFLICT, "이미 다른 곳에서 사용 중인 파일입니다."),
     FILE_COUNT_EXCEEDED(HttpStatus.BAD_REQUEST, "첨부할 수 있는 파일 개수를 초과했습니다."),
     FILE_STORAGE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "파일 저장소 처리 중 오류가 발생했습니다."),
+    FILE_ARCHIVE_EMPTY(HttpStatus.NOT_FOUND, "다운로드할 수 있는 파일이 없습니다."),
+    FILE_ARCHIVE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "일괄 다운로드 허용 개수 또는 용량을 초과했습니다."),
     ;
 
     override val code: String get() = name

@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.inreok.getiserver.domain.member.dto.MemberProfileLinkResponse
 import team.inreok.getiserver.domain.member.dto.MemberProfileUpdateResponse
 import team.inreok.getiserver.domain.member.dto.MyProfileResponse
 import team.inreok.getiserver.domain.member.entity.type.AcademicStatus
@@ -32,7 +33,7 @@ import java.time.LocalDateTime
 // SecurityConfig를 명시적으로 Import해 /api/v1/me/**가 실제로 인증을 요구하는지(401)까지
 // 검증한다(WebPageableConfig와 동일하게 일반 @Configuration이라 @WebMvcTest가 자동 인식하지 않음).
 @WebMvcTest(controllers = [MemberProfileController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class MemberProfileControllerTest
     @Autowired
@@ -72,6 +73,7 @@ class MemberProfileControllerTest
                     githubUrl = "https://github.com/example",
                     isPublic = true,
                     majors = listOf("소프트웨어"),
+                    links = listOf(MemberProfileLinkResponse(label = "기술 블로그", url = "https://blog.example.com")),
                     techStacks = listOf("Kotlin"),
                 ),
             )
@@ -84,6 +86,8 @@ class MemberProfileControllerTest
                 .andExpect(jsonPath("$.data.roles[0]").value("STUDENT"))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.data.majors[0]").value("소프트웨어"))
+                .andExpect(jsonPath("$.data.links[0].label").value("기술 블로그"))
+                .andExpect(jsonPath("$.data.links[0].url").value("https://blog.example.com"))
         }
 
         @Test
@@ -105,6 +109,7 @@ class MemberProfileControllerTest
                     githubUrl = "https://github.com/example",
                     isPublic = true,
                     majors = listOf("소프트웨어"),
+                    links = listOf(MemberProfileLinkResponse(label = "기술 블로그", url = "https://blog.example.com")),
                     techStacks = listOf("Kotlin"),
                 ),
             )
@@ -137,6 +142,7 @@ class MemberProfileControllerTest
                     desiredJob = "Backend Developer",
                     bio = "안녕하세요",
                     githubUrl = "https://github.com/example",
+                    links = listOf(MemberProfileLinkResponse(label = "기술 블로그", url = "https://blog.example.com")),
                     isPublic = true,
                     profileImageUrl = null,
                     updatedAt = LocalDateTime.of(2026, 7, 31, 0, 0),
@@ -152,7 +158,54 @@ class MemberProfileControllerTest
                 ).andExpect(status().isOk)
                 .andExpect(jsonPath("$.data.memberId").value(1))
                 .andExpect(jsonPath("$.data.bio").value("안녕하세요"))
+                .andExpect(jsonPath("$.data.links[0].label").value("기술 블로그"))
                 .andExpect(jsonPath("$.data.isPublic").value(true))
+        }
+
+        @Test
+        fun `links를 포함해 수정하면 200과 함께 변경된 링크 목록을 반환한다`() {
+            val requestBody = """{"links":[{"label":"블로그","url":"https://blog.example.com/me"}]}"""
+            given(memberService.updateProfile(1L, objectMapper.readTree(requestBody))).willReturn(
+                MemberProfileUpdateResponse(
+                    memberId = 1L,
+                    name = "홍길동",
+                    department = DepartmentType.SW_DEVELOPMENT,
+                    phone = "010-0000-0000",
+                    desiredJob = "Backend Developer",
+                    bio = "안녕하세요",
+                    githubUrl = "https://github.com/example",
+                    links = listOf(MemberProfileLinkResponse(label = "블로그", url = "https://blog.example.com/me")),
+                    isPublic = true,
+                    profileImageUrl = null,
+                    updatedAt = LocalDateTime.of(2026, 7, 31, 0, 0),
+                ),
+            )
+
+            mockMvc
+                .perform(
+                    patch("/api/v1/me/profile")
+                        .with(authOf(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.links[0].label").value("블로그"))
+                .andExpect(jsonPath("$.data.links[0].url").value("https://blog.example.com/me"))
+        }
+
+        @Test
+        fun `links의 url이 http-https가 아니면 400 PROFILE_VALIDATION_FAILED를 반환한다`() {
+            val requestBody = """{"links":[{"label":"위험한 링크","url":"javascript:alert(1)"}]}"""
+            given(memberService.updateProfile(1L, objectMapper.readTree(requestBody)))
+                .willThrow(MemberProfileValidationException("links의 url은 http 또는 https만 허용합니다."))
+
+            mockMvc
+                .perform(
+                    patch("/api/v1/me/profile")
+                        .with(authOf(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody),
+                ).andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.error.code").value("PROFILE_VALIDATION_FAILED"))
         }
 
         @Test

@@ -8,6 +8,8 @@ import team.inreok.getiserver.domain.collector.entity.type.JobNotificationDelive
 import java.time.LocalDateTime
 
 interface JobNotificationDeliveryRepository : JpaRepository<JobNotificationDelivery, Long> {
+    fun findFirstByOrderByUpdatedAtDescIdDesc(): JobNotificationDelivery?
+
     fun existsByJobId(jobId: Long): Boolean
 
     /** 서버 재시작 시 SENDING 상태로 멈춘 Row를 찾아 PENDING으로 되돌리는 용도로만 사용한다. */

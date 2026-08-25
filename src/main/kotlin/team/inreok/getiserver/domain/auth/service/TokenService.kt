@@ -1,9 +1,16 @@
 package team.inreok.getiserver.domain.auth.service
 
 interface TokenService {
+    // 인증에 성공한 회원에게 새 Access/Refresh Token 쌍을 발급한다(OAuth 로그인 직후 사용, Issue
+    // #48). Access Token은 전달받은 roles를 그대로 Claim에 담는다.
+    fun issueFor(
+        memberId: Long,
+        roles: List<String>,
+        deviceIdentifier: String?,
+    ): IssuedTokens
+
     // Refresh Token을 검증하고 즉시 폐기(Rotation)한 뒤 새 Access/Refresh Token 쌍을 발급한다.
-    // 새 Access Token은 memberId Claim만 담는다 — Member 도메인 연동 전이라 역할(roles)을 다시
-    // 조회할 방법이 없어 이번 단계에서는 빈 목록으로 발급한다(다음 단계에서 Member 연동 후 보완).
+    // 새 Access Token의 roles Claim은 Member 도메인에서 현재 역할을 다시 조회해 채운다.
     fun refresh(
         refreshToken: String,
         deviceIdentifier: String?,

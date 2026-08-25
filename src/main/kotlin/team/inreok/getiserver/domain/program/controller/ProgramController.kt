@@ -75,14 +75,18 @@ class ProgramController(
             programId로 지정한 프로그램의 상세 정보를 조회하고 조회수를 1 증가시킨다. 요청한
             사용자 기준으로 `canApply`/`eligibilityReason`/`eligibilityMessage`/`availableActions`를
             서버가 계산해 함께 반환한다 — 클라이언트가 대상 학년·재학 여부·모집 기간·정원·신청
-            여부를 직접 조합해 계산하지 않는다. 삭제된 프로그램은 410로 응답한다.
+            여부를 직접 조합해 계산하지 않는다. 삭제된 프로그램도 보존된 상세와
+            `programDeletedAt`을 반환한다.
+
+            `files`(본문 첨부파일 목록)는 게시(PUBLISHED)·마감(CLOSED) 상태에서는 누구나 볼 수
+            있고, DRAFT 상태에서는 등록자·담당 교사·개발자에게만 실제 목록이 담기며 그 외
+            요청자에게는 빈 배열이 반환된다.
         """,
     )
     @ApiResponses(
         SwaggerApiResponse(responseCode = "200", description = "조회 성공"),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "404", description = "프로그램이 없음 (PROGRAM_NOT_FOUND)"),
-        SwaggerApiResponse(responseCode = "410", description = "삭제된 프로그램 (PROGRAM_DELETED)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @GetMapping("/{programId}")

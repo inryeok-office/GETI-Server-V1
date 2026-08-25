@@ -53,7 +53,7 @@ import java.time.LocalDateTime
 // WebPageableConfig도 함께 Import해야 최대 Page Size(100) 강제가 이 Slice에서도 실제로 동작한다
 // -- @WebMvcTest는 일반 @Configuration을 포함하지 않는다(NotificationControllerTest와 동일한 이유).
 @WebMvcTest(controllers = [InquiryAdminController::class])
-@Import(SecurityConfig::class, WebPageableConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class, WebPageableConfig::class)
 @EnableWebSecurity
 class InquiryAdminControllerTest
     @Autowired

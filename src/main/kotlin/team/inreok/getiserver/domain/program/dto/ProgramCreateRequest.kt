@@ -10,10 +10,9 @@ import java.time.LocalDateTime
 /**
  * 프로그램 등록·임시저장 요청이다(원본 요구사항 문서 6절).
  *
- * `fileIds`(본문 첨부파일 연결)는 이번 범위에서 제외했다 — File 도메인에 공개 Use Case가 아직
- * 없어(entity/repository만 존재) 소유권·사용 권한을 검증할 방법이 없다(요구사항 19절 "File
- * 도메인이 미구현이면 최소 File 기능을 선행 Issue로 분리한다"). Discord 실제 게시(Phase 7)도
- * 아직 연동하지 않아 `discordChannelId`는 값 자체의 필수 여부만 검증하고 저장만 한다.
+ * `fileIds`(본문 첨부파일 연결)는 File 도메인의 공개 Port(`FileLinkPort`, Issue #85)로 소유권·
+ * 목적·상태·개수를 검증한 뒤 연결한다(Issue #127). Discord 실제 게시(Phase 7)도 아직 연동하지
+ * 않아 `discordChannelId`는 값 자체의 필수 여부만 검증하고 저장만 한다.
  */
 @Schema(description = "프로그램 등록·임시저장 요청")
 data class ProgramCreateRequest(
@@ -60,4 +59,11 @@ data class ProgramCreateRequest(
         maxLength = 255,
     )
     val discordChannelId: String? = null,
+    @param:Schema(
+        description =
+            "연결할 첨부파일 ID 목록(선택). FilePurpose=PROGRAM_ATTACHMENT로 업로드하고 본인이 " +
+                "소유한 파일만 연결할 수 있다. 개수 상한은 app.file.policies 설정을 따른다.",
+        example = "[1, 2]",
+    )
+    val fileIds: List<Long> = emptyList(),
 )

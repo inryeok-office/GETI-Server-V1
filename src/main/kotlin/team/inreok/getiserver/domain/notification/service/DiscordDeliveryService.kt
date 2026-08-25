@@ -1,14 +1,15 @@
 package team.inreok.getiserver.domain.notification.service
 
 import team.inreok.getiserver.domain.notification.dto.DiscordDeliveryEnqueueCommand
+import team.inreok.getiserver.domain.notification.dto.DiscordDeliveryStatusResponse
+import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryTargetType
 
 /**
- * Discord 전달의 생성·처리·재시도 계약이다.
- *
- * **REST로 노출되지 않는다.** 후속 요구사항 문서 §36·§37의 상태 조회·수동 재시도 API는
- * Job/Program/Inquiry Domain Event가 붙어 실제로 Delivery Row가 생기는 후속 PR에서 추가한다 --
- * 그 전에 Endpoint를 만들면 운영에서 영원히 빈 결과만 반환하고 재시도할 Row도 없어 검증이
- * 불가능하다.
+ * Discord 전달의 생성·처리·조회·재시도 계약이다. [findStatus]/[retryManuallyForTarget]은
+ * `domain.notification.controller`의 상태 조회·수동 재시도 API가 사용한다(요구사항 §36·§37,
+ * Issue #97) -- Job/Program/Inquiry Domain Event가 붙어 실제로 Delivery Row가 생기기 전까지는
+ * 이 API를 노출하지 않았다(운영에서 영원히 빈 결과만 반환하고 재시도할 Row도 없어 검증이
+ * 불가능했기 때문, `discord-delivery-plan.md` 결정 2 참고).
  */
 interface DiscordDeliveryService {
     /**
@@ -37,4 +38,24 @@ interface DiscordDeliveryService {
      * HTTP를 기다리게 되고, Worker와 같은 Row를 동시에 건드릴 위험도 생긴다.
      */
     fun retryManually(deliveryId: Long)
+
+    /**
+     * 대상(targetType+targetId)의 최신 Discord 전달 상태를 조회한다. Delivery가 아직 없으면
+     * [team.inreok.getiserver.domain.notification.exception.DiscordDeliveryNotFoundForTargetException]을
+     * 던진다.
+     */
+    fun findStatus(
+        targetType: DiscordDeliveryTargetType,
+        targetId: Long,
+    ): DiscordDeliveryStatusResponse
+
+    /**
+     * [retryManually]를 대상 기준으로 호출하는 편의 메서드다. Admin Controller는 URL에서
+     * `targetType`/`targetId`만 얻을 수 있고 `deliveryId`는 모른다. 재시도를 예약한 뒤 최신
+     * 상태를 돌려준다.
+     */
+    fun retryManuallyForTarget(
+        targetType: DiscordDeliveryTargetType,
+        targetId: Long,
+    ): DiscordDeliveryStatusResponse
 }

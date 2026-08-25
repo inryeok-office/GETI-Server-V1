@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.inreok.getiserver.domain.company.dto.CompanyOpenJobResponse
 import team.inreok.getiserver.domain.company.dto.CompanyResponse
 import team.inreok.getiserver.domain.company.dto.CompanySearchResponse
 import team.inreok.getiserver.domain.company.dto.CompanySummaryResponse
@@ -29,7 +30,7 @@ import java.time.LocalDateTime
 
 // SecurityConfig를 명시적으로 Import해 /api/v1/companies가 실제로 인증을 요구하는지(401)까지 검증한다.
 @WebMvcTest(controllers = [CompanyController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class CompanyControllerTest
     @Autowired
@@ -69,6 +70,21 @@ class CompanyControllerTest
                 mouEndDate = LocalDate.of(2027, 2, 28),
                 createdAt = LocalDateTime.of(2026, 3, 1, 10, 15, 30),
                 updatedAt = LocalDateTime.of(2026, 3, 2, 9, 0, 0),
+                openJobs =
+                    listOf(
+                        CompanyOpenJobResponse(
+                            jobId = 10L,
+                            title = "Backend 개발자 채용",
+                            postingType = "MOU",
+                            applicationMethod = "INTERNAL",
+                            status = "PUBLISHED",
+                            startDate = LocalDateTime.of(2026, 3, 1, 9, 0),
+                            endDate = LocalDateTime.of(2026, 3, 31, 18, 0),
+                            location = "서울",
+                            employmentType = "인턴",
+                            sourceName = null,
+                        ),
+                    ),
             )
 
         @Test
@@ -88,6 +104,11 @@ class CompanyControllerTest
                 .andExpect(jsonPath("$.data.industry").value("소프트웨어 개발"))
                 .andExpect(jsonPath("$.data.address").value("대구광역시 남구 대명동"))
                 .andExpect(jsonPath("$.data.mouStartDate").value("2026-03-01"))
+                .andExpect(jsonPath("$.data.representativeEmail").doesNotExist())
+                .andExpect(jsonPath("$.data.representativePhone").doesNotExist())
+                .andExpect(jsonPath("$.data.memo").doesNotExist())
+                .andExpect(jsonPath("$.data.openJobs[0].jobId").value(10))
+                .andExpect(jsonPath("$.data.openJobs[0].applicationMethod").value("INTERNAL"))
                 // File 도메인 연동 전이라 logoUrl은 항상 null로 응답한다.
                 .andExpect(jsonPath("$.data.logoUrl").isEmpty)
         }
@@ -135,6 +156,9 @@ class CompanyControllerTest
                                     companyType = CompanyType.GENERAL,
                                     mouStatus = MouStatus.NONE,
                                     logoUrl = null,
+                                    openJobCount = 2L,
+                                    activeMouJobCount = 1L,
+                                    applicationCount = 24L,
                                 ),
                             ),
                         page = 0,
@@ -152,6 +176,9 @@ class CompanyControllerTest
                 .andExpect(jsonPath("$.data.content.length()").value(1))
                 .andExpect(jsonPath("$.data.content[0].companyId").value(1))
                 .andExpect(jsonPath("$.data.content[0].name").value("인력개발원"))
+                .andExpect(jsonPath("$.data.content[0].openJobCount").value(2))
+                .andExpect(jsonPath("$.data.content[0].activeMouJobCount").value(1))
+                .andExpect(jsonPath("$.data.content[0].applicationCount").value(24))
                 .andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.first").value(true))
                 .andExpect(jsonPath("$.data.last").value(true))

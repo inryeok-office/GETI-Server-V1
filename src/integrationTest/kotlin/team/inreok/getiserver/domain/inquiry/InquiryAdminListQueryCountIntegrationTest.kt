@@ -46,6 +46,16 @@ import java.util.UUID
         "app.file.storage.region=us-east-1",
         "app.file.storage.access-key=integration-test-only-access-key",
         "app.file.storage.secret-key=integration-test-only-secret-key",
+        // Hibernate Statistics.prepareStatementCount는 SessionFactory 전역 Counter라 이 Test와
+        // 무관한 Query도 그대로 더해진다. `@EnableScheduling`이 걸린 실제 운영 Scheduler들이
+        // 이 Context에서도 함께 기동하므로(GETI-Server-V1 CI Integration Test에서 반복 관측된
+        // 산발적 실패, 근본 원인), before/after 측정 구간에 우연히 끼어들면 Query 수가 흔들려
+        // 이 Test가 비결정적으로 깨진다. Statement를 실행하는 Scheduler를 이 Context에서만 끈다.
+        "app.program.close-scheduler.interval-ms=86400000",
+        "app.discord.bot.sweep-interval-ms=86400000",
+        "app.discord.job-notification.retry-interval-ms=86400000",
+        "app.search.index-retry-interval-ms=86400000",
+        "app.collector.scheduler.cron=-",
     ],
 )
 class InquiryAdminListQueryCountIntegrationTest {

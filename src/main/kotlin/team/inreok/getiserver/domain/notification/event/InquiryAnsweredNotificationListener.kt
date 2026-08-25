@@ -35,6 +35,11 @@ class InquiryAnsweredNotificationListener(
                     type = NotificationType.INQUIRY_ANSWERED,
                     title = "문의에 답변이 등록되었습니다",
                     content = "\"${event.inquiryTitle}\" 문의에 답변이 등록되었습니다.",
+                    // answerId는 답변 1건마다 새로 생기는 안정적인 식별자다(Issue #193 Idempotency
+                    // Identity). 같은 답변이 중복 수신되면 dedup되고, 한 문의에 답변이 여러 번
+                    // 달리면(재답변 등) 매번 다른 알림이 만들어진다.
+                    sourceEventType = SOURCE_EVENT_TYPE,
+                    sourceEventId = event.answerId,
                     targetType = NotificationTargetType.INQUIRY,
                     targetId = event.inquiryId,
                 ),
@@ -47,5 +52,12 @@ class InquiryAnsweredNotificationListener(
                 ex,
             )
         }
+    }
+
+    private companion object {
+        // Notification Idempotency Identity(Issue #193)의 sourceEventType. 원본 Domain Event Class
+        // 이름을 그대로 쓴다 -- 어떤 Event 종류에서 만들어진 알림인지가 판정 기준이지, 알림이
+        // 화면에 어떻게 보이는지(NotificationType)와는 별개 개념이기 때문이다.
+        const val SOURCE_EVENT_TYPE = "InquiryAnsweredEvent"
     }
 }

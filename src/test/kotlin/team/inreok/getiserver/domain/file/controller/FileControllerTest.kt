@@ -39,7 +39,7 @@ import java.time.LocalDateTime
 // SecurityConfig를 명시적으로 Import해 /api/v1/files 이하가 실제로 인증을 요구하는지(401)까지
 // 검증한다(NotificationControllerTest와 동일한 방식).
 @WebMvcTest(controllers = [FileController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class FileControllerTest
     @Autowired

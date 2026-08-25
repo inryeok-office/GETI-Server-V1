@@ -68,4 +68,32 @@ interface ProgramRepository : JpaRepository<Program, Long> {
     fun incrementViewCount(
         @Param("id") id: Long,
     ): Int
+
+    /**
+     * 신청 종료 시각이 지난 Program 자동 마감 Scheduler(`ProgramCloseScheduler`) 전용 조회다.
+     * `applicationEndedAt < now`로 [ProgramEligibility.computeProgramEligibilityReason]의
+     * `now.isAfter(applicationEndedAt)` 경계와 동일하게 맞춰(applicationEndedAt 시각 자체는
+     * 아직 마감이 아님) 대상을 고른다. 대상이 확정되면 각 Program은 다시
+     * `findByIdForUpdate`로 잠그고 재확인한 뒤 개별 전이한다(TOCTOU 방지) -- 이 Method는 Id만
+     * 반환한다.
+     *
+     * `programs`에는 status 단일 Column Index(`idx_programs_status`)만 있고
+     * (status, application_ended_at) 복합 Index는 없다 -- 이 Query가 Postgres에서 status
+     * Index Scan 뒤 application_ended_at을 Filter로 처리하는지, 아니면 이 Migration 시점
+     * 데이터량에서 Index 없이도 충분히 빠른지는 별도로 확인이 필요하다(완료 보고 참고,
+     * Migration 추가는 이번 범위 밖).
+     */
+    @Query(
+        """
+        SELECT p.id FROM Program p
+        WHERE p.status = :status
+          AND p.applicationEndedAt IS NOT NULL
+          AND p.applicationEndedAt < :now
+          AND p.deletedAt IS NULL
+        """,
+    )
+    fun findExpiredPublishedIds(
+        @Param("status") status: ProgramStatus,
+        @Param("now") now: LocalDateTime,
+    ): List<Long>
 }

@@ -27,7 +27,8 @@ interface MemberProfileImageService {
      * 표시용 Presigned URL. 이미지가 없거나 [requesterId]에게 볼 권한이 없으면 `null`이다.
      *
      * 권한 판정은 `MemberProfileImageAccessChecker`(`domain.member.access`)가 담당한다 -- 호출
-     * 측에서 `profilePublic`을 다시 검사하면 규칙이 두 곳으로 갈라진다.
+     * 측에서 `profilePublic`을 다시 검사하면 규칙이 두 곳으로 갈라진다. 그 판정에는 교사·개발자가
+     * 비공개 프로필도 볼 수 있다는 예외가 포함된다(Issue #114).
      */
     fun urlOf(
         fileId: Long?,

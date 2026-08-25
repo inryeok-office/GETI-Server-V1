@@ -1,7 +1,6 @@
 package team.inreok.getiserver.domain.inquiry.dto
 
 import io.swagger.v3.oas.annotations.media.Schema
-import team.inreok.getiserver.domain.inquiry.entity.type.InquiryDiscordDeliveryStatus
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryStatus
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryType
 import java.time.LocalDateTime
@@ -26,20 +25,10 @@ data class InquiryCreateResponse(
     val author: InquiryAuthorResponse,
     @param:Schema(description = "첨부파일 목록(연결한 파일이 없으면 빈 배열)")
     val files: List<InquiryFileResponse>,
-    @param:Schema(
-        description = "Discord 접수 알림 전달 상태. Notification 연동 전이라 항상 PENDING(Phase 5에서 실제 값 연결 예정)",
-        example = "PENDING",
-    )
-    val discordDeliveryStatus: InquiryDiscordDeliveryStatus,
     @param:Schema(description = "답변 목록(항상 빈 배열)")
     val answers: List<InquiryAnswerItemResponse>,
     @param:Schema(description = "등록 시각")
     val createdAt: LocalDateTime,
     @param:Schema(description = "수정 시각")
     val updatedAt: LocalDateTime,
-    @param:Schema(
-        description = "Discord 전달 완료 여부. discordDeliveryStatus==DELIVERED에서 파생된 값이며 별도로 저장하지 않는다.",
-        example = "false",
-    )
-    val discordDelivered: Boolean,
 )

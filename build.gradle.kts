@@ -36,7 +36,7 @@ dependencyManagement {
         // AWS SDK v2(S3). Spring Boot Dependency Management가 AWS SDK를 관리하지 않으므로
         // BOM을 직접 Import해 s3/s3-presigner와 전이 의존(http-client, auth 등) Version을
         // 한곳에서 맞춘다(File 도메인, Issue #85).
-        mavenBom("software.amazon.awssdk:bom:2.51.2")
+        mavenBom("software.amazon.awssdk:bom:2.51.3")
     }
 }
 
@@ -105,6 +105,12 @@ dependencies {
     // endpoint/path-style 설정으로만 구분한다(Issue #85). S3Client와 S3Presigner가 모두 필요해
     // s3 Artifact 하나로 충분하다(Presigner는 s3에 포함되어 있다).
     implementation("software.amazon.awssdk:s3")
+
+    // 지원자 PROFILE/ANSWERS 문서(XLSX) 생성(Issue #218). Apache POI OOXML은 Apache-2.0
+    // License이며 Java 25 및 현재 Spring Boot/Jackson 3 조합과 독립적으로 동작하는 문서 생성
+    // Library다. XLSX 구조를 테스트에서 실제로 다시 열어 검증할 수 있어 CSV보다 계약을 명확히
+    // 유지할 수 있다.
+    implementation("org.apache.poi:poi-ooxml:5.4.1")
 
     // 업로드 파일의 실제 형식(Magic Number) 탐지. 확장자·선언 MIME만 믿으면 이름만 바꾼 실행
     // 파일을 막을 수 없다(Issue #85). 문서 본문을 파싱하는 tika-parsers는 쓰지 않는다 —

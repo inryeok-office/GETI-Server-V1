@@ -20,4 +20,11 @@ data class NotificationListResponse(
     val first: Boolean,
     @param:Schema(description = "마지막 Page 여부", example = "true")
     val last: Boolean,
+    @param:Schema(
+        description =
+            "요청자 본인의 읽지 않은 알림 전체 개수. Header Badge용 값이라 unreadOnly/notificationType " +
+                "Filter나 현재 Page와 무관하게 항상 같은 값이다.",
+        example = "5",
+    )
+    val unreadCount: Long,
 )
