@@ -229,6 +229,7 @@ class InquiryServiceImplTest {
             inquiryRepository.searchForAdmin(
                 type = null,
                 status = null,
+                answered = false,
                 assigneeId = null,
                 mineOnlyMemberId = null,
                 hasQuery = true,
@@ -241,6 +242,7 @@ class InquiryServiceImplTest {
         service.listAdmin(
             inquiryType = null,
             status = null,
+            answered = false,
             query = rawQuery,
             assigneeId = null,
             mineOnly = false,
@@ -252,6 +254,7 @@ class InquiryServiceImplTest {
         verify(inquiryRepository).searchForAdmin(
             type = null,
             status = null,
+            answered = false,
             assigneeId = null,
             mineOnlyMemberId = null,
             hasQuery = true,

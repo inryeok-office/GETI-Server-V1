@@ -126,6 +126,7 @@ class InquiryAdminControllerTest
                     anyBoolean(),
                     anyLong(),
                     anyPageable(),
+                    isNull(),
                 ),
             ).willReturn(listResponse())
 
@@ -143,7 +144,7 @@ class InquiryAdminControllerTest
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"))
 
             verify(inquiryService, never())
-                .listAdmin(any(), any(), any(), any(), anyBoolean(), anyLong(), anyPageable())
+                .listAdmin(any(), any(), any(), any(), anyBoolean(), anyLong(), anyPageable(), isNull())
         }
 
         @Test
@@ -154,7 +155,7 @@ class InquiryAdminControllerTest
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"))
 
             verify(inquiryService, never())
-                .listAdmin(any(), any(), any(), any(), anyBoolean(), anyLong(), anyPageable())
+                .listAdmin(any(), any(), any(), any(), anyBoolean(), anyLong(), anyPageable(), isNull())
         }
 
         @Test
@@ -179,6 +180,7 @@ class InquiryAdminControllerTest
                     anyBoolean(),
                     anyLong(),
                     anyPageable(),
+                    isNull(),
                 ),
             ).willReturn(listResponse())
 
@@ -199,6 +201,7 @@ class InquiryAdminControllerTest
                 anyBoolean(),
                 anyLong(),
                 pageableCaptor.capture() ?: Pageable.unpaged(),
+                isNull(),
             )
             assertThat(pageableCaptor.value.pageNumber).isEqualTo(0)
             assertThat(pageableCaptor.value.pageSize).isEqualTo(100)

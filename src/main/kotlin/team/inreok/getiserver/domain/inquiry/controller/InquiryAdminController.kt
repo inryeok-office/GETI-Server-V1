@@ -70,6 +70,9 @@ class InquiryAdminController(
     @GetMapping
     fun listInquiries(
         authentication: Authentication,
+        @Parameter(description = "답변 여부 필터(선택). answered=true는 answeredAt 존재, false는 null인 문의만 조회")
+        @RequestParam(required = false)
+        answered: Boolean?,
         @Parameter(description = "문의 유형 필터(선택)") @RequestParam(required = false) inquiryType: InquiryType?,
         @Parameter(description = "문의 상태 필터(선택)") @RequestParam(required = false) status: InquiryStatus?,
         @Parameter(description = "검색어(선택). 제목·내용·작성자 이름 대상") @RequestParam(required = false) query: String?,
@@ -81,7 +84,7 @@ class InquiryAdminController(
     ): ApiResponse<InquiryAdminListResponse> {
         val memberId = authentication.principal as Long
         return ApiResponse.of(
-            inquiryService.listAdmin(inquiryType, status, query, assigneeId, mineOnly, memberId, pageable),
+            inquiryService.listAdmin(inquiryType, status, query, assigneeId, mineOnly, memberId, pageable, answered),
         )
     }
 

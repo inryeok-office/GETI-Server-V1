@@ -206,6 +206,7 @@ class InquiryServiceImpl(
         mineOnly: Boolean,
         requesterMemberId: Long,
         pageable: Pageable,
+        answered: Boolean?,
     ): InquiryAdminListResponse {
         // 검색어를 보내지 않은 경우와 공백만 보낸 경우를 모두 "검색어 없음"으로 취급한다
         // (CompanyServiceImpl.search와 동일한 관례).
@@ -224,6 +225,7 @@ class InquiryServiceImpl(
             inquiryRepository.searchForAdmin(
                 type = inquiryType,
                 status = status,
+                answered = answered,
                 assigneeId = assigneeId,
                 mineOnlyMemberId = mineOnlyMemberId,
                 // :query를 null로 바인딩하지 않는 이유는 InquiryRepository.searchForAdmin KDoc 참고
