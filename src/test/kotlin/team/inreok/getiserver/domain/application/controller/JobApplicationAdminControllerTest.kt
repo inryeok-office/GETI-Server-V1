@@ -108,6 +108,8 @@ class JobApplicationAdminControllerTest
                     anyBoolean(),
                     anyLong(),
                     anyPageable(),
+                    any(),
+                    any(),
                 ),
             ).willReturn(JobApplicationAdminListResponse(emptyList(), 0, 20, 0, 0, true, true))
 
@@ -134,6 +136,8 @@ class JobApplicationAdminControllerTest
                     anyBoolean(),
                     anyLong(),
                     anyPageable(),
+                    any(),
+                    any(),
                 ),
             ).willReturn(JobApplicationAdminListResponse(emptyList(), 0, 20, 0, 0, true, true))
 
@@ -148,6 +152,8 @@ class JobApplicationAdminControllerTest
                         .param("companyId", "2")
                         .param("managerMemberId", "3")
                         .param("mineOnly", "true")
+                        .param("createdFrom", "2026-08-23T00:00:00")
+                        .param("createdTo", "2026-08-26T00:00:00")
                         .with(authOf(100L, "TEACHER")),
                 ).andExpect(status().isOk)
 
@@ -162,6 +168,8 @@ class JobApplicationAdminControllerTest
                 eq(true),
                 eq(100L),
                 anyPageable(),
+                eq(LocalDateTime.of(2026, 8, 23, 0, 0)),
+                eq(LocalDateTime.of(2026, 8, 26, 0, 0)),
             )
         }
 
@@ -180,6 +188,8 @@ class JobApplicationAdminControllerTest
                     anyBoolean(),
                     anyLong(),
                     anyPageable(),
+                    any(),
+                    any(),
                 ),
             ).willReturn(JobApplicationAdminListResponse(emptyList(), 0, 20, 0, 0, true, true))
 
@@ -198,6 +208,8 @@ class JobApplicationAdminControllerTest
                 eq(false),
                 eq(100L),
                 anyPageable(),
+                isNull(),
+                isNull(),
             )
         }
 

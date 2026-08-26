@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
+import java.time.LocalDateTime
 
 interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
     @Query(
@@ -112,6 +113,8 @@ interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
           AND (:department IS NULL OR a.applicantDepartment = :department)
           AND (:hasJobFilter = FALSE OR a.jobId IN :jobIds)
           AND (:hasApplicationIds = FALSE OR a.id IN :applicationIds)
+          AND a.createdAt >= COALESCE(:createdFrom, a.createdAt)
+          AND a.createdAt < COALESCE(:createdTo, CURRENT_TIMESTAMP)
         ORDER BY a.id DESC
         """,
     )
@@ -126,6 +129,8 @@ interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
         @Param("jobIds") jobIds: Collection<Long>,
         @Param("hasApplicationIds") hasApplicationIds: Boolean,
         @Param("applicationIds") applicationIds: Collection<Long>,
+        @Param("createdFrom") createdFrom: LocalDateTime? = null,
+        @Param("createdTo") createdTo: LocalDateTime? = null,
         pageable: Pageable,
     ): Page<JobApplication>
 
