@@ -91,6 +91,10 @@ class InquiryDetailAnswerFileQueryCountIntegrationTest {
         repeat(FEW) { createAnswerWithFile(inquiryId, authorId) }
 
         val statistics = entityManagerFactory.unwrap(SessionFactory::class.java).statistics
+        // First invocation can initialize Hibernate query plans/proxies and add a one-time cost to the counter.
+        // Warm up the same path before measuring so the assertion covers only the answer-count-dependent work.
+        getDetailAndCount(statistics, inquiryId, authorId)
+        statistics.clear()
         statistics.isStatisticsEnabled = true
 
         val fewResult = getDetailAndCount(statistics, inquiryId, authorId)

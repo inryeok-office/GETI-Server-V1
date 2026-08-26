@@ -98,6 +98,10 @@ class MemberSearchImageUrlQueryCountIntegrationTest {
         createStudentsWithProfileImage(manyName, count = MANY)
 
         val statistics = entityManagerFactory.unwrap(SessionFactory::class.java).statistics
+        // First invocation can initialize Hibernate query plans/proxies and add a one-time cost to the counter.
+        // Warm up the same path before measuring so the assertion covers only the result-count-dependent work.
+        searchAndCount(statistics, requesterId, fewName)
+        statistics.clear()
         statistics.isStatisticsEnabled = true
 
         val fewResult = searchAndCount(statistics, requesterId, fewName)
@@ -136,6 +140,10 @@ class MemberSearchImageUrlQueryCountIntegrationTest {
         authenticateAsTeacher(teacherId)
 
         val statistics = entityManagerFactory.unwrap(SessionFactory::class.java).statistics
+        // First invocation can initialize Hibernate query plans/proxies and add a one-time cost to the counter.
+        // Warm up the same path before measuring so the assertion covers only the result-count-dependent work.
+        searchAndCount(statistics, teacherId, fewName)
+        statistics.clear()
         statistics.isStatisticsEnabled = true
 
         val fewResult = searchAndCount(statistics, teacherId, fewName)

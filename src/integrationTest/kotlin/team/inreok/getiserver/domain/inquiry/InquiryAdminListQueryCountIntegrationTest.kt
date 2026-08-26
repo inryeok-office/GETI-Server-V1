@@ -77,6 +77,10 @@ class InquiryAdminListQueryCountIntegrationTest {
         createInquiriesWithDistinctAuthorAndAssignee(FEW)
 
         val statistics = entityManagerFactory.unwrap(SessionFactory::class.java).statistics
+        // First invocation can initialize Hibernate query plans/proxies and add a one-time cost to the counter.
+        // Warm up the same path before measuring so the assertion covers only the row-count-dependent work.
+        listAndCount(statistics, developerId, FEW)
+        statistics.clear()
         statistics.isStatisticsEnabled = true
 
         val fewResult = listAndCount(statistics, developerId, FEW)
