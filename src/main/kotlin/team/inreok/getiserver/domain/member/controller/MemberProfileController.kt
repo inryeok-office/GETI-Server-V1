@@ -18,6 +18,7 @@ import team.inreok.getiserver.domain.member.dto.MemberProfileUpdateResponse
 import team.inreok.getiserver.domain.member.dto.MyProfileResponse
 import team.inreok.getiserver.domain.member.entity.type.DepartmentType
 import team.inreok.getiserver.domain.member.service.MemberService
+import team.inreok.getiserver.global.error.ErrorResponse
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
 import team.inreok.getiserver.global.web.ApiResponse
 import tools.jackson.databind.JsonNode
@@ -41,9 +42,21 @@ class MemberProfileController(
     )
     @ApiResponses(
         SwaggerApiResponse(responseCode = "200", description = "조회 성공"),
-        SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
-        SwaggerApiResponse(responseCode = "404", description = "내 프로필을 찾을 수 없음 (PROFILE_NOT_FOUND)"),
-        SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
+        SwaggerApiResponse(
+            responseCode = "401",
+            description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
+        ),
+        SwaggerApiResponse(
+            responseCode = "404",
+            description = "내 프로필을 찾을 수 없음 (PROFILE_NOT_FOUND)",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
+        ),
+        SwaggerApiResponse(
+            responseCode = "500",
+            description = "서버 내부 오류",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
+        ),
     )
     @GetMapping
     fun getMyProfile(authentication: Authentication): ApiResponse<MyProfileResponse> {
@@ -84,15 +97,33 @@ class MemberProfileController(
                     "profileImageUrl 미지원, links 형식/개수/길이/scheme 오류 (PROFILE_VALIDATION_FAILED). " +
                     "profileImageFileId가 본인 파일이 아니면 403 FILE_NOT_OWNED, " +
                     "용도가 다르면 400 FILE_PURPOSE_MISMATCH로 거부된다.",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
         ),
-        SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
-        SwaggerApiResponse(responseCode = "403", description = "본인이 업로드하지 않은 파일을 연결하려 함 (FILE_NOT_OWNED)"),
+        SwaggerApiResponse(
+            responseCode = "401",
+            description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
+        ),
+        SwaggerApiResponse(
+            responseCode = "403",
+            description = "본인이 업로드하지 않은 파일을 연결하려 함 (FILE_NOT_OWNED)",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
+        ),
         SwaggerApiResponse(
             responseCode = "404",
             description = "회원을 찾을 수 없음(PROFILE_NOT_FOUND), 파일이 없거나 사용할 수 없는 상태(FILE_NOT_FOUND)",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
         ),
-        SwaggerApiResponse(responseCode = "409", description = "이미 다른 리소스에 연결된 파일 (FILE_ALREADY_LINKED)"),
-        SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
+        SwaggerApiResponse(
+            responseCode = "409",
+            description = "이미 다른 리소스에 연결된 파일 (FILE_ALREADY_LINKED)",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
+        ),
+        SwaggerApiResponse(
+            responseCode = "500",
+            description = "서버 내부 오류",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
+        ),
     )
     @SwaggerRequestBody(
         required = true,

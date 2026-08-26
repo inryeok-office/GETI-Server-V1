@@ -152,6 +152,57 @@ class OpenApiDocumentationTest {
         assertThat(properties.has("programDeletedAt")).isTrue()
     }
 
+    @Test
+    fun `프로필과 파일 오류 응답은 ErrorResponse Schema를 사용한다`() {
+        val document = fetchOpenApiDocument()
+
+        assertErrorSchema(document, "/api/v1/me/profile", "get", setOf("401", "404", "500"))
+        assertErrorSchema(document, "/api/v1/me/profile", "patch", setOf("400", "401", "403", "404", "409", "500"))
+        assertErrorSchema(document, "/api/v1/files", "post", setOf("400", "401", "413", "415", "500"))
+
+        val errorSchema = document.get("components").get("schemas").get("ErrorResponse")
+        assertThat(errorSchema).isNotNull
+        assertThat(
+            errorSchema
+                ?.get("properties")
+                ?.get("error")
+                ?.get("\u0024ref")
+                ?.asString(),
+        ).isEqualTo("#/components/schemas/ErrorBody")
+        assertThat(
+            document
+                .get("components")
+                .get("schemas")
+                .get("ErrorBody")
+                .get("properties")
+                .has("fieldErrors"),
+        ).isTrue()
+    }
+
+    private fun assertErrorSchema(
+        document: JsonNode,
+        path: String,
+        method: String,
+        responseCodes: Set<String>,
+    ) {
+        val operation = document.get("paths").get(path).get(method)
+        responseCodes.forEach { responseCode ->
+            val schemaReference =
+                operation
+                    .get("responses")
+                    .get(responseCode)
+                    .get("content")
+                    .get("*/*")
+                    .get("schema")
+                    .get("\$ref")
+                    .asString()
+
+            assertThat(schemaReference)
+                .describedAs("$method $path $responseCode 오류 응답의 Schema")
+                .isEqualTo("#/components/schemas/ErrorResponse")
+        }
+    }
+
     private fun fetchOpenApiDocument(): JsonNode {
         val body =
             mockMvc

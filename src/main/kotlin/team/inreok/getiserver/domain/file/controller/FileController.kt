@@ -24,6 +24,7 @@ import team.inreok.getiserver.domain.file.dto.FileUploadResponse
 import team.inreok.getiserver.domain.file.entity.type.FilePurpose
 import team.inreok.getiserver.domain.file.service.FileDownloadService
 import team.inreok.getiserver.domain.file.service.FileUploadService
+import team.inreok.getiserver.global.error.ErrorResponse
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
 import team.inreok.getiserver.global.web.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
@@ -70,16 +71,30 @@ class FileController(
             description =
                 "빈 파일 (FILE_EMPTY), 파일 이름이 올바르지 않음 (INVALID_FILE_NAME), " +
                     "purpose 누락 (MISSING_REQUEST_PARAMETER), purpose 값이 올바르지 않음 (TYPE_MISMATCH)",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
         ),
-        SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
-        SwaggerApiResponse(responseCode = "413", description = "허용된 파일 크기 초과 (FILE_TOO_LARGE)"),
+        SwaggerApiResponse(
+            responseCode = "401",
+            description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
+        ),
+        SwaggerApiResponse(
+            responseCode = "413",
+            description = "허용된 파일 크기 초과 (FILE_TOO_LARGE)",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
+        ),
         SwaggerApiResponse(
             responseCode = "415",
             description =
                 "허용되지 않은 확장자·형식 (FILE_TYPE_NOT_ALLOWED), " +
                     "확장자와 실제 파일 형식 불일치 (MIME_MISMATCH)",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
         ),
-        SwaggerApiResponse(responseCode = "500", description = "파일 저장소 오류 (FILE_STORAGE_ERROR) 또는 서버 내부 오류"),
+        SwaggerApiResponse(
+            responseCode = "500",
+            description = "파일 저장소 오류 (FILE_STORAGE_ERROR) 또는 서버 내부 오류",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))],
+        ),
     )
     @PostMapping(consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     @ResponseStatus(HttpStatus.CREATED)
