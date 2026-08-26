@@ -30,6 +30,7 @@ import team.inreok.getiserver.domain.member.entity.type.DepartmentType
 import team.inreok.getiserver.domain.member.query.InquiryMemberSnapshot
 import team.inreok.getiserver.domain.member.query.InquiryMemberSnapshotQueryPort
 import tools.jackson.databind.ObjectMapper
+import java.time.LocalDateTime
 
 @Service
 class JobApplicationAdminServiceImpl(
@@ -60,6 +61,8 @@ class JobApplicationAdminServiceImpl(
         mineOnly: Boolean,
         requesterMemberId: Long,
         pageable: Pageable,
+        createdFrom: LocalDateTime?,
+        createdTo: LocalDateTime?,
     ): JobApplicationAdminListResponse {
         // 검색어를 보내지 않은 경우와 공백만 보낸 경우를 모두 "검색어 없음"으로 취급한다
         // (InquiryServiceImpl.listAdmin과 동일한 관례).
@@ -100,6 +103,8 @@ class JobApplicationAdminServiceImpl(
                     jobIds = filterJobIds,
                     hasApplicationIds = false,
                     applicationIds = emptySet(),
+                    createdFrom = createdFrom,
+                    createdTo = createdTo,
                     pageable = pageable,
                 )
             }

@@ -36,11 +36,21 @@ interface DiscordDeliveryRepository : JpaRepository<DiscordDelivery, Long> {
         """
         SELECT d FROM DiscordDelivery d
         WHERE (:status IS NULL OR d.status = :status)
+          AND (
+            d.lastAttemptAt >= COALESCE(:startAt, d.lastAttemptAt)
+            OR COALESCE(:startAt, d.lastAttemptAt) IS NULL
+          )
+          AND (
+            d.lastAttemptAt < COALESCE(:endAt, CURRENT_TIMESTAMP)
+            OR COALESCE(:endAt, d.lastAttemptAt) IS NULL
+          )
         ORDER BY d.id DESC
         """,
     )
     fun findRecent(
         @Param("status") status: DiscordDeliveryStatus?,
+        @Param("startAt") startAt: LocalDateTime? = null,
+        @Param("endAt") endAt: LocalDateTime? = null,
         pageable: Pageable,
     ): Page<DiscordDelivery>
 
