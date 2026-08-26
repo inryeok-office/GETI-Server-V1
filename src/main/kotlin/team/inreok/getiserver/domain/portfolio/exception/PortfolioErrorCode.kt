@@ -9,7 +9,6 @@ import team.inreok.getiserver.global.error.ErrorCode
  * 아래 Error Code는 이번 Phase 범위가 아니라 아직 만들지 않았다 -- 실제로 던지는 곳이 생기는
  * Phase에서 추가한다.
  * - `PORTFOLIO_ACCESS_DENIED`: 제출물 File 다운로드 권한(Phase 3, §17)에서 쓴다.
- * - `NO_SUBMISSIONS_TO_EXPORT`: 일괄 다운로드(Phase 5, §24)에서 쓴다.
  */
 enum class PortfolioErrorCode(
     override val status: HttpStatus,
@@ -22,6 +21,7 @@ enum class PortfolioErrorCode(
     SUBMISSION_CLOSED(HttpStatus.CONFLICT, "제출 기간이 아니거나 마감되어 제출할 수 없습니다."),
     PORTFOLIO_REQUEST_NOT_EDITABLE(HttpStatus.CONFLICT, "현재 상태에서는 수합 요청을 수정할 수 없습니다."),
     PORTFOLIO_STATUS_TRANSITION_INVALID(HttpStatus.CONFLICT, "허용되지 않은 수합 요청 상태 변경입니다."),
+    NO_SUBMISSIONS_TO_EXPORT(HttpStatus.NOT_FOUND, "내려받을 제출 자료가 없습니다."),
     ;
 
     override val code: String get() = name

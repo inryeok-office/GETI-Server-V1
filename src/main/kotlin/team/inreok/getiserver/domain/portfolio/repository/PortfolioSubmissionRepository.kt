@@ -12,6 +12,13 @@ interface PortfolioSubmissionRepository : JpaRepository<PortfolioSubmission, Lon
         memberId: Long,
     ): PortfolioSubmission?
 
+    /**
+     * 한 수합 요청의 모든 제출물을 조회한다. 관리자 제출 현황(§19)·일괄 다운로드(§24)가 대상 학생
+     * 전체와 대조하려고 이 요청의 제출물을 한 번에 읽을 때 쓴다(제출자 수만큼 단건 조회를 반복하지
+     * 않기 위한 배치 조회, §35). 임시저장(DRAFT)도 포함하므로 호출 측이 필요에 따라 상태로 거른다.
+     */
+    fun findAllByRequestId(requestId: Long): List<PortfolioSubmission>
+
     /** 실제 제출 완료(SUBMITTED) 상태만 센다 — DRAFT(임시저장)는 제출 수에 포함하지 않는다(요구사항 §20). */
     fun countByRequestIdAndStatus(
         requestId: Long,
