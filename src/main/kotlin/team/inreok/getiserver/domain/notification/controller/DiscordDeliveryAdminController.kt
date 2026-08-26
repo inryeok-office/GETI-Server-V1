@@ -23,6 +23,7 @@ import team.inreok.getiserver.domain.notification.service.DiscordDeliveryService
 import team.inreok.getiserver.domain.program.query.ProgramManagerQueryPort
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
 import team.inreok.getiserver.global.web.ApiResponse
+import java.time.LocalDateTime
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 
 /**
@@ -86,10 +87,16 @@ class DiscordDeliveryAdminController(
         @Parameter(description = "전달 상태 Filter(선택). 생략하면 전체를 조회한다.")
         @RequestParam(required = false)
         status: DiscordDeliveryStatus?,
+        @Parameter(description = "최근 시도 시각 하한(포함, lastAttemptAt 기준).", example = "2026-08-25T00:00:00")
+        @RequestParam(required = false)
+        startAt: LocalDateTime?,
+        @Parameter(description = "최근 시도 시각 상한(미포함, lastAttemptAt 기준).", example = "2026-08-26T00:00:00")
+        @RequestParam(required = false)
+        endAt: LocalDateTime?,
         @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20, 최대 100). sort는 무시된다.")
         pageable: Pageable,
     ): ApiResponse<DiscordDeliveryListResponse> =
-        ApiResponse.of(discordDeliveryAdminQueryService.listRecent(status, pageable))
+        ApiResponse.of(discordDeliveryAdminQueryService.listRecent(status, pageable, startAt, endAt))
 
     @Operation(
         summary = "공고 Discord 전달 상태 조회",

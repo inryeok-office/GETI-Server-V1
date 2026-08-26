@@ -17,6 +17,7 @@ import team.inreok.getiserver.domain.notification.repository.DiscordDeliveryRepo
 import team.inreok.getiserver.domain.notification.service.DiscordDeliveryAdminQueryService
 import team.inreok.getiserver.domain.notification.service.DiscordDeliveryRetryPolicy
 import team.inreok.getiserver.domain.program.query.ProgramDiscordPayloadQueryPort
+import java.time.LocalDateTime
 
 /**
  * 관리자 Discord 전달 목록 조회 구현이다(Issue #206).
@@ -41,10 +42,18 @@ class DiscordDeliveryAdminQueryServiceImpl(
     override fun listRecent(
         status: DiscordDeliveryStatus?,
         pageable: Pageable,
+        startAt: LocalDateTime?,
+        endAt: LocalDateTime?,
     ): DiscordDeliveryListResponse {
         // 정렬은 Repository Query가 id DESC로 고정한다. 클라이언트가 보낸 Sort를 그대로 넘기면
         // JPQL의 ORDER BY와 충돌하므로 Page 정보만 남긴다(NotificationServiceImpl.list와 동일).
-        val page = deliveryRepository.findRecent(status, PageRequest.of(pageable.pageNumber, pageable.pageSize))
+        val page =
+            deliveryRepository.findRecent(
+                status,
+                startAt,
+                endAt,
+                PageRequest.of(pageable.pageNumber, pageable.pageSize),
+            )
         if (page.isEmpty) return page.toListResponse(emptyMap(), emptySet())
 
         val targetNames = loadTargetNames(page.content)
