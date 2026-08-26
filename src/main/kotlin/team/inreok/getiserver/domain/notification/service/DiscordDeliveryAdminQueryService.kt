@@ -3,6 +3,7 @@ package team.inreok.getiserver.domain.notification.service
 import org.springframework.data.domain.Pageable
 import team.inreok.getiserver.domain.notification.dto.DiscordDeliveryListResponse
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryStatus
+import java.time.LocalDateTime
 
 /**
  * 관리자 Discord 전달 관리 화면이 쓰는 읽기 전용 조회 계약이다(Issue #206).
@@ -21,5 +22,7 @@ interface DiscordDeliveryAdminQueryService {
     fun listRecent(
         status: DiscordDeliveryStatus?,
         pageable: Pageable,
+        startAt: LocalDateTime? = null,
+        endAt: LocalDateTime? = null,
     ): DiscordDeliveryListResponse
 }
