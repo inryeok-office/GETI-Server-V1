@@ -110,7 +110,7 @@ dependencies {
     // License이며 Java 25 및 현재 Spring Boot/Jackson 3 조합과 독립적으로 동작하는 문서 생성
     // Library다. XLSX 구조를 테스트에서 실제로 다시 열어 검증할 수 있어 CSV보다 계약을 명확히
     // 유지할 수 있다.
-    implementation("org.apache.poi:poi-ooxml:5.4.1")
+    implementation("org.apache.poi:poi-ooxml:5.5.1")
 
     // 업로드 파일의 실제 형식(Magic Number) 탐지. 확장자·선언 MIME만 믿으면 이름만 바꾼 실행
     // 파일을 막을 수 없다(Issue #85). 문서 본문을 파싱하는 tika-parsers는 쓰지 않는다 —
