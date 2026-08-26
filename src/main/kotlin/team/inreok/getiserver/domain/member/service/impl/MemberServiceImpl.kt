@@ -116,6 +116,24 @@ class MemberServiceImpl(
         member: Member,
         body: JsonNode,
     ) {
+        if (body.has("cohort")) {
+            val cohort = body.get("cohort")
+            if (cohort.isNull) {
+                member.cohort = null
+            } else {
+                val value = cohort.asLong()
+                if (!cohort.isIntegralNumber || value !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
+                    val message =
+                        if (!cohort.isIntegralNumber) {
+                            "cohort는 정수여야 합니다."
+                        } else {
+                            "cohort의 값 범위가 올바르지 않습니다."
+                        }
+                    throw MemberProfileValidationException(message)
+                }
+                member.cohort = value.toInt()
+            }
+        }
         if (!body.has("department")) return
         val node = body.get("department")
         if (node.isNull) {
@@ -188,6 +206,7 @@ class MemberServiceImpl(
         return MemberProfileUpdateResponse(
             memberId = memberId,
             name = member.name.orEmpty(),
+            cohort = member.cohort,
             department = member.department,
             phone = member.phoneNumber,
             desiredJob = readStringList(objectMapper, member.desiredPositions).firstOrNull(),
@@ -226,6 +245,7 @@ class MemberServiceImpl(
     companion object {
         private val ALLOWED_PROFILE_UPDATE_FIELDS =
             setOf(
+                "cohort",
                 "department",
                 "phone",
                 "desiredJob",
