@@ -24,6 +24,7 @@ import team.inreok.getiserver.domain.application.service.JobApplicationAdminServ
 import team.inreok.getiserver.domain.member.entity.type.DepartmentType
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
 import team.inreok.getiserver.global.web.ApiResponse
+import java.time.LocalDateTime
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 
 @Tag(
@@ -50,8 +51,9 @@ class JobApplicationAdminController(
             항상 결과에서 제외된다. `mineOnly=true`면 현재 로그인한 교사·개발자가 담당
             (managerMemberId) 또는 등록(createdByMemberId)한 공고의 지원서만 반환하며, `mineOnly`를
             지정하지 않으면(기본 false) 담당 공고 여부와 무관하게 모든 교사·개발자가 전체를 조회할
-            수 있다. `applicantName`은 지원자 이름 스냅샷을 대소문자 구분 없이 부분 검색한다. 기본
-            page=0, size=20이며 최신 등록순으로 고정된다.
+            수 있다. `applicantName`은 지원자 이름 스냅샷을 대소문자 구분 없이 부분 검색한다.
+            `createdFrom`은 생성 시각 이상, `createdTo`는 생성 시각 미만으로 적용되는 선택 범위다.
+            기본 page=0, size=20이며 최신 등록순으로 고정된다.
         """,
     )
     @ApiResponses(
@@ -76,6 +78,12 @@ class JobApplicationAdminController(
         @RequestParam(required = false, defaultValue = "false")
         mineOnly: Boolean,
         @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20)") pageable: Pageable,
+        @Parameter(description = "지원서 생성 시각 하한(포함, 선택)", example = "2026-08-23T00:00:00")
+        @RequestParam(required = false)
+        createdFrom: LocalDateTime?,
+        @Parameter(description = "지원서 생성 시각 상한(미포함, 선택)", example = "2026-08-26T00:00:00")
+        @RequestParam(required = false)
+        createdTo: LocalDateTime?,
     ): ApiResponse<JobApplicationAdminListResponse> {
         val requesterMemberId = authentication.principal as Long
         return ApiResponse.of(
@@ -90,6 +98,8 @@ class JobApplicationAdminController(
                 mineOnly = mineOnly,
                 requesterMemberId = requesterMemberId,
                 pageable = pageable,
+                createdFrom = createdFrom,
+                createdTo = createdTo,
             ),
         )
     }

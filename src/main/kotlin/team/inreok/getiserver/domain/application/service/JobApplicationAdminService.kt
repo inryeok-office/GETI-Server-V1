@@ -7,6 +7,7 @@ import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.member.entity.type.DepartmentType
+import java.time.LocalDateTime
 
 /** 교사·개발자용 지원서 조회·검토 Service다(Issue #125). 학생 본인 Action(SUBMIT 등)은
  * [JobApplicationService]가 별도로 담당한다 -- 소유권 기반 권한 모델(학생)과 담당자 기반 권한
@@ -29,6 +30,8 @@ interface JobApplicationAdminService {
         mineOnly: Boolean,
         requesterMemberId: Long,
         pageable: Pageable,
+        createdFrom: LocalDateTime? = null,
+        createdTo: LocalDateTime? = null,
     ): JobApplicationAdminListResponse
 
     /** 지원서가 없으면 ApplicationNotFoundException. */
