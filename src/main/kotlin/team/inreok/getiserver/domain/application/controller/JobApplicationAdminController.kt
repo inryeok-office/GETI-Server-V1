@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationStatusCountsResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
@@ -43,6 +44,20 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 class JobApplicationAdminController(
     private val jobApplicationAdminService: JobApplicationAdminService,
 ) {
+    @Operation(
+        summary = "지원서 상태별 건수 조회",
+        description = "관리자 지원서 목록과 동일하게 DRAFT를 제외한 상태별 건수를 한 번의 요청으로 조회한다. 건수가 없는 상태도 0으로 반환한다.",
+    )
+    @ApiResponses(
+        SwaggerApiResponse(responseCode = "200", description = "상태별 건수 조회 성공"),
+        SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
+        SwaggerApiResponse(responseCode = "403", description = "교사 또는 개발자 권한이 없음 (FORBIDDEN)"),
+        SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
+    )
+    @GetMapping("/status-counts")
+    fun countByStatus(): ApiResponse<JobApplicationStatusCountsResponse> =
+        ApiResponse.of(jobApplicationAdminService.statusCounts())
+
     @Operation(
         summary = "지원서 목록 조회",
         description = """

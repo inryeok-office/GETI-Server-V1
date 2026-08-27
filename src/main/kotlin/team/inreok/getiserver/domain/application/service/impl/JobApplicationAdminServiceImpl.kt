@@ -9,6 +9,7 @@ import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRe
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListItemResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationStatusCountsResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
@@ -49,6 +50,24 @@ class JobApplicationAdminServiceImpl(
     private val eventPublisher: ApplicationEventPublisher,
     private val objectMapper: ObjectMapper,
 ) : JobApplicationAdminService {
+    @Transactional(readOnly = true)
+    override fun statusCounts(): JobApplicationStatusCountsResponse {
+        val countsByStatus =
+            jobApplicationRepository
+                .countByStatusForAdmin()
+                .associate { it.status to it.applicationCount }
+                .let { persistedCounts ->
+                    JobApplicationStatus.entries
+                        .filter { it != JobApplicationStatus.DRAFT }
+                        .associateWithTo(LinkedHashMap()) { status -> persistedCounts[status] ?: 0L }
+                }
+
+        return JobApplicationStatusCountsResponse(
+            totalCount = countsByStatus.values.sum(),
+            counts = countsByStatus,
+        )
+    }
+
     @Transactional(readOnly = true)
     override fun list(
         jobId: Long?,

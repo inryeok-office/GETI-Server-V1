@@ -67,6 +67,26 @@ class JobApplicationAdminListFilterIntegrationTest {
     private lateinit var memberRepository: MemberRepository
 
     @Test
+    fun `관리자 상태별 건수는 DRAFT를 제외하고 모든 상태를 한 번에 집계한다`() {
+        val before = jobApplicationAdminService.statusCounts()
+
+        val jobId = createJob()
+        createApplication(jobId, status = JobApplicationStatus.SUBMITTED)
+        createApplication(jobId, status = JobApplicationStatus.SUBMITTED)
+        createApplication(jobId, status = JobApplicationStatus.APPROVED)
+        createApplication(jobId, status = JobApplicationStatus.DRAFT)
+
+        val after = jobApplicationAdminService.statusCounts()
+
+        assertThat(after.counts[JobApplicationStatus.SUBMITTED])
+            .isEqualTo(before.counts.getValue(JobApplicationStatus.SUBMITTED) + 2L)
+        assertThat(after.counts[JobApplicationStatus.APPROVED])
+            .isEqualTo(before.counts.getValue(JobApplicationStatus.APPROVED) + 1L)
+        assertThat(after.totalCount).isEqualTo(before.totalCount + 3L)
+        assertThat(after.counts).doesNotContainKey(JobApplicationStatus.DRAFT)
+    }
+
+    @Test
     fun `applicantName은 대소문자 구분 없이 부분 검색된다`() {
         val jobId = createJob()
         createApplication(jobId, applicantName = "Hong Gildong")
@@ -312,6 +332,7 @@ class JobApplicationAdminListFilterIntegrationTest {
         applicantName: String? = "지원자 ${UUID.randomUUID()}",
         cohort: Int? = null,
         department: String? = null,
+        status: JobApplicationStatus = JobApplicationStatus.SUBMITTED,
     ) {
         jobApplicationRepository.saveAndFlush(
             JobApplication(
@@ -320,7 +341,7 @@ class JobApplicationAdminListFilterIntegrationTest {
                 attemptNumber = 1,
                 contactEmail = "applicant-${UUID.randomUUID()}@example.com",
                 answers = "[]",
-                status = JobApplicationStatus.SUBMITTED,
+                status = status,
             ).apply {
                 this.applicantName = applicantName
                 this.applicantCohort = cohort
