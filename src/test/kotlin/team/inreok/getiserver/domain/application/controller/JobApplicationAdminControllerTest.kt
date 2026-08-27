@@ -27,6 +27,7 @@ import team.inreok.getiserver.domain.application.dto.JobApplicationAdminAction
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationStatusCountsResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
 import team.inreok.getiserver.domain.application.exception.ApplicationActionNotAvailableException
@@ -93,6 +94,42 @@ class JobApplicationAdminControllerTest
                 createdAt = fixedTime,
                 updatedAt = fixedTime,
             )
+
+        @Test
+        fun `교사가 상태별 건수를 조회하면 200과 함께 전체 건수를 반환한다`() {
+            given(jobApplicationAdminService.statusCounts())
+                .willReturn(
+                    JobApplicationStatusCountsResponse(
+                        totalCount = 3L,
+                        counts =
+                            linkedMapOf(
+                                JobApplicationStatus.SUBMITTED to 2L,
+                                JobApplicationStatus.APPROVED to 1L,
+                            ),
+                    ),
+                )
+
+            mockMvc
+                .perform(get("/api/v1/admin/job-applications/status-counts").with(authOf(100L, "TEACHER")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.totalCount").value(3))
+                .andExpect(jsonPath("$.data.counts.SUBMITTED").value(2))
+                .andExpect(jsonPath("$.data.counts.APPROVED").value(1))
+        }
+
+        @Test
+        fun `학생은 상태별 건수를 조회할 수 없고 403을 반환한다`() {
+            mockMvc
+                .perform(get("/api/v1/admin/job-applications/status-counts").with(authOf(1L, "STUDENT")))
+                .andExpect(status().isForbidden)
+        }
+
+        @Test
+        fun `인증 없이 상태별 건수를 조회하면 401을 반환한다`() {
+            mockMvc
+                .perform(get("/api/v1/admin/job-applications/status-counts"))
+                .andExpect(status().isUnauthorized)
+        }
 
         @Test
         fun `교사가 목록을 조회하면 200과 함께 결과를 반환한다`() {

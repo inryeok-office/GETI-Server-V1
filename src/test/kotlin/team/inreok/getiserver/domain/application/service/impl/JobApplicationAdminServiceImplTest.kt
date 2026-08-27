@@ -30,6 +30,7 @@ import team.inreok.getiserver.domain.application.exception.ApplicationActionNotA
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
 import team.inreok.getiserver.domain.application.exception.ApplicationReviewForbiddenException
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
+import team.inreok.getiserver.domain.application.repository.JobApplicationStatusCountProjection
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
 import team.inreok.getiserver.domain.company.query.CompanyQuery
@@ -154,6 +155,45 @@ class JobApplicationAdminServiceImplTest {
         createdByMemberId = createdByMemberId,
         managerMemberId = managerMemberId,
     )
+
+    @Test
+    fun `상태별 건수를 DB Projection에서 변환하고 누락 상태를 0으로 채운다`() {
+        given(jobApplicationRepository.countByStatusForAdmin())
+            .willReturn(
+                listOf(
+                    statusCount(JobApplicationStatus.SUBMITTED, 2L),
+                    statusCount(JobApplicationStatus.APPROVED, 1L),
+                ),
+            )
+
+        val result = service.statusCounts()
+
+        assertThat(result.totalCount).isEqualTo(3L)
+        assertThat(result.counts.keys)
+            .containsExactly(
+                JobApplicationStatus.SUBMITTED,
+                JobApplicationStatus.EDIT_REQUESTED,
+                JobApplicationStatus.EDIT_ALLOWED,
+                JobApplicationStatus.REVISION_REQUESTED,
+                JobApplicationStatus.APPROVED,
+                JobApplicationStatus.REJECTED,
+                JobApplicationStatus.FORWARDED,
+                JobApplicationStatus.WITHDRAWN,
+            )
+        assertThat(result.counts[JobApplicationStatus.SUBMITTED]).isEqualTo(2L)
+        assertThat(result.counts[JobApplicationStatus.APPROVED]).isEqualTo(1L)
+        assertThat(result.counts[JobApplicationStatus.FORWARDED]).isZero()
+        assertThat(result.counts).doesNotContainKey(JobApplicationStatus.DRAFT)
+        verify(jobApplicationRepository).countByStatusForAdmin()
+    }
+
+    private fun statusCount(
+        status: JobApplicationStatus,
+        count: Long,
+    ) = object : JobApplicationStatusCountProjection {
+        override val status = status
+        override val applicationCount = count
+    }
 
     // ---------- list ----------
 
