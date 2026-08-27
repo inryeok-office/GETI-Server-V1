@@ -59,12 +59,6 @@ import java.util.concurrent.TimeUnit
         "app.file.storage.secret-key=integration-test-only-secret-key",
         // Discord PROGRAM_CLOSED 연동 검증에 필요한 허용 채널(Issue #97과 같은 방식).
         "app.discord.channel-policy.channels.program-close-concurrency-test.channel-id=program-close-concurrency-test-channel",
-        // 실제 운영 ProgramCloseScheduler(`@Scheduled(fixedDelayString = ".../60000")`)가
-        // `@EnableScheduling`으로 이 Context에서도 함께 기동해, 이 Test가 5개 Thread로 직접
-        // 마감을 경쟁시키는 바로 그 Program Row를 백그라운드에서 먼저 마감시켜 버릴 수 있다
-        // (GETI-Server-V1 CI Integration Test에서 반복 관측된 산발적 실패, 근본 원인 —
-        // `results.count { it }`가 1이 아니게 나옴). 이 Context에서만 Scheduler를 끈다.
-        "app.program.close-scheduler.interval-ms=86400000",
     ],
 )
 class ProgramCloseConcurrencyIntegrationTest {
