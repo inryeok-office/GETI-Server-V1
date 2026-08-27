@@ -156,6 +156,11 @@ val integrationTest =
         testClassesDirs = sourceSets["integrationTest"].output.classesDirs
         classpath = sourceSets["integrationTest"].runtimeClasspath
         useJUnitPlatform()
+        // Integration Test는 각 Test가 필요한 Scheduler Method를 직접 호출하거나 명시적으로
+        // 검증한다. 운영 @Scheduled Thread가 Test 데이터와 경합하면 테스트가 검증하는 호출과
+        // 무관하게 상태를 먼저 바꿀 수 있으므로, Application의 Scheduling 인프라만 이 Task에서
+        // 비활성화한다. 기본값은 true라 운영 실행 동작은 바뀌지 않는다.
+        systemProperty("app.scheduling.enabled", "false")
         shouldRunAfter(tasks.test)
     }
 
