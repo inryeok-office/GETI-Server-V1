@@ -200,11 +200,11 @@ jobs:
             fi
 
             echo "배포 검증 완료: SHA=${DEPLOY_SHA}"
-            
+
   deploy-prod:
     name: 서버 배포 (prod)
     needs: [notify-start, deploy]
-    if: always()
+    if: always() && needs.deploy.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -267,8 +267,8 @@ jobs:
 
   notify-success:
     name: Discord 배포 성공 알림
-    needs: [notify-start, deploy]
-    if: needs.deploy.result == 'success'
+    needs: [notify-start, deploy, deploy-prod]
+    if: needs.deploy.result == 'success' && needs.deploy-prod.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -360,8 +360,8 @@ jobs:
 
   notify-failure:
     name: Discord 배포 실패 알림
-    needs: [notify-start, deploy]
-    if: always() && needs.deploy.result == 'failure'
+    needs: [notify-start, deploy, deploy-prod]
+    if: always() && (needs.deploy.result == 'failure' || needs.deploy-prod.result == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -456,10 +456,10 @@ jobs:
 
   notify-cancelled:
     name: Discord 배포 취소 알림
-    needs: [notify-start, deploy]
+    needs: [notify-start, deploy, deploy-prod]
     # GitHub Actions가 Workflow Run 자체를 강제 취소하면 이 Job이 예약되지 않을 수 있어(대기 중인
     # Job까지 즉시 종료), 취소 알림은 Best Effort로만 보장한다(docs/development/cd.md 참고).
-    if: always() && (cancelled() || needs.deploy.result == 'cancelled')
+    if: always() && (cancelled() || needs.deploy.result == 'cancelled' || needs.deploy-prod.result == 'cancelled')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

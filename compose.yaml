@@ -182,12 +182,6 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: 8081
-      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-geti}
-      DATABASE_USERNAME: ${POSTGRES_USER:-geti}
-      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-geti-local-only}
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      ELASTICSEARCH_URIS: http://elasticsearch:9200
     ports:
       - "0.0.0.0:8081:8081"
     healthcheck:
@@ -200,8 +194,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      minio:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
