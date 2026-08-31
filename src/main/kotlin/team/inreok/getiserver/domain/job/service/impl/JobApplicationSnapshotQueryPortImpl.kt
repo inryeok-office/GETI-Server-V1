@@ -1,5 +1,7 @@
 package team.inreok.getiserver.domain.job.service.impl
 
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.job.entity.Job
@@ -28,6 +30,12 @@ class JobApplicationSnapshotQueryPortImpl(
             .findAllByIdInAndDeletedAtIsNull(jobIds)
             .associate { requireNotNull(it.id) { "저장된 Job은 id를 가져야 합니다." } to toSnapshot(it) }
     }
+
+    @Transactional(readOnly = true)
+    override fun findManagedByMemberId(
+        memberId: Long,
+        pageable: Pageable,
+    ): Page<JobApplicationJobSnapshot> = jobRepository.findManagedByMemberId(memberId, pageable).map(::toSnapshot)
 
     private fun toSnapshot(job: Job): JobApplicationJobSnapshot =
         JobApplicationJobSnapshot(

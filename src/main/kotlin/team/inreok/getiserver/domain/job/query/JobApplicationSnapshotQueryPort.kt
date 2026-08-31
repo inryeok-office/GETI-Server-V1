@@ -1,5 +1,7 @@
 package team.inreok.getiserver.domain.job.query
 
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.modulith.NamedInterface
 import java.time.LocalDateTime
 
@@ -25,6 +27,15 @@ interface JobApplicationSnapshotQueryPort {
      * 반복 없이 한 번에 채우기 위한 배치 조회다.
      */
     fun findAllByIds(jobIds: Set<Long>): Map<Long, JobApplicationJobSnapshot>
+
+    /**
+     * 현재 사용자가 담당하거나 등록한 삭제되지 않은 공고를 관리자 화면용으로 페이지 조회한다.
+     * Application은 이 계약으로 공고 정보를 받고, 지원서별 집계는 자신의 Repository에서 수행한다.
+     */
+    fun findManagedByMemberId(
+        memberId: Long,
+        pageable: Pageable,
+    ): Page<JobApplicationJobSnapshot>
 }
 
 @NamedInterface

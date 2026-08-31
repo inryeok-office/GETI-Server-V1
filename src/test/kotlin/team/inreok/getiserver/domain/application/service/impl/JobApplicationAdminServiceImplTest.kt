@@ -29,6 +29,7 @@ import team.inreok.getiserver.domain.application.event.JobApplicationReviewedEve
 import team.inreok.getiserver.domain.application.exception.ApplicationActionNotAvailableException
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
 import team.inreok.getiserver.domain.application.exception.ApplicationReviewForbiddenException
+import team.inreok.getiserver.domain.application.repository.JobApplicationJobSummaryProjection
 import team.inreok.getiserver.domain.application.repository.JobApplicationRepository
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusCountProjection
 import team.inreok.getiserver.domain.application.repository.JobApplicationStatusHistoryRepository
@@ -187,12 +188,52 @@ class JobApplicationAdminServiceImplTest {
         verify(jobApplicationRepository).countByStatusForAdmin()
     }
 
+    @Test
+    fun `담당 공고별 지원 현황은 공고 Page와 단일 집계 결과를 결합한다`() {
+        val pageable = PageRequest.of(0, 20)
+        val jobs =
+            PageImpl(
+                listOf(
+                    jobOf().copy(jobId = 1L, title = "첫 번째 공고"),
+                    jobOf().copy(jobId = 2L, title = "지원자 없는 공고"),
+                ),
+                pageable,
+                2,
+            )
+        given(jobApplicationSnapshotQueryPort.findManagedByMemberId(100L, pageable)).willReturn(jobs)
+        given(jobApplicationRepository.summarizeByJobIds(setOf(1L, 2L)))
+            .willReturn(listOf(jobSummary(jobId = 1L, applicantCount = 3L, pendingCount = 2L)))
+
+        val result = service.jobSummaries(100L, pageable)
+
+        assertThat(result.totalElements).isEqualTo(2L)
+        assertThat(result.content).hasSize(2)
+        assertThat(result.content[0].jobId).isEqualTo(1L)
+        assertThat(result.content[0].applicantCount).isEqualTo(3L)
+        assertThat(result.content[0].pendingCount).isEqualTo(2L)
+        assertThat(result.content[1].jobId).isEqualTo(2L)
+        assertThat(result.content[1].applicantCount).isZero()
+        assertThat(result.content[1].pendingCount).isZero()
+        verify(jobApplicationSnapshotQueryPort).findManagedByMemberId(100L, pageable)
+        verify(jobApplicationRepository).summarizeByJobIds(setOf(1L, 2L))
+    }
+
     private fun statusCount(
         status: JobApplicationStatus,
         count: Long,
     ) = object : JobApplicationStatusCountProjection {
         override val status = status
         override val applicationCount = count
+    }
+
+    private fun jobSummary(
+        jobId: Long,
+        applicantCount: Long,
+        pendingCount: Long,
+    ) = object : JobApplicationJobSummaryProjection {
+        override val jobId = jobId
+        override val applicantCount = applicantCount
+        override val pendingCount = pendingCount
     }
 
     // ---------- list ----------

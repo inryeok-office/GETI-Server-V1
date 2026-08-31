@@ -14,6 +14,24 @@ import java.time.LocalDateTime
 interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
     @Query(
         """
+        SELECT a.jobId AS jobId,
+               COUNT(a.id) AS applicantCount,
+               SUM(CASE WHEN a.status IN (
+                   team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus.SUBMITTED,
+                   team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus.EDIT_REQUESTED
+               ) THEN 1 ELSE 0 END) AS pendingCount
+        FROM JobApplication a
+        WHERE a.jobId IN :jobIds
+          AND a.status <> team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus.DRAFT
+        GROUP BY a.jobId
+        """,
+    )
+    fun summarizeByJobIds(
+        @Param("jobIds") jobIds: Set<Long>,
+    ): List<JobApplicationJobSummaryProjection>
+
+    @Query(
+        """
         SELECT a.jobId AS jobId, COUNT(a.id) AS applicationCount
         FROM JobApplication a
         WHERE a.jobId IN :jobIds
@@ -186,6 +204,12 @@ interface JobApplicationRepository : JpaRepository<JobApplication, Long> {
 interface JobApplicationCountProjection {
     val jobId: Long
     val applicationCount: Long
+}
+
+interface JobApplicationJobSummaryProjection {
+    val jobId: Long
+    val applicantCount: Long
+    val pendingCount: Long
 }
 
 interface JobApplicationStatusCountProjection {
