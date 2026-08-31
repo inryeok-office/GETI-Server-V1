@@ -134,6 +134,7 @@ services:
       APP_FILE_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-geti-local}
       APP_FILE_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-geti-local-minio}
       FILE_STORAGE_BUCKET: ${FILE_STORAGE_BUCKET:-geti-local}
+      FILE_STORAGE_REGION: ${FILE_STORAGE_REGION:-ap-northeast-2}
       # Collector 비Secret 설정만 전달한다(Issue #62). 실제 서비스키(COLLECTOR_*_SERVICE_KEY 등)는
       # 이 Compose 구성으로 전달하지 않는다 — develop 서버에는 실제 API Key를 배치하지 않는다.
       # COLLECTOR_SEED_ENABLED는 여기서 강제로 값을 넣지 않는다 — Host에서 지정하지 않으면
@@ -148,6 +149,49 @@ services:
       # 처리 준비 상태(Readiness)를 기준으로 판단한다. Runtime Image(eclipse-temurin:jre-alpine)에
       # curl이 없어 Alpine 기본 제공 wget(BusyBox)을 사용한다.
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${SERVER_PORT:-8080}/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    restart: "no"
+  # develop과 동일한 구성이나, prod Profile 배포 전용. SPRING_PROFILES_ACTIVE=prod로 
+  # 실행되며 실제 AWS S3를 사용한다. Port를 8081로 분리해 develop(8080)과 동시에 운영한다.
+  app-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-0.0.1-SNAPSHOT}
+        APP_GIT_SHA: ${APP_GIT_SHA:-unknown}
+        APP_BUILD_TIME: ${APP_BUILD_TIME:-unknown}
+        APP_ENVIRONMENT: prod
+    profiles:
+      - app-prod
+    env_file:
+      - path: .env.prod
+        required: true
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 8081
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-geti}
+      DATABASE_USERNAME: ${POSTGRES_USER:-geti}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-geti-local-only}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      ELASTICSEARCH_URIS: http://elasticsearch:9200
+    ports:
+      - "0.0.0.0:8081:8081"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/actuator/health/readiness"]
       interval: 10s
       timeout: 5s
       retries: 10
