@@ -121,7 +121,7 @@ jobs:
       # devops가 이미 구성해 둔 `sudo docker compose ...` 명령 자체(및 그 sudoers 권한)는
       # 그대로 유지된다. docs/development/cd.md 참고.
       - name: 서버 배포
-        uses: appleboy/ssh-action@v1.0.0
+        uses: appleboy/ssh-action@v1.2.5
         env:
           # appleboy/ssh-action의 envs 입력이 SSH 세션 시작 시 이 Job 환경의 값을 그대로
           # export한다. Secret 값 자체는 script 안에서 echo/log로 출력하지 않는다(GitHub

@@ -8,6 +8,11 @@ import org.springframework.modulith.NamedInterface
  * 하는데, 이 판정은 `inquiry`의 비즈니스 규칙이라 Port는 원시 값(역할 집합, 상태)만 반환하고
  * 최종 판정은 하지 않는다([team.inreok.getiserver.domain.program.query.ProgramNotificationTargetQueryPort]와
  * 같은 "원시 상태만 반환" 원칙).
+ *
+ * `application` Module도 지원서 첨부파일 다운로드 권한 판정(교사·개발자 여부, Issue #134)에 그대로
+ * 재사용한다 -- "이 회원의 역할이 무엇인가"라는 같은 조회이므로 거의 동일한 목적의 Named
+ * Interface를 또 만들지 않았다(`MemberApplicantSnapshotQueryPort`가 `application`/`program`
+ * 양쪽에서 재사용되는 것과 같은 판단).
  */
 @NamedInterface
 interface InquiryAssigneeCandidateQueryPort {

@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
+import org.springframework.security.config.annotation.web.AuthorizeHttpRequestsDsl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.invoke
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -18,7 +19,13 @@ import team.inreok.getiserver.global.error.ErrorResponse
 import tools.jackson.databind.ObjectMapper
 
 /**
- * Stateless JWT 인증 기반 Filter Chain이다. `/api/v1/auth/session`, `/api/v1/auth/logout`,
+ * `securityFilterChain`의 HTTP Authorization Layer는 [applyNormalSecurityRules]가 선언하는 정상
+ * 정책을 그대로 적용한다(임시 전역 `permitAll` 개방은 Frontend/DG OAuth 연동이 진행되며 제거했다,
+ * Issue #162). 미인증 요청은 [jsonAuthenticationEntryPoint]가 401(UNAUTHORIZED)로, 역할이 부족한
+ * 요청은 [jsonAccessDeniedHandler]가 403(FORBIDDEN)으로 걸러낸다.
+ *
+ * 아래는 [applyNormalSecurityRules]가 정의하는 정상 정책이다.
+ * `/api/v1/auth/session`, `/api/v1/auth/logout`,
  * `/api/v1/me/` 이하 모든 경로(Issue #50, 내 프로필/전공/기술스택), `/api/v1/members`(학생 이름
  * 검색·프로필 조회, Issue #50 후속), `/api/v1/companies`(기업 조회, Issue #56), `/api/v1/jobs`
  * (공고 조회, Issue #60)는 인증을 요구하고, `/api/v1/admin/companies`(기업 등록·수정·삭제,
@@ -33,7 +40,12 @@ import tools.jackson.databind.ObjectMapper
  * File 도메인 Issue #85)도 인증만 요구하고, 파일별 소유권·접근 권한은 File 도메인이 판정한다.
  * `/api/v1/inquiries`(문의 등록·상세 조회)와 `/api/v1/me/inquiries`(내 문의 목록, 기존
  * `/api/v1/me/` 이하 규칙에 포함)도 인증만 요구한다 — 상세 조회의 본인 소유권 검증(개발자는 예외)은
- * Role로 알 수 없어 InquiryService가 별도로 수행한다.
+ * Role로 알 수 없어 InquiryService가 별도로 수행한다. `/api/v1/me/job-recommendations`,
+ * `/api/v1/me/recommendation-exclusions**`, `/api/v1/recommendations/settings`(맞춤 공고 추천
+ * 조회·설정·관심 없음, Recommendation R3 Issue #152, Notion 계약 정합성 Issue #155),
+ * `/api/v1/me/job-bookmarks`(내 북마크 목록 조회, Issue #170)는 학생·교사·개발자 모두 인증만
+ * 요구한다. 북마크 등록·해제(`/api/v1/me/bookmarks**`)는 기존 계약대로 STUDENT Role까지
+ * 요구한다.
  * 전공/기술스택 메타데이터 조회 등 다른
  * Domain은 아직 Spring Security와 연동되지 않아
  * ([AuthorizationHeaderSupport][team.inreok.getiserver.global.web.AuthorizationHeaderSupport] 참고)
@@ -67,119 +79,28 @@ class SecurityConfig(
             sessionManagement { sessionCreationPolicy = SessionCreationPolicy.STATELESS }
             httpBasic { disable() }
             formLogin { disable() }
-            authorizeHttpRequests {
-                // CORS Preflight(OPTIONS)에는 Authorization Header가 없어 authenticated에 막힌다. CORS가
-                // 활성화되는 시점에 Cross-Origin의 /session·/logout이 막히지 않도록 먼저 허용한다(코드 리뷰 P2 반영).
-                authorize(HttpMethod.OPTIONS, "/**", permitAll)
-                // Swagger UI/OpenAPI JSON은 anyRequest(permitAll)에 의해서도 이미 허용되지만, 향후
-                // anyRequest 기본값이 바뀌어도 Swagger 접근이 조용히 막히지 않도록 명시적으로 선언한다
-                // (docs/ai/openapi-documentation.md 참고). Production에서는 springdoc 자체가
-                // application-prod.yaml에서 비활성화되어 이 경로가 애초에 존재하지 않는다.
-                authorize("/v3/api-docs/**", permitAll)
-                authorize("/swagger-ui/**", permitAll)
-                authorize("/swagger-ui.html", permitAll)
-                // CD Readiness Polling과 Docker Health Check가 인증 없이 호출해야 하므로 노출 중인
-                // Actuator Endpoint(health,info, docs/development/cd.md 참고)만 명시적으로 permitAll
-                // 처리한다. env/beans/mappings/heapdump 등 다른 Actuator Endpoint는 management.endpoints
-                // .web.exposure.include에도 없어 애초에 존재하지 않는다.
-                authorize("/actuator/health", permitAll)
-                authorize("/actuator/health/**", permitAll)
-                authorize("/actuator/info", permitAll)
-                authorize("/api/v1/auth/session", authenticated)
-                authorize("/api/v1/auth/logout", authenticated)
-                // 개인 신청 양식(Form) 관리는 교사·개발자만 접근한다(Application Epic #75, Issue #76).
-                // 소유자 본인 검증(다른 교사의 양식 차단)은 Role만으로 알 수 없어 FormService가
-                // 별도로 수행한다. 더 구체적인 경로를 먼저 선언해야 아래 /api/v1/me/** 규칙에
-                // 가려지지 않는다.
-                authorize("/api/v1/me/forms", hasAnyRole("TEACHER", "DEVELOPER"))
-                authorize("/api/v1/me/forms/**", hasAnyRole("TEACHER", "DEVELOPER"))
-                // 내 문의 목록(요구사항 §13)도 학생·교사·개발자 모두 인증만 있으면 접근할 수
-                // 있어 값 자체는 아래 "/api/v1/me/**" 규칙과 같다. 그래도 명시적으로 선언한다 --
-                // 그 규칙에 암묵적으로 기대면 나중에 "/api/v1/me/**" 기본값이 바뀔 때(예: 다른
-                // 하위 경로에 Role 제한이 생기며 그 파급 범위를 좁히려 규칙이 세분화되는 경우)
-                // Inquiry가 조용히 영향받는다. 하위 경로가 없는 단일 Endpoint라 "/**" 형태는
-                // 추가하지 않는다.
-                authorize("/api/v1/me/inquiries", authenticated)
-                authorize("/api/v1/me/**", authenticated)
-                authorize("/api/v1/members", authenticated)
-                authorize("/api/v1/members/**", authenticated)
-                // 기업 관리(등록·수정·삭제)는 개발자만 접근한다. 더 구체적인 admin 경로를 먼저
-                // 선언해야 아래 조회 규칙에 가려지지 않는다(Issue #56, Notion API 명세서 권한).
-                authorize("/api/v1/admin/companies", hasRole("DEVELOPER"))
-                authorize("/api/v1/admin/companies/**", hasRole("DEVELOPER"))
-                // 기업 조회(목록·상세)는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
-                authorize("/api/v1/companies", authenticated)
-                authorize("/api/v1/companies/**", authenticated)
-                // 공고 관리(등록·수정·상태 변경·관리자 상세)는 교사와 개발자가 사용한다(Issue #60).
-                // 담당자 본인만 수정할 수 있는지는 기준이 확정되지 않아 역할까지만 검증한다.
-                // 더 구체적인 admin 경로를 먼저 선언해야 아래 조회 규칙에 가려지지 않는다.
-                authorize("/api/v1/admin/jobs", hasAnyRole("TEACHER", "DEVELOPER"))
-                authorize("/api/v1/admin/jobs/**", hasAnyRole("TEACHER", "DEVELOPER"))
-                // Collector 운영(수집원 관리·수동 실행·수집 실행 이력)은 개발자만 접근한다(Issue #62).
-                authorize("/api/v1/admin/job-sources", hasRole("DEVELOPER"))
-                authorize("/api/v1/admin/job-sources/**", hasRole("DEVELOPER"))
-                authorize("/api/v1/admin/collector-actions", hasRole("DEVELOPER"))
-                authorize("/api/v1/admin/collection-runs", hasRole("DEVELOPER"))
-                authorize("/api/v1/admin/collection-runs/**", hasRole("DEVELOPER"))
-                // 검색 색인 운영(전체 재구축)은 개발자만 접근한다(Issue #69).
-                authorize("/api/v1/admin/search-actions", hasRole("DEVELOPER"))
-                // 공고 조회(목록·상세)는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
-                authorize("/api/v1/jobs", authenticated)
-                authorize("/api/v1/jobs/**", authenticated)
-                // 공개 공고 출처 목록(JobSourceController)도 인증된 사용자 모두 접근할 수 있다(Issue #62).
-                authorize("/api/v1/job-sources", authenticated)
-                // 지원서 초안 조회·임시저장은 인증만 요구한다(소유자 본인 검증은 Role로 알 수
-                // 없어 JobApplicationService가 별도로 수행한다, Application Epic #75 Issue #78).
-                authorize("/api/v1/job-applications", authenticated)
-                authorize("/api/v1/job-applications/**", authenticated)
-                // 프로그램 관리(등록·수정·상태 변경)는 교사와 개발자가 사용한다(Program 도메인
-                // 전체 개발 요구사항 3절). 등록자·담당 교사 본인만 수정할 수 있는지는 Role만으로
-                // 알 수 없어 ProgramService가 별도로 수행한다. 더 구체적인 admin 경로를 먼저
-                // 선언해야 아래 조회 규칙에 가려지지 않는다.
-                authorize("/api/v1/admin/programs", hasAnyRole("TEACHER", "DEVELOPER"))
-                authorize("/api/v1/admin/programs/**", hasAnyRole("TEACHER", "DEVELOPER"))
-                // 프로그램 신청·취소(원본 요구사항 문서 11절 권한: STUDENT)는 Role 자체가
-                // 학생으로 고정되므로 여기서 STUDENT Role을 요구한다. 재학 여부(NOT_ENROLLED)는
-                // Role이 아닌 학적 상태라 이것과 별개로 ProgramService가 추가로 판단한다. 더
-                // 구체적인 경로를 먼저 선언해야 아래 조회 규칙에 가려지지 않는다.
-                authorize(HttpMethod.POST, "/api/v1/programs/*/application-actions", hasRole("STUDENT"))
-                // 프로그램 목록·상세 조회는 학생·교사·개발자 모두 접근할 수 있으므로 인증만
-                // 요구한다.
-                authorize("/api/v1/programs", authenticated)
-                authorize("/api/v1/programs/**", authenticated)
-                // 인앱 알림은 항상 요청자 본인의 알림만 다루므로 Role 구분 없이 인증만 요구한다
-                // (Notification Core, docs/Notification/notification-core-plan.md). 본인 소유
-                // 검증은 Role로 알 수 없어 NotificationService가 별도로 수행한다.
-                authorize("/api/v1/notifications", authenticated)
-                authorize("/api/v1/notifications/**", authenticated)
-                // 파일 업로드·다운로드는 학생·교사·개발자가 모두 사용하므로 Role을 구분하지 않고
-                // 인증만 요구한다(File 도메인 요구사항 §5/§15). 로그인만으로 모든 파일을 받을 수
-                // 있다는 뜻은 아니다 -- 파일별 소유권과 대상 리소스 접근 권한은 Role로 알 수 없어
-                // File 도메인의 Service 계층이 별도로 판정한다(§16).
-                authorize("/api/v1/files", authenticated)
-                authorize("/api/v1/files/**", authenticated)
-                // 문의 관리(전체 목록·검색, 담당자 지정·해제, 상태 변경, 답변 등록)는 개발자만
-                // 접근한다(요구사항 §51 권한 Matrix). Program에서 넓은 패턴이 먼저 선언되어
-                // 학생 전용 API가 뚫렸던 사고(원본 실행 프롬프트 §3)를 반복하지 않도록, 구체적인
-                // 하위 경로(.../answers, .../status, .../assignee)를 목록 조회·admin catch-all
-                // 보다 먼저 선언한다. POST .../answers는 Phase 4에서 Controller를 추가하며, 그때
-                // 가서 이 순서를 다시 손대지 않도록 지금 함께 선언해 둔다(현재는 대응하는
-                // Controller가 없어 이 규칙에 실제로 도달하는 요청이 없다).
-                authorize(HttpMethod.POST, "/api/v1/admin/inquiries/*/answers", hasRole("DEVELOPER"))
-                authorize(HttpMethod.PATCH, "/api/v1/admin/inquiries/*/status", hasRole("DEVELOPER"))
-                authorize(HttpMethod.PATCH, "/api/v1/admin/inquiries/*/assignee", hasRole("DEVELOPER"))
-                authorize(HttpMethod.GET, "/api/v1/admin/inquiries", hasRole("DEVELOPER"))
-                authorize("/api/v1/admin/inquiries/**", hasRole("DEVELOPER"))
-                // 문의 등록·상세 조회는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
-                // 상세 조회의 본인 소유권 검증(다른 사용자 문의 차단, 개발자는 예외)은 Role로 알
-                // 수 없어 InquiryService가 별도로 수행한다. "/api/v1/admin/inquiries"는 이 Prefix와
-                // 겹치지 않지만, 위 admin 규칙을 이 규칙보다 먼저 선언하는 순서 관례를 유지한다.
-                // "/api/v1/me/inquiries"는 기존 "/api/v1/me/**" 규칙(위)이 이미 포함하므로 별도로
-                // 추가하지 않는다.
-                authorize("/api/v1/inquiries", authenticated)
-                authorize("/api/v1/inquiries/**", authenticated)
-                authorize(anyRequest, permitAll)
+            authorizeHttpRequests { applyNormalSecurityRules() }
+            exceptionHandling {
+                authenticationEntryPoint = jsonAuthenticationEntryPoint()
+                accessDeniedHandler = jsonAccessDeniedHandler()
             }
+            addFilterBefore<UsernamePasswordAuthenticationFilter>(jwtAuthenticationFilter)
+        }
+        return http.build()
+    }
+
+    // Test fixture only: existing controller tests can continue to verify the preserved policy.
+    @Suppress("LongMethod")
+    internal fun normalSecurityFilterChainForTest(
+        http: HttpSecurity,
+        jwtAuthenticationFilter: JwtAuthenticationFilter,
+    ): SecurityFilterChain {
+        http {
+            csrf { disable() }
+            sessionManagement { sessionCreationPolicy = SessionCreationPolicy.STATELESS }
+            httpBasic { disable() }
+            formLogin { disable() }
+            authorizeHttpRequests { applyNormalSecurityRules() }
             exceptionHandling {
                 authenticationEntryPoint = jsonAuthenticationEntryPoint()
                 accessDeniedHandler = jsonAccessDeniedHandler()
@@ -211,4 +132,189 @@ class SecurityConfig(
         val body = ErrorResponse.of(errorCode = errorCode, path = path)
         response.writer.write(objectMapper.writeValueAsString(body))
     }
+}
+
+// Domain별 세부 Role/인증 Rule을 선언한다. securityFilterChain(운영)과 normalSecurityFilterChainForTest
+// (Controller 계약 Test)가 모두 이 Method를 호출한다. Class 안에 두지 않고 File 최상위 Extension
+// Function으로 둔 이유는 detekt `TooManyFunctions`를 피하면서도 이 Method 자체가 SecurityConfig의
+// 어떤 주입 필드도 쓰지 않는 순수 DSL 선언이기 때문이다.
+@Suppress("LongMethod")
+private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
+    // CORS Preflight(OPTIONS)에는 Authorization Header가 없어 authenticated에 막힌다. CORS가
+    // 활성화되는 시점에 Cross-Origin의 /session·/logout이 막히지 않도록 먼저 허용한다(코드 리뷰 P2 반영).
+    authorize(HttpMethod.OPTIONS, "/**", permitAll)
+    // Swagger UI/OpenAPI JSON은 anyRequest(permitAll)에 의해서도 이미 허용되지만, 향후
+    // anyRequest 기본값이 바뀌어도 Swagger 접근이 조용히 막히지 않도록 명시적으로 선언한다
+    // (docs/ai/openapi-documentation.md 참고). Production에서는 springdoc 자체가
+    // application-prod.yaml에서 비활성화되어 이 경로가 애초에 존재하지 않는다.
+    authorize("/v3/api-docs/**", permitAll)
+    authorize("/swagger-ui/**", permitAll)
+    authorize("/swagger-ui.html", permitAll)
+    // CD Readiness Polling과 Docker Health Check가 인증 없이 호출해야 하므로 노출 중인
+    // Actuator Endpoint(health,info, docs/development/cd.md 참고)만 명시적으로 permitAll
+    // 처리한다. env/beans/mappings/heapdump 등 다른 Actuator Endpoint는 management.endpoints
+    // .web.exposure.include에도 없어 애초에 존재하지 않는다.
+    authorize("/actuator/health", permitAll)
+    authorize("/actuator/health/**", permitAll)
+    authorize("/actuator/info", permitAll)
+    authorize("/api/v1/auth/session", authenticated)
+    authorize("/api/v1/auth/logout", authenticated)
+    // 개인 신청 양식(Form) 관리는 교사·개발자만 접근한다(Application Epic #75, Issue #76).
+    // 소유자 본인 검증(다른 교사의 양식 차단)은 Role만으로 알 수 없어 FormService가
+    // 별도로 수행한다. 더 구체적인 경로를 먼저 선언해야 아래 /api/v1/me/** 규칙에
+    // 가려지지 않는다.
+    authorize("/api/v1/me/forms", hasAnyRole("TEACHER", "DEVELOPER"))
+    authorize("/api/v1/me/forms/**", hasAnyRole("TEACHER", "DEVELOPER"))
+    // 맞춤 공고 추천 조회와 관심 없음(추천 제외)은 학생 전용 기능이라 STUDENT Role을
+    // 요구한다(Notion 계약 정합성, Issue #155). 아래 "/api/v1/me/**" 규칙(인증만
+    // 요구)에 가려지지 않도록 더 구체적인 경로를 먼저 선언한다 -- 위 Form 규칙과 같은
+    // 이유. 요청자 본인 범위로 한정하는 것은 Role로 알 수 없어 RecommendationService가
+    // memberId를 인증 Principal에서만 받아 처리한다.
+    authorize("/api/v1/me/job-recommendations", hasRole("STUDENT"))
+    authorize("/api/v1/me/recommendation-exclusions", hasRole("STUDENT"))
+    authorize("/api/v1/me/recommendation-exclusions/**", hasRole("STUDENT"))
+    // 북마크 목록 조회는 Notion 계약상 학생·교사·개발자 모두 인증만 요구한다. 쓰기 경로의
+    // STUDENT Role 제한과 분리해 읽기/쓰기 권한 정책을 명시적으로 유지한다.
+    authorize("/api/v1/me/job-bookmarks", authenticated)
+    // 공고 북마크 등록·해제(Issue #170)도 관심 없음과 같은 Entity를 쓰는 학생 전용 기능이라
+    // STUDENT Role을 요구한다. 같은 이유로 아래 "/api/v1/me/**" 규칙보다 먼저 선언한다.
+    authorize("/api/v1/me/bookmarks", hasRole("STUDENT"))
+    authorize("/api/v1/me/bookmarks/**", hasRole("STUDENT"))
+    // 내 문의 목록(요구사항 §13)도 학생·교사·개발자 모두 인증만 있으면 접근할 수
+    // 있어 값 자체는 아래 "/api/v1/me/**" 규칙과 같다. 그래도 명시적으로 선언한다 --
+    // 그 규칙에 암묵적으로 기대면 나중에 "/api/v1/me/**" 기본값이 바뀔 때(예: 다른
+    // 하위 경로에 Role 제한이 생기며 그 파급 범위를 좁히려 규칙이 세분화되는 경우)
+    // Inquiry가 조용히 영향받는다. 하위 경로가 없는 단일 Endpoint라 "/**" 형태는
+    // 추가하지 않는다.
+    authorize("/api/v1/me/inquiries", authenticated)
+    authorize("/api/v1/me/**", authenticated)
+    // 담당자 선택 Dropdown용 회원 목록 조회(GET)는 교사와 개발자가 사용한다(Issue #182 —
+    // 지원자 관리 화면에서 담당 교사를 고른다). 응답은 memberId/name만 담아 민감 정보가 없다.
+    // Method가 더 구체적인 이 규칙을 교직원 승인(POST)용 DEVELOPER 규칙보다 먼저 선언해야
+    // 가려지지 않는다.
+    authorize(HttpMethod.GET, "/api/v1/admin/members", hasAnyRole("TEACHER", "DEVELOPER"))
+    // 교직원 가입 승인·거절(승인 대기 교직원 승인/거절, POST .../{id}/approval-actions)은 개발자만
+    // 접근한다(Issue #99). 더 구체적인 admin 경로를 먼저 선언해야 아래 회원 조회 규칙에 가려지지
+    // 않는다. (경로 Prefix가 /api/v1/admin/으로 /api/v1/members와 겹치지 않지만, admin 규칙을
+    // 먼저 선언하는 순서 관례를 유지한다.)
+    authorize("/api/v1/admin/members", hasRole("DEVELOPER"))
+    authorize("/api/v1/admin/members/**", hasRole("DEVELOPER"))
+    authorize("/api/v1/members", authenticated)
+    authorize("/api/v1/members/**", authenticated)
+    // 기업 관리(등록·수정·삭제)는 개발자만 접근한다. 더 구체적인 admin 경로를 먼저
+    // 선언해야 아래 조회 규칙에 가려지지 않는다(Issue #56, Notion API 명세서 권한).
+    authorize("/api/v1/admin/companies", hasRole("DEVELOPER"))
+    authorize("/api/v1/admin/companies/**", hasRole("DEVELOPER"))
+    // 기업 조회(목록·상세)는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
+    authorize("/api/v1/companies", authenticated)
+    authorize("/api/v1/companies/**", authenticated)
+    // 공고 관리(등록·수정·상태 변경·관리자 상세)는 교사와 개발자가 사용한다(Issue #60).
+    // 담당자 본인만 수정할 수 있는지는 기준이 확정되지 않아 역할까지만 검증한다.
+    // 더 구체적인 admin 경로를 먼저 선언해야 아래 조회 규칙에 가려지지 않는다.
+    authorize("/api/v1/admin/jobs", hasAnyRole("TEACHER", "DEVELOPER"))
+    authorize("/api/v1/admin/jobs/**", hasAnyRole("TEACHER", "DEVELOPER"))
+    // Collector 운영(수집원 관리·수동 실행·수집 실행 이력)은 개발자만 접근한다(Issue #62).
+    authorize("/api/v1/admin/job-sources", hasRole("DEVELOPER"))
+    authorize("/api/v1/admin/job-sources/**", hasRole("DEVELOPER"))
+    authorize("/api/v1/admin/collector-actions", hasRole("DEVELOPER"))
+    authorize("/api/v1/admin/collection-runs", hasRole("DEVELOPER"))
+    authorize("/api/v1/admin/collection-runs/**", hasRole("DEVELOPER"))
+    // 검색 색인 운영(전체 재구축)은 개발자만 접근한다(Issue #69).
+    authorize("/api/v1/admin/search-actions", hasRole("DEVELOPER"))
+    // 감사 로그는 운영·개인정보 변경 이력을 포함하므로 개발자만 조회한다(Issue #228).
+    authorize("/api/v1/admin/audit-logs", hasRole("DEVELOPER"))
+    authorize("/api/v1/admin/audit-logs/**", hasRole("DEVELOPER"))
+    // 공고 조회(목록·상세)는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
+    authorize("/api/v1/jobs", authenticated)
+    authorize("/api/v1/jobs/**", authenticated)
+    // 공개 공고 출처 목록(JobSourceController)도 인증된 사용자 모두 접근할 수 있다(Issue #62).
+    authorize("/api/v1/job-sources", authenticated)
+    // 지원서 초안 조회·임시저장은 인증만 요구한다(소유자 본인 검증은 Role로 알 수
+    // 없어 JobApplicationService가 별도로 수행한다, Application Epic #75 Issue #78).
+    authorize("/api/v1/job-applications", authenticated)
+    authorize("/api/v1/job-applications/**", authenticated)
+    // 교사·개발자용 지원서 조회·검토(ALLOW_EDIT/REQUEST_REVISION/APPROVE/REJECT)는
+    // 역할까지만 검증한다(Application Epic #75 Issue #125). 조회는 담당 공고 여부와
+    // 무관히 모든 교사·개발자가 가능하고, 상태 변경(담당자만)은 JobApplicationAdminService가
+    // 별도로 판단한다.
+    authorize("/api/v1/admin/job-applications", hasAnyRole("TEACHER", "DEVELOPER"))
+    authorize("/api/v1/admin/job-applications/**", hasAnyRole("TEACHER", "DEVELOPER"))
+    // 프로그램 관리(등록·수정·상태 변경)는 교사와 개발자가 사용한다(Program 도메인
+    // 전체 개발 요구사항 3절). 등록자·담당 교사 본인만 수정할 수 있는지는 Role만으로
+    // 알 수 없어 ProgramService가 별도로 수행한다. 더 구체적인 admin 경로를 먼저
+    // 선언해야 아래 조회 규칙에 가려지지 않는다.
+    authorize("/api/v1/admin/programs", hasAnyRole("TEACHER", "DEVELOPER"))
+    authorize("/api/v1/admin/programs/**", hasAnyRole("TEACHER", "DEVELOPER"))
+    // 프로그램 신청·취소(원본 요구사항 문서 11절 권한: STUDENT)는 Role 자체가
+    // 학생으로 고정되므로 여기서 STUDENT Role을 요구한다. 재학 여부(NOT_ENROLLED)는
+    // Role이 아닌 학적 상태라 이것과 별개로 ProgramService가 추가로 판단한다. 더
+    // 구체적인 경로를 먼저 선언해야 아래 조회 규칙에 가려지지 않는다.
+    authorize(HttpMethod.POST, "/api/v1/programs/*/application-actions", hasRole("STUDENT"))
+    // 프로그램 목록·상세 조회는 학생·교사·개발자 모두 접근할 수 있으므로 인증만
+    // 요구한다.
+    authorize("/api/v1/programs", authenticated)
+    authorize("/api/v1/programs/**", authenticated)
+    // 인앱 알림은 항상 요청자 본인의 알림만 다루므로 Role 구분 없이 인증만 요구한다
+    // (Notification Core, docs/Notification/notification-core-plan.md). 본인 소유
+    // 검증은 Role로 알 수 없어 NotificationService가 별도로 수행한다.
+    authorize("/api/v1/notifications", authenticated)
+    authorize("/api/v1/notifications/**", authenticated)
+    // 파일 업로드·다운로드는 학생·교사·개발자가 모두 사용하므로 Role을 구분하지 않고
+    // 인증만 요구한다(File 도메인 요구사항 §5/§15). 로그인만으로 모든 파일을 받을 수
+    // 있다는 뜻은 아니다 -- 파일별 소유권과 대상 리소스 접근 권한은 Role로 알 수 없어
+    // File 도메인의 Service 계층이 별도로 판정한다(§16).
+    authorize("/api/v1/files", authenticated)
+    authorize("/api/v1/files/**", authenticated)
+    // 관리자 공통 파일 목록 조회(Issue #225)는 업로더·연결 대상 등 운영 정보를 포함하므로
+    // 개발자만 접근한다(Discord 전달 횡단 목록 "/api/v1/admin/discord-deliveries"와 같은 기준,
+    // Issue #206). "/api/v1/admin/files"는 "/api/v1/files" Prefix와 겹치지 않으므로 선언 순서와
+    // 무관하게 항상 이 규칙이 적용된다. 하위 경로가 없는 단일 Endpoint라 "/**" 형태는 추가하지
+    // 않는다.
+    authorize("/api/v1/admin/files", hasRole("DEVELOPER"))
+    // 문의 관리(전체 목록·검색, 담당자 지정·해제, 상태 변경, 답변 등록)는 개발자만
+    // 접근한다(요구사항 §51 권한 Matrix). Program에서 넓은 패턴이 먼저 선언되어
+    // 학생 전용 API가 뚫렸던 사고(원본 실행 프롬프트 §3)를 반복하지 않도록, 구체적인
+    // 하위 경로(.../answers, .../status, .../assignee)를 목록 조회·admin catch-all
+    // 보다 먼저 선언한다. POST .../answers는 Phase 4에서 Controller를 추가하며, 그때
+    // 가서 이 순서를 다시 손대지 않도록 지금 함께 선언해 둔다(현재는 대응하는
+    // Controller가 없어 이 규칙에 실제로 도달하는 요청이 없다).
+    authorize(HttpMethod.POST, "/api/v1/admin/inquiries/*/answers", hasRole("DEVELOPER"))
+    authorize(HttpMethod.PATCH, "/api/v1/admin/inquiries/*/status", hasRole("DEVELOPER"))
+    authorize(HttpMethod.PATCH, "/api/v1/admin/inquiries/*/assignee", hasRole("DEVELOPER"))
+    authorize(HttpMethod.GET, "/api/v1/admin/inquiries", hasRole("DEVELOPER"))
+    authorize("/api/v1/admin/inquiries/**", hasRole("DEVELOPER"))
+    // Discord 전달 내역 횡단 목록(Issue #206)은 개발자만 접근한다. 대상별 개별 조회는 각
+    // 도메인의 admin 경로 규칙(/api/v1/admin/jobs = TEACHER/DEVELOPER 등)을 그대로 따르지만,
+    // 이 목록은 공고·프로그램·문의를 한 Table에 섞어 보여주므로 그중 가장 엄격한 문의 규칙
+    // (DEVELOPER)에 맞춘다 -- 그렇지 않으면 교사가 이 목록을 통해 문의 Discord 전달의 존재를
+    // 알게 되어 바로 위 DEVELOPER 전용 규칙을 우회하는 셈이 된다. 하위 경로가 없는 단일
+    // Endpoint라 "/**" 형태는 추가하지 않는다.
+    authorize("/api/v1/admin/discord-deliveries", hasRole("DEVELOPER"))
+    // 정기 작업 운영 상태는 개발자만 접근한다(Issue #227).
+    authorize("/api/v1/admin/system/jobs", hasRole("DEVELOPER"))
+    // 문의 등록·상세 조회는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다.
+    // 상세 조회의 본인 소유권 검증(다른 사용자 문의 차단, 개발자는 예외)은 Role로 알
+    // 수 없어 InquiryService가 별도로 수행한다. "/api/v1/admin/inquiries"는 이 Prefix와
+    // 겹치지 않지만, 위 admin 규칙을 이 규칙보다 먼저 선언하는 순서 관례를 유지한다.
+    // "/api/v1/me/inquiries"는 기존 "/api/v1/me/**" 규칙(위)이 이미 포함하므로 별도로
+    // 추가하지 않는다.
+    authorize("/api/v1/inquiries", authenticated)
+    authorize("/api/v1/inquiries/**", authenticated)
+    // 추천 기능 ON/OFF 설정(Recommendation R3, Issue #152)도 학생 전용이라 STUDENT
+    // Role을 요구한다. 조회·관심 없음은 위 "/api/v1/me/job-recommendations",
+    // "/api/v1/me/recommendation-exclusions**"로 이미 다룬다(Notion 계약 정합성,
+    // Issue #155) -- "settings"는 대응하는 Notion Endpoint를 찾지 못해 기존 경로를
+    // 유지했다.
+    authorize("/api/v1/recommendations/settings", hasRole("STUDENT"))
+    // 포트폴리오 수합 요청 관리(등록·수정·상태 변경)는 교사와 개발자가 사용한다(Portfolio 도메인
+    // 요구사항 §2/§31). 등록자 본인만 수정할 수 있는지는 확정되지 않아 역할까지만 검증한다. 더
+    // 구체적인 admin 경로를 먼저 선언해야 아래 조회 규칙에 가려지지 않는다.
+    authorize("/api/v1/admin/portfolio-requests", hasAnyRole("TEACHER", "DEVELOPER"))
+    authorize("/api/v1/admin/portfolio-requests/**", hasAnyRole("TEACHER", "DEVELOPER"))
+    // 수합 요청 목록·상세 조회는 학생·교사·개발자 모두 접근할 수 있으므로 인증만 요구한다. 학생이
+    // 자신이 대상인 공개 이후 요청만 볼 수 있는지는 Role로 알 수 없어 PortfolioRequestService가
+    // 별도로 판정한다.
+    authorize("/api/v1/portfolio-requests", authenticated)
+    authorize("/api/v1/portfolio-requests/**", authenticated)
+    authorize(anyRequest, permitAll)
 }

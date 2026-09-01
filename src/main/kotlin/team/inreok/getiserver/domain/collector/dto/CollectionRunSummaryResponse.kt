@@ -22,6 +22,12 @@ data class CollectionRunSummaryResponse(
     val successCount: Long,
     @param:Schema(description = "실패 건수")
     val failureCount: Long,
+    @param:Schema(description = "신규 생성 건수(V30 이전 실행은 집계 불가로 null)", nullable = true)
+    val createdCount: Long?,
+    @param:Schema(description = "갱신 건수(V30 이전 실행은 집계 불가로 null)", nullable = true)
+    val updatedCount: Long?,
+    @param:Schema(description = "실패 건수(Client 호환 필드, failureCount와 동일)")
+    val failedCount: Long,
     @param:Schema(description = "품질 경고 건수")
     val partialQualityCount: Long,
     @param:Schema(description = "시작 시각")
@@ -42,6 +48,9 @@ data class CollectionRunSummaryResponse(
                 status = run.status,
                 successCount = run.successCount.toLong(),
                 failureCount = run.failureCount.toLong(),
+                createdCount = run.createdCount?.toLong(),
+                updatedCount = run.updatedCount?.toLong(),
+                failedCount = run.failureCount.toLong(),
                 partialQualityCount = run.partialQualityCount.toLong(),
                 startedAt = run.startedAt,
                 finishedAt = run.finishedAt,

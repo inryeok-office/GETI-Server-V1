@@ -208,7 +208,11 @@ Contributor 이름(`livenessState`/`readinessState`/`db`/`redis`)은 실제 `Hea
 
 ## Security
 
-`/actuator/health`, `/actuator/health/**`, `/actuator/info`는 `SecurityConfig`에서 인증 없이 permitAll로 명시한다(CD Readiness Check, Docker Health Check가 인증 없이 호출해야 하므로). `env`/`beans`/`mappings` 등 노출되지 않은 다른 Actuator Endpoint는 `management.endpoints.web.exposure.include`에도 없어 애초에 404다.
+### 임시 Security Bypass
+
+현재 Frontend/API 연동 단계에서는 Spring Security HTTP Authorization을 전역 `permitAll`로 적용한다. 기존 Role/Authentication Rule은 `SecurityConfig.kt`의 private `applyNormalSecurityRules()`에 보존되어 있으며, 연동 완료 후 전역 `authorize(anyRequest, permitAll)`을 제거하고 해당 Method를 다시 호출해 복구한다.
+
+이 설정에서는 CD 배포 환경의 모든 노출된 HTTP Endpoint가 인증 없이 Security Layer를 통과한다. Actuator exposure 설정 자체는 변경하지 않으므로 실제 노출 Endpoint는 기존 설정을 따른다. 이 상태를 운영 서비스에 사용하지 않는다.
 
 ## Docker 연계
 
@@ -224,6 +228,29 @@ Runtime Image(`eclipse-temurin:25.0.3_9-jre-alpine`)에는 `curl`이 없고 Alpi
 ## OpenAPI
 
 이번 PR에서는 springdoc(OpenAPI) 도입을 보류했다. 현재 저장소에는 Test 전용 Controller 외의 실제 API Endpoint가 하나도 없어, 지금 시점에 OpenAPI UI/JSON을 추가해도 문서화할 실제 API가 없다. 첫 실제 Domain Controller가 추가되는 PR에서 `springdoc-openapi-starter-webmvc-ui`(Spring Boot 4.1/Jackson 3.x와 호환되는 Version을 그 시점에 다시 확인) 도입 여부를 재검토한다.
+
+## 프로필 이미지 파일 업로드 정책
+
+Frontend가 프로필 이미지 선택 UI와 오류 처리를 구현할 때 적용할 현재 Backend 기본 정책은 다음과 같다. 기준 Source는 [`application.yaml`](../../src/main/resources/application.yaml)의 `app.file.policies.PROFILE_IMAGE`이며, 아래 값은 환경별 설정으로 Override될 수 있다.
+
+| 항목 | 현재 정책 |
+| --- | --- |
+| 업로드 Endpoint | `POST /api/v1/files` (`multipart/form-data`, part `file`, query `purpose=PROFILE_IMAGE`) |
+| 허용 확장자 | `png`, `jpg`, `jpeg`, `webp` |
+| 허용 MIME | `image/png`, `image/jpeg`, `image/webp` |
+| 최대 파일 크기 | 5 MiB (`5,242,880` bytes) |
+| 프로필 연결 개수 | 최대 1개 (`max-count: 1`) |
+| SVG | 허용하지 않음 |
+
+서버는 파일명 확장자와 Client가 선언한 `Content-Type`만 신뢰하지 않고 파일 내용에서 MIME을 탐지해 정책과 비교한다. 업로드에 성공하면 응답의 `data.fileId`를 사용해 `PATCH /api/v1/me/profile`의 `profileImageFileId`로 연결한다. 프로필 연결은 업로드한 본인 파일이며 `PROFILE_IMAGE` 용도인 경우에만 허용된다.
+
+대표 오류 계약은 다음과 같다.
+
+- `413 FILE_TOO_LARGE`: 허용된 파일 크기를 초과했다.
+- `415 FILE_TYPE_NOT_ALLOWED`: 확장자 또는 탐지된 파일 형식이 허용되지 않는다.
+- `415 MIME_MISMATCH`: 확장자와 실제 파일 형식이 일치하지 않는다.
+
+현재 `application.yaml`의 숫자와 목록은 Repository에 반영된 기본 설정이며 최종 Product 정책 결정과는 별개다. 정책을 변경할 때는 설정, 이 문서, OpenAPI 설명 및 관련 Test를 함께 갱신한다. 환경별 Override가 적용된 Runtime에서는 실제 적용 설정이 이 기본값과 다를 수 있다.
 
 ## Validation
 

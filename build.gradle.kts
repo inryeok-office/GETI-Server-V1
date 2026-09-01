@@ -36,7 +36,7 @@ dependencyManagement {
         // AWS SDK v2(S3). Spring Boot Dependency Management가 AWS SDK를 관리하지 않으므로
         // BOM을 직접 Import해 s3/s3-presigner와 전이 의존(http-client, auth 등) Version을
         // 한곳에서 맞춘다(File 도메인, Issue #85).
-        mavenBom("software.amazon.awssdk:bom:2.51.2")
+        mavenBom("software.amazon.awssdk:bom:2.51.3")
     }
 }
 
@@ -106,6 +106,12 @@ dependencies {
     // s3 Artifact 하나로 충분하다(Presigner는 s3에 포함되어 있다).
     implementation("software.amazon.awssdk:s3")
 
+    // 지원자 PROFILE/ANSWERS 문서(XLSX) 생성(Issue #218). Apache POI OOXML은 Apache-2.0
+    // License이며 Java 25 및 현재 Spring Boot/Jackson 3 조합과 독립적으로 동작하는 문서 생성
+    // Library다. XLSX 구조를 테스트에서 실제로 다시 열어 검증할 수 있어 CSV보다 계약을 명확히
+    // 유지할 수 있다.
+    implementation("org.apache.poi:poi-ooxml:5.4.1")
+
     // 업로드 파일의 실제 형식(Magic Number) 탐지. 확장자·선언 MIME만 믿으면 이름만 바꾼 실행
     // 파일을 막을 수 없다(Issue #85). 문서 본문을 파싱하는 tika-parsers는 쓰지 않는다 —
     // 형식 탐지에는 tika-core만 있으면 되고 Dependency도 훨씬 가볍다. Spring Boot Dependency
@@ -150,6 +156,11 @@ val integrationTest =
         testClassesDirs = sourceSets["integrationTest"].output.classesDirs
         classpath = sourceSets["integrationTest"].runtimeClasspath
         useJUnitPlatform()
+        // Integration Test는 각 Test가 필요한 Scheduler Method를 직접 호출하거나 명시적으로
+        // 검증한다. 운영 @Scheduled Thread가 Test 데이터와 경합하면 테스트가 검증하는 호출과
+        // 무관하게 상태를 먼저 바꿀 수 있으므로, Application의 Scheduling 인프라만 이 Task에서
+        // 비활성화한다. 기본값은 true라 운영 실행 동작은 바뀌지 않는다.
+        systemProperty("app.scheduling.enabled", "false")
         shouldRunAfter(tasks.test)
     }
 

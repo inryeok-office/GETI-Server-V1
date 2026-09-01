@@ -21,6 +21,7 @@ enum class JobErrorCode(
     JOB_VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "공고 정보가 올바르지 않습니다."),
     JOB_STATUS_TRANSITION_INVALID(HttpStatus.CONFLICT, "허용되지 않은 공고 상태 변경입니다."),
     JOB_FORM_REQUIRED(HttpStatus.BAD_REQUEST, "내부 지원 공고는 지원서 양식이 연결되어야 게시할 수 있습니다."),
+    JOB_DISCORD_CHANNEL_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "허용되지 않은 Discord 채널입니다."),
 
     // domain.company.exception.CompanyErrorCode는 Company Module 내부 구현이라 참조할 수 없어
     // 여기 다시 정의한다. 응답에 나가는 code 문자열과 HTTP Status(404)는 Company와 동일하므로

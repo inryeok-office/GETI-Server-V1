@@ -49,6 +49,9 @@ class JobAdminController(
 
             작성자는 Access Token에서 식별해 자동으로 기록한다. CLOSED와 DELETED는 이 API로
             지정할 수 없고 상태 변경 API를 사용한다.
+
+            `fileIds`를 지정하면 본인이 FilePurpose=JOB_ATTACHMENT로 업로드하고 아직 연결하지
+            않은 파일만 첨부파일로 연결할 수 있다.
         """,
     )
     @ApiResponses(
@@ -58,11 +61,19 @@ class JobAdminController(
             description =
                 "제목 공백·대상 학년 범위·모집 기간 역전·외부 URL 형식 등 공고 규칙 위반(JOB_VALIDATION_FAILED), " +
                     "INTERNAL 공고 게시 시도(JOB_FORM_REQUIRED), 길이 등 요청 값 형식 오류(VALIDATION_FAILED), " +
-                    "필수 Field 누락(MALFORMED_JSON)",
+                    "필수 Field 누락(MALFORMED_JSON), 첨부파일 목적 불일치(FILE_PURPOSE_MISMATCH), " +
+                    "첨부파일 개수 초과(FILE_COUNT_EXCEEDED)",
         ),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
-        SwaggerApiResponse(responseCode = "403", description = "교사 또는 개발자 권한이 없음 (FORBIDDEN)"),
-        SwaggerApiResponse(responseCode = "404", description = "기업이 없거나 삭제됨 (COMPANY_NOT_FOUND)"),
+        SwaggerApiResponse(
+            responseCode = "403",
+            description = "교사 또는 개발자 권한이 없음 (FORBIDDEN), 본인이 업로드하지 않은 첨부파일 (FILE_NOT_OWNED)",
+        ),
+        SwaggerApiResponse(
+            responseCode = "404",
+            description = "기업이 없거나 삭제됨 (COMPANY_NOT_FOUND), 존재하지 않는 첨부파일 (FILE_NOT_FOUND)",
+        ),
+        SwaggerApiResponse(responseCode = "409", description = "이미 다른 곳에 연결된 첨부파일 (FILE_ALREADY_LINKED)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @PostMapping
@@ -84,6 +95,11 @@ class JobAdminController(
             기업, 공고 유형, 지원 방식은 이 API로 변경할 수 없고 상태는 상태 변경 API로 분리되어
             있다. 이미 게시된 공고를 수정하면 수정 결과가 게시 필수값을 계속 만족하는지 다시
             검증한다.
+
+            `fileIds`를 전달하지 않으면 기존 첨부파일을 유지한다. 전달하면(빈 배열 포함) 그 목록을
+            최종 상태로 취급해 기존 연결을 모두 해제한 뒤 다시 연결한다 — 유지할 파일도 다시
+            포함해야 하며, 본인이 업로드한 파일만 연결할 수 있다(다른 관리자가 업로드한 기존
+            첨부는 본인이 아니면 재전송해도 FILE_NOT_OWNED로 거부된다).
         """,
     )
     @ApiResponses(
@@ -92,18 +108,28 @@ class JobAdminController(
             responseCode = "400",
             description =
                 "공고 규칙 위반(JOB_VALIDATION_FAILED), 게시 상태 공고가 게시 필수값을 잃음" +
-                    "(JOB_VALIDATION_FAILED), 요청 값 형식 오류(VALIDATION_FAILED)",
+                    "(JOB_VALIDATION_FAILED), 요청 값 형식 오류(VALIDATION_FAILED), " +
+                    "첨부파일 목적 불일치(FILE_PURPOSE_MISMATCH), 첨부파일 개수 초과(FILE_COUNT_EXCEEDED)",
         ),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
-        SwaggerApiResponse(responseCode = "403", description = "교사 또는 개발자 권한이 없음 (FORBIDDEN)"),
-        SwaggerApiResponse(responseCode = "404", description = "공고가 없거나 삭제됨 (JOB_NOT_FOUND)"),
+        SwaggerApiResponse(
+            responseCode = "403",
+            description = "교사 또는 개발자 권한이 없음 (FORBIDDEN), 본인이 업로드하지 않은 첨부파일 (FILE_NOT_OWNED)",
+        ),
+        SwaggerApiResponse(
+            responseCode = "404",
+            description = "공고가 없거나 삭제됨 (JOB_NOT_FOUND), 존재하지 않는 첨부파일 (FILE_NOT_FOUND)",
+        ),
+        SwaggerApiResponse(responseCode = "409", description = "이미 다른 곳에 연결된 첨부파일 (FILE_ALREADY_LINKED)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @PatchMapping("/{jobId}")
     fun updateJob(
         @Parameter(description = "수정할 공고 ID", example = "1") @PathVariable jobId: Long,
         @Valid @RequestBody request: JobUpdateRequest,
-    ): ApiResponse<JobDetailResponse> = ApiResponse.of(jobService.update(jobId, request))
+        authentication: Authentication,
+    ): ApiResponse<JobDetailResponse> =
+        ApiResponse.of(jobService.update(jobId, request, authentication.principal as Long))
 
     @Operation(
         summary = "공고 상태 변경",
@@ -118,7 +144,8 @@ class JobAdminController(
             ```
 
             PUBLISHED로 바꿀 때는 게시 필수값을 모두 검증한다. DELETED는 Soft Delete로 처리해
-            실제 행을 지우지 않으므로 기존 북마크와 지원 이력이 보존된다.
+            실제 행을 지우지 않으므로 기존 북마크와 지원 이력이 보존된다. DELETED로 전이하면
+            첨부파일 연결도 함께 해제한다(Storage의 실제 파일은 지우지 않는다).
         """,
     )
     @ApiResponses(
@@ -137,7 +164,9 @@ class JobAdminController(
     fun changeJobStatus(
         @Parameter(description = "상태를 변경할 공고 ID", example = "1") @PathVariable jobId: Long,
         @Valid @RequestBody request: JobStatusUpdateRequest,
-    ): ApiResponse<JobDetailResponse> = ApiResponse.of(jobService.changeStatus(jobId, request))
+        authentication: Authentication,
+    ): ApiResponse<JobDetailResponse> =
+        ApiResponse.of(jobService.changeStatus(jobId, request, authentication.principal as Long))
 
     @Operation(
         summary = "관리자용 공고 상세 조회",
@@ -146,6 +175,9 @@ class JobAdminController(
             조회수를 증가시키지 않으므로 관리자가 확인해도 통계가 왜곡되지 않는다.
 
             임시저장한 공고를 다시 열어보거나 삭제된 공고의 이력을 확인할 때 사용한다.
+
+            `files`(첨부파일 목록)는 공개 상태(PUBLISHED, CLOSED)가 아니면 등록자·담당 교사·
+            개발자만 실제 목록을 볼 수 있고, 그 외 요청자에게는 빈 목록이 담긴다.
         """,
     )
     @ApiResponses(
@@ -158,5 +190,6 @@ class JobAdminController(
     @GetMapping("/{jobId}")
     fun getJobForAdmin(
         @Parameter(description = "조회할 공고 ID", example = "1") @PathVariable jobId: Long,
-    ): ApiResponse<JobDetailResponse> = ApiResponse.of(jobService.getForAdmin(jobId))
+        authentication: Authentication,
+    ): ApiResponse<JobDetailResponse> = ApiResponse.of(jobService.getForAdmin(jobId, authentication.principal as Long))
 }

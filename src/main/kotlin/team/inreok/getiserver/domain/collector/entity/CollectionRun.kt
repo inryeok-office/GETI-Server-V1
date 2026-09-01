@@ -45,6 +45,14 @@ class CollectionRun(
     @Column(name = "failure_count", nullable = false)
     var failureCount: Int = 0
 
+    // V30 이전 실행은 생성/갱신 결과를 분리해 저장하지 않았으므로 null로 역사적 불확실성을 보존한다.
+    // 신규 실행은 0에서 시작해 완료 시 실제 Upsert 결과로 갱신한다.
+    @Column(name = "created_count")
+    var createdCount: Int? = 0
+
+    @Column(name = "updated_count")
+    var updatedCount: Int? = 0
+
     @Column(name = "partial_quality_count", nullable = false)
     var partialQualityCount: Int = 0
 

@@ -99,6 +99,23 @@ class FileStorageIntegrationTest {
     }
 
     @Test
+    fun `업로드한 내용을 download로 그대로 읽을 수 있다`() {
+        // FileArchivePort(Issue #84 Phase 6)가 여러 File을 ZIP으로 묶을 때 이 Method로 각 File의
+        // 내용을 읽는다.
+        val key = "PROFILE_IMAGE/2026/08/${UUID.randomUUID()}"
+        adapter.upload(key, "image/png", CONTENT.size.toLong(), ByteArrayInputStream(CONTENT))
+
+        adapter.download(key).use { assertThat(it.readBytes()).isEqualTo(CONTENT) }
+    }
+
+    @Test
+    fun `존재하지 않는 Object를 download하면 FileStorageException이다`() {
+        assertThatThrownBy {
+            adapter.download("PROFILE_IMAGE/2026/08/${UUID.randomUUID()}")
+        }.isInstanceOf(FileStorageException::class.java)
+    }
+
+    @Test
     fun `Bucket이 없으면 업로드가 FileStorageException으로 변환된다`() {
         // SDK 예외 Message에는 Bucket 이름과 Request ID가 들어 있어 그대로 노출하면 안 된다(§26/§42).
         val key = "PROFILE_IMAGE/2026/08/${UUID.randomUUID()}"
@@ -122,6 +139,31 @@ class FileStorageIntegrationTest {
         assertThat(url.toString()).doesNotContain("이력서")
         val decoded = URLDecoder.decode(url.toString(), StandardCharsets.UTF_8)
         assertThat(decoded).contains(key)
+    }
+
+    @Test
+    fun `endpoint가 접속할 수 없는 주소여도 publicEndpoint가 있으면 Presigned URL은 실제로 내려받을 수 있다`() {
+        // docker compose --profile app 재현: S3Client(PutObject 등 서버 내부 호출)는 Container
+        // 내부 DNS(minio:9000 같은)만 아는 endpoint를 쓰고, S3Presigner는 외부 Client가 실제로
+        // 여는 publicEndpoint를 따로 써야 한다. endpoint를 아예 접속 불가능한 값으로 둬도
+        // Presigned URL이 publicEndpoint를 기준으로 서명되면 정상적으로 내려받을 수 있어야 한다.
+        val key = "PROFILE_IMAGE/2026/08/${UUID.randomUUID()}"
+        adapter.upload(key, "image/png", CONTENT.size.toLong(), ByteArrayInputStream(CONTENT))
+
+        val presignOnlyAdapter =
+            adapterFor(
+                bucket = BUCKET,
+                autoCreateBucket = false,
+                endpoint = "http://internal-only-host-that-does-not-resolve.invalid:9000",
+                publicEndpoint = minio.s3URL,
+            )
+
+        val url = presignOnlyAdapter.presignedGetUrl(key, "attachment; filename=\"logo.png\"", "image/png", TTL)
+        val connection = url.toURL().openConnection() as HttpURLConnection
+
+        assertThat(url.toString()).doesNotContain("internal-only-host-that-does-not-resolve")
+        assertThat(connection.responseCode).isEqualTo(HttpURLConnection.HTTP_OK)
+        assertThat(connection.inputStream.readBytes()).isEqualTo(CONTENT)
     }
 
     companion object {
@@ -148,12 +190,15 @@ class FileStorageIntegrationTest {
         private fun adapterFor(
             bucket: String,
             autoCreateBucket: Boolean,
+            endpoint: String = minio.s3URL,
+            publicEndpoint: String? = null,
         ): S3FileStorageAdapter {
             val properties =
                 FileStorageProperties(
                     bucket = bucket,
                     region = "us-east-1",
-                    endpoint = minio.s3URL,
+                    endpoint = endpoint,
+                    publicEndpoint = publicEndpoint,
                     pathStyleAccess = true,
                     accessKey = minio.userName,
                     secretKey = minio.password,

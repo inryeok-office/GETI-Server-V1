@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.inreok.getiserver.domain.collector.dto.PublicJobSourceListResponse
 import team.inreok.getiserver.domain.collector.dto.PublicJobSourceResponse
+import team.inreok.getiserver.domain.collector.entity.type.JobSourceCode
 import team.inreok.getiserver.domain.collector.entity.type.JobSourceType
 import team.inreok.getiserver.domain.collector.service.JobSourceService
 import team.inreok.getiserver.global.security.JwtTokenProvider
@@ -24,7 +25,7 @@ import team.inreok.getiserver.global.security.SecurityConfig
 
 // SecurityConfig를 명시적으로 Import해 /api/v1/job-sources가 인증만 요구하는지(401) 검증한다.
 @WebMvcTest(controllers = [JobSourceController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class JobSourceControllerTest
     @Autowired
@@ -52,6 +53,7 @@ class JobSourceControllerTest
                         listOf(
                             PublicJobSourceResponse(
                                 sourceId = 1L,
+                                sourceCode = JobSourceCode.MMA,
                                 name = "병역일터",
                                 sourceType = JobSourceType.EXTERNAL_API,
                                 active = false,
@@ -63,6 +65,7 @@ class JobSourceControllerTest
             mockMvc
                 .perform(get("/api/v1/job-sources").with(authOf(1L, "STUDENT")))
                 .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.sources[0].sourceCode").value("MMA"))
                 .andExpect(jsonPath("$.data.sources[0].name").value("병역일터"))
         }
 

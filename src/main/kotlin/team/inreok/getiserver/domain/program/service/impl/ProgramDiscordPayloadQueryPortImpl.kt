@@ -5,6 +5,7 @@ import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.program.query.ProgramDiscordPayloadQueryPort
 import team.inreok.getiserver.domain.program.query.ProgramDiscordPayloadSnapshot
 import team.inreok.getiserver.domain.program.repository.ProgramRepository
+import team.inreok.getiserver.domain.program.repository.ProgramTargetGradeRepository
 
 /**
  * 다른 Domain Module(notification)에 공개된 조회 계약([ProgramDiscordPayloadQueryPort])의
@@ -14,6 +15,7 @@ import team.inreok.getiserver.domain.program.repository.ProgramRepository
 @Service
 class ProgramDiscordPayloadQueryPortImpl(
     private val programRepository: ProgramRepository,
+    private val programTargetGradeRepository: ProgramTargetGradeRepository,
 ) : ProgramDiscordPayloadQueryPort {
     @Transactional(readOnly = true)
     override fun findById(programId: Long): ProgramDiscordPayloadSnapshot? {
@@ -25,6 +27,18 @@ class ProgramDiscordPayloadQueryPortImpl(
             bodyMarkdown = program.bodyMarkdown,
             eventStartedAt = program.eventStartedAt,
             eventEndedAt = program.eventEndedAt,
+            discordChannelId = program.discordChannelId,
+            targetGrades = programTargetGradeRepository.findAllByIdProgramId(programId).map { it.id.grade },
+            updatedAt = requireNotNull(program.updatedAt) { "저장된 Program은 updatedAt을 가져야 합니다." },
         )
+    }
+
+    @Transactional(readOnly = true)
+    override fun findDisplayNamesByIds(programIds: Set<Long>): Map<Long, String> {
+        if (programIds.isEmpty()) return emptyMap()
+        // findById와 같은 이유로 Soft Delete를 거르지 않는다(Port KDoc 참고).
+        return programRepository
+            .findAllById(programIds)
+            .associate { requireNotNull(it.id) { "저장된 Program은 id를 가져야 합니다." } to it.title }
     }
 }

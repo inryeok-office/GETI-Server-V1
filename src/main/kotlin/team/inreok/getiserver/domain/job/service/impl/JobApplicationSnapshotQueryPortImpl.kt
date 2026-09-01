@@ -1,7 +1,10 @@
 package team.inreok.getiserver.domain.job.service.impl
 
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
 import team.inreok.getiserver.domain.job.repository.JobRepository
@@ -17,7 +20,25 @@ class JobApplicationSnapshotQueryPortImpl(
     @Transactional(readOnly = true)
     override fun findById(jobId: Long): JobApplicationJobSnapshot? {
         val job = jobRepository.findByIdAndDeletedAtIsNull(jobId) ?: return null
-        return JobApplicationJobSnapshot(
+        return toSnapshot(job)
+    }
+
+    @Transactional(readOnly = true)
+    override fun findAllByIds(jobIds: Set<Long>): Map<Long, JobApplicationJobSnapshot> {
+        if (jobIds.isEmpty()) return emptyMap()
+        return jobRepository
+            .findAllByIdInAndDeletedAtIsNull(jobIds)
+            .associate { requireNotNull(it.id) { "저장된 Job은 id를 가져야 합니다." } to toSnapshot(it) }
+    }
+
+    @Transactional(readOnly = true)
+    override fun findManagedByMemberId(
+        memberId: Long,
+        pageable: Pageable,
+    ): Page<JobApplicationJobSnapshot> = jobRepository.findManagedByMemberId(memberId, pageable).map(::toSnapshot)
+
+    private fun toSnapshot(job: Job): JobApplicationJobSnapshot =
+        JobApplicationJobSnapshot(
             jobId = requireNotNull(job.id) { "저장된 Job은 id를 가져야 합니다." },
             title = job.title,
             companyId = job.companyId,
@@ -29,6 +50,6 @@ class JobApplicationSnapshotQueryPortImpl(
             recruitmentEndedAt = job.recruitmentEndedAt,
             createdByMemberId = job.createdByMemberId,
             managerMemberId = job.managerMemberId,
+            viewCount = job.viewCount,
         )
-    }
 }

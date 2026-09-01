@@ -56,9 +56,9 @@ class InquiryAdminController(
             (서로 다른 개발자를 가리키면 결과가 항상 빈 목록이 된다). 기본 page=0, size=20이며
             최대 size=100이다. 정렬은 최신 등록순으로 고정된다.
 
-            Discord 접수 알림 상태(`discordStatus`)로 필터링하는 기능은 Notification 실연동
-            (Phase 5) 이후에 추가한다 -- 지금은 모든 문의의 상태가 PENDING 고정값이라 필터링이
-            의미가 없다.
+            Discord 접수 알림 상태(`discordStatus`)로 필터링하는 기능은 이번 범위에 포함되지
+            않는다. Discord 전달 상태는 이 목록에 포함되지 않고
+            `GET /api/v1/admin/inquiries/{inquiryId}/discord`로 개별 조회한다.
         """,
     )
     @ApiResponses(
@@ -70,6 +70,9 @@ class InquiryAdminController(
     @GetMapping
     fun listInquiries(
         authentication: Authentication,
+        @Parameter(description = "답변 여부 필터(선택). answered=true는 answeredAt 존재, false는 null인 문의만 조회")
+        @RequestParam(required = false)
+        answered: Boolean?,
         @Parameter(description = "문의 유형 필터(선택)") @RequestParam(required = false) inquiryType: InquiryType?,
         @Parameter(description = "문의 상태 필터(선택)") @RequestParam(required = false) status: InquiryStatus?,
         @Parameter(description = "검색어(선택). 제목·내용·작성자 이름 대상") @RequestParam(required = false) query: String?,
@@ -81,7 +84,7 @@ class InquiryAdminController(
     ): ApiResponse<InquiryAdminListResponse> {
         val memberId = authentication.principal as Long
         return ApiResponse.of(
-            inquiryService.listAdmin(inquiryType, status, query, assigneeId, mineOnly, memberId, pageable),
+            inquiryService.listAdmin(inquiryType, status, query, assigneeId, mineOnly, memberId, pageable, answered),
         )
     }
 

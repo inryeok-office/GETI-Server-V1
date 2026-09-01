@@ -6,11 +6,15 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.data.domain.Pageable
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
+import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
+import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.PostingType
 import team.inreok.getiserver.domain.search.dto.JobSearchResponse
 import team.inreok.getiserver.domain.search.dto.JobSort
@@ -47,9 +51,12 @@ class JobSearchController(
             공고는 이 API로 조회할 수 없다.
 
             `query`는 공고 제목·기업명·본문에 대한 다중 필드 검색어다(Nori 형태소 분석 기반).
-            `techStackIds` 필터는 지원하지 않는다 — `jobs.required_skills`가 구조화된 ID 관계가
-            아니라 자유 형식 JSONB라 정확한 필터를 구현할 수 없다(Issue #69 "문서 불일치 및
-            설계 결정" 참고). `sourceId` 대신 `sourceName`(문자열)을 사용한다.
+            고졸 적합성(`highSchoolGraduateFit`), 신입 적합성(`entryLevelFit`), 난이도(`difficulty`)
+            필터는 Elasticsearch에 색인된 AI 분석 Enum과 정확히 일치하는 공고만 반환한다. AI 분석이
+            없거나 해당 값이 null인 공고는 AI 필터를 지정하지 않은 검색에서는 그대로 포함되며, 필터를
+            지정하면 일치하지 않는다. 기술스택(`techStackIds`) 필터는 required/preferred 범위와
+            복수 ID 매칭 방식(AND/OR)이 확정되지 않아 아직 제공하지 않는다. `sourceId` 대신
+            `sourceName`(문자열)을 사용한다.
 
             정렬 기준은 `sort`, 방향은 `direction`으로 지정한다(Pagination Parameter의 `sort`는
             무시된다). 모든 정렬은 방향과 무관하게 동일 값에서 공고 ID 내림차순 보조 정렬로
@@ -62,7 +69,7 @@ class JobSearchController(
         SwaggerApiResponse(responseCode = "200", description = "조회 성공(결과가 없으면 빈 목록)"),
         SwaggerApiResponse(
             responseCode = "400",
-            description = "status 또는 sort에 허용되지 않은 값을 보냄 (TYPE_MISMATCH)",
+            description = "status, AI 분석 필터 또는 sort에 허용되지 않은 값을 보냄 (TYPE_MISMATCH)",
         ),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
@@ -75,6 +82,9 @@ class JobSearchController(
         @Parameter(description = "공고 유형 필터(선택)")
         @RequestParam(required = false)
         postingType: PostingType?,
+        @Parameter(description = "지원 방식 필터. INTERNAL(학교 지원) 또는 EXTERNAL(외부 지원)")
+        @RequestParam(required = false)
+        applicationMethod: ApplicationMethod?,
         @Parameter(description = "공고 상태 필터(선택). PUBLISHED 또는 CLOSED만 지정할 수 있다.")
         @RequestParam(required = false)
         status: PublicJobStatus?,
@@ -87,6 +97,15 @@ class JobSearchController(
         @Parameter(description = "지원 대상 학년 필터(선택, 1~3)", example = "3")
         @RequestParam(required = false)
         targetGrade: Int?,
+        @Parameter(description = "고졸 지원 적합성 필터(선택). SUITABLE, CONDITIONAL, UNSUITABLE 중 하나")
+        @RequestParam(required = false)
+        highSchoolGraduateFit: AiFitLevel?,
+        @Parameter(description = "신입 지원 적합성 필터(선택). SUITABLE, CONDITIONAL, UNSUITABLE 중 하나")
+        @RequestParam(required = false)
+        entryLevelFit: AiFitLevel?,
+        @Parameter(description = "공고 진입 난이도 필터(선택). EASY, NORMAL, HARD 중 하나")
+        @RequestParam(required = false)
+        difficulty: AiDifficulty?,
         @Parameter(
             description =
                 "true면 마감되지 않은 게시 공고만 반환한다. 모집 종료 시각이 없는 공고는 " +
@@ -107,19 +126,25 @@ class JobSearchController(
         direction: SortDirection?,
         @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20, 최대 100). sort Parameter는 무시된다")
         pageable: Pageable,
+        authentication: Authentication,
     ): ApiResponse<JobSearchResponse> =
         ApiResponse.of(
             jobSearchService.search(
                 query,
                 postingType,
+                applicationMethod,
                 status,
                 companyType,
                 sourceName,
                 targetGrade,
+                highSchoolGraduateFit,
+                entryLevelFit,
+                difficulty,
                 openOnly,
                 sort,
                 direction,
                 pageable,
+                authentication.principal as Long,
             ),
         )
 }

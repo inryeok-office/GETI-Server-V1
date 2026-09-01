@@ -625,7 +625,7 @@ Notification이 `findAllByIds(ids): Map<Long, Snapshot>` 배치 Port를 쓴 선�
 
 | Checker | ownerType | 규칙 |
 | --- | --- | --- |
-| `MemberProfileImageAccessChecker` | `MEMBER` | 본인이거나 `members.profile_public = true` |
+| `MemberProfileImageAccessChecker` | `MEMBER` | 본인·교사·개발자이거나 `members.profile_public = true` (교사·개발자 예외는 Issue #114, 결정 근거는 Issue #89) |
 | `CompanyLogoAccessChecker` | `COMPANY` | 인증된 사용자 모두 (`/api/v1/companies`가 이미 인증만 요구) |
 
 나머지 6개 `ownerType`은 해당 도메인이 파일을 붙이는 기능을 구현하는 PR에서 Checker를 추가한다.
@@ -933,7 +933,7 @@ domain/company/dto/CompanyCreateRequest.kt, CompanyUpdateRequest.kt  logoFileId 
 | 7 | 미연결 File 보존 시간 (§44.6) | **Phase 5로 미룸** | Cleanup PR |
 | 8 | 연결 해제 후 실제 삭제 보존 기간 (§44.9) | **Phase 5로 미룸** | Cleanup PR |
 | 9 | Metadata Hard Delete 정책 (§44.10) | **Phase 5로 미룸**. `ck_files_link_state`가 미연결 `DELETED`를 막으므로 함께 검토 필요 | Cleanup PR |
-| 10 | 일괄 다운로드 최대 파일/용량 (§44.11) | **Phase 6로 미룸** | Archive PR |
+| 10 | 일괄 다운로드 최대 파일/용량 (§44.11) | **Phase 6에서 잠정값 적용**(100개 / 500MB, §20 참고) | Archive PR(완료), `app.file.archive.*`만 교체 |
 | 11 | Virus Scan 도입 (§44.12) | **도입하지 않음**. 요구사항 확정 없음 | 별도 Issue |
 | 12 | `contains_personal_information` 판단 주체 | 업로드 시 `false` 고정 | 정책 확정 시 Purpose별 기본값 또는 요청 Field |
 | 13 | Rate Limit (§25) | **도입하지 않음**. §25가 "임의 도입하지 않는다" 명시 | 별도 Issue |
@@ -952,7 +952,7 @@ domain/company/dto/CompanyCreateRequest.kt, CompanyUpdateRequest.kt  logoFileId 
 | Phase | 내용 | 선행 결정 |
 | --- | --- | --- |
 | **Phase 5** — Cleanup | `status IN ('PENDING','FAILED','UPLOADED') AND created_at < threshold` 대상 Scheduler. Object Storage 실제 삭제, 실패 재시도 | **ShedLock 도입 여부**. 저장소에 ShedLock이 없고 `CollectorScheduler`도 중복 실행을 감수 중이다(§1.15). 파일 삭제는 되돌릴 수 없어 중복 실행 방지가 수집보다 중요하므로 별도 판단이 필요하다. §44.6 보존 시간도 함께 확정 |
-| **Phase 6** — Archive | Application/Program 일괄 다운로드용 Stream/ZIP 공통 기능. Export Endpoint 자체는 해당 도메인 소유(§23). `OPERATION_RESULT` Purpose 추가 | ZIP Slip 방지, 중복·한글 파일명 처리, 메모리 미적재 Streaming, §44.11 상한 |
+| **Phase 6** — Archive | **File 도메인 쪽 공통 기능은 구현 완료(§20)** — `FileArchivePort`. Export Endpoint 자체는 여전히 각 소비 Domain 소유(§23) | 해소됨(§20). `OPERATION_RESULT` Purpose는 도입하지 않기로 판단(§20, 비동기 방식이 실제로 필요해지면 재검토) |
 | Job / Program / Application / Inquiry 배선 | 각 도메인이 `FileLinkPort`를 호출하고 `FileAccessChecker`를 구현 | 각 도메인 PR. 이번에 만든 Port를 그대로 사용 |
 | Portfolio | §40이 "Portfolio 전체 기능을 File PR에서 구현하지 않는다" 명시 | Portfolio 도메인 PR |
 
@@ -968,6 +968,33 @@ domain/company/dto/CompanyCreateRequest.kt, CompanyUpdateRequest.kt  logoFileId 
 | 4 | 인프라 선행 조건 | **미착수** — §14.3의 7개 항목. 코드로 해결할 수 없어 사람이 AWS 콘솔/CLI에서 수행해야 한다. 특히 **EC2 Metadata hop limit 2 상향**이 빠지면 운영에서 모든 S3 호출이 실패한다 |
 
 인프라(4번)는 **운영 배포 시점에만 필요**하다. local은 `compose.yaml`의 MinIO를 그대로 쓰므로 4번 없이도 PR A 구현·테스트를 끝까지 진행할 수 있다.
+
+---
+
+## 20. Phase 6 — Archive 구현 완료 (§18 갱신, Issue #154)
+
+`FileArchivePort`(`domain.file.archive`)를 새로 공개했다. §18이 미룬 4개 항목 중 **File 도메인이 책임지는 부분**(공통 Stream/ZIP 기능)만 이번에 구현했고, 나머지는 계획대로 각 소비 Domain의 별도 PR로 남는다.
+
+| §18 항목 | 처리 |
+| --- | --- |
+| Stream/ZIP 공통 기능 | **구현 완료** — `FileArchivePort.writeZip(entries, outputStream)`. `FileStoragePort.download(key)`(신규, S3 `GetObject`를 `InputStream`으로 노출)로 각 File을 순서대로 읽어 `ZipOutputStream`에 직접 쓴다(전체를 메모리에 올리지 않음) |
+| ZIP Slip 방지 | Entry 이름에서 `/`, `\`를 치환해 경로 구분자를 제거한다(`FileArchivePortImpl.uniqueEntryName`) |
+| 중복·한글 파일명 처리 | 중복 이름은 `(2)`, `(3)`처럼 번호를 붙인다. `ZipOutputStream`을 `StandardCharsets.UTF_8`로 생성해 EFS Language Encoding Flag가 켜지므로 한글 파일명이 Windows/macOS 양쪽에서 깨지지 않는다 |
+| §44.11 상한(파일 개수·총 용량) | **잠정값**으로 처리(§17 DECISION_REQUIRED #10과 동일한 방식) — `FileArchiveProperties`(`app.file.archive.*`), 기본 100개 / 500MB. 초과하면 Storage 접근 전에 `FileArchiveTooLargeException`으로 막는다 |
+| `OPERATION_RESULT` Purpose 추가 | **도입하지 않음(범위 축소, 근거 아래)** |
+| Export API Endpoint(`GET /api/v1/admin/jobs/{jobId}/applications/export` 등) | **범위 밖 그대로** — Application Phase 10(#138)/Program 쪽 PR이 이 Port를 호출해 만든다 |
+
+### `OPERATION_RESULT` Purpose를 추가하지 않은 이유(DECISION_REQUIRED, 착수 시점 판단)
+
+원래 §16/FilePurpose 주석은 "일괄 다운로드(Phase 6)에서 추가한다"고 적어 두었는데, 이는 서버가 생성한 ZIP을 다시 Storage에 업로드해 `StoredFile`로 관리하고(`async_operations.result_file_id`가 그 File을 가리킴) 클라이언트가 기존 다운로드 API(Presigned URL)로 받아가는 **비동기 방식**을 전제로 한 이름이다.
+
+이번 구현은 그보다 좁은 **동기 Streaming 방식**만 제공한다 -- `writeZip`은 Storage에 아무것도 쓰지 않고 호출자가 준 `OutputStream`에 그대로 흘려보낸다. 이렇게 좁힌 이유:
+
+1. 비동기 방식은 `AsyncOperation` 상태 전이·폴링 API·결과 File 정리(Cleanup, Phase 5) 설계까지 함께 필요해 File 도메인 Epic(§18의 "Export Endpoint 소유권은 가져오지 않는다") 밖의 결정이 여러 개 얽힌다.
+2. 요구사항(Issue #138)의 "메모리에 전체 File을 한꺼번에 올리지 않는 Streaming 우선"은 동기 방식으로도 충분히 만족한다.
+3. 나중에 비동기 방식이 실제로 필요해지면(매우 큰 Archive가 HTTP Timeout을 넘는 경우 등), 소비 Domain이 이 `writeZip`을 Background Thread에서 호출해 그 결과를 직접 Storage에 올리고 `OPERATION_RESULT` Purpose를 그때 추가하면 된다 -- `FileArchivePort`의 계약을 바꿀 필요가 없다.
+
+Application Phase 10(#138)/Program 쪽에서 실제로 동기 방식이 요구사항에 맞지 않는다고 판단되면 이 결정을 재검토해야 한다(DECISION_REQUIRED로 다시 보고).
 
 ### PR A 구현 완료
 

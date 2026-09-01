@@ -120,10 +120,22 @@ services:
       # 직접 지정한다.
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-develop}
       SERVER_PORT: ${SERVER_PORT:-8080}
+      # GETI-Client-V1(`next dev`)의 Local 기본 Origin. Staging/Production은 실제 Client
+      # 배포 Domain을 APP_WEB_CORS_ALLOWED_ORIGINS 환경 변수로 주입한다.
+      APP_WEB_CORS_ALLOWED_ORIGINS: ${APP_WEB_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
       # Host(localhost)가 아닌 Compose Service 이름으로 접속한다.
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-geti}
       DATABASE_USERNAME: ${POSTGRES_USER:-geti}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-geti-local-only}
+      JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      DG_CLIENT_ID: ${DG_CLIENT_ID}
+      DG_CLIENT_SECRET: ${DG_CLIENT_SECRET}
+      DG_REDIRECT_URI: ${DG_REDIRECT_URI}
+      DG_AUTHORIZATION_SERVER: ${DG_AUTHORIZATION_SERVER}
+      DG_RESOURCE_SERVER: ${DG_RESOURCE_SERVER}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       ELASTICSEARCH_URIS: http://elasticsearch:9200
@@ -131,6 +143,13 @@ services:
       # 재사용하므로(application.yaml의 Profile Group) Container 안에서도 MinIO를 쓴다.
       # Host(localhost) 대신 Compose Service 이름으로 접속해야 한다.
       APP_FILE_STORAGE_ENDPOINT: http://minio:9000
+      # Presigned URL은 이 App Container가 아니라 외부 Client(Browser, GETI-Client-V1의 `next
+      # dev` 등)가 직접 접속한다. `minio`는 Compose 내부 DNS 이름이라 Container 밖에서는 해석되지
+      # 않으므로, Presign 전용 Endpoint는 Host에서 실제로 닿는 값을 따로 준다. EC2에 배포된
+      # develop 환경은 이 값이 아직 외부에 공개된 Endpoint를 가리키지 않는다 -- MinIO API Port가
+      # `127.0.0.1`에만 Bind되어 있어(compose.yaml minio 서비스) 서버 밖에서 이 URL로 실제 다운로드는
+      # 아직 불가능하다(후속 인프라 결정 필요, Issue #255 참고).
+      APP_FILE_STORAGE_PUBLIC_ENDPOINT: http://localhost:${MINIO_API_PORT:-9000}
       APP_FILE_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-geti-local}
       APP_FILE_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-geti-local-minio}
       FILE_STORAGE_BUCKET: ${FILE_STORAGE_BUCKET:-geti-local}
@@ -143,7 +162,7 @@ services:
       # 실행하는 Shell/서버 .env에 COLLECTOR_SEED_ENABLED를 직접 export한다.
       COLLECTOR_EXTERNAL_SCHEDULER_ENABLED: ${COLLECTOR_EXTERNAL_SCHEDULER_ENABLED:-false}
     ports:
-      - "127.0.0.1:${SERVER_PORT:-8080}:8080"
+      - "0.0.0.0:${SERVER_PORT:-8080}:8080"
     healthcheck:
       # 단순 Process 생존(/actuator/health)이 아니라 PostgreSQL/Redis까지 연결된 실제 요청
       # 처리 준비 상태(Readiness)를 기준으로 판단한다. Runtime Image(eclipse-temurin:jre-alpine)에
