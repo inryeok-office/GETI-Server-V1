@@ -122,4 +122,17 @@ interface JobRepository : JpaRepository<Job, Long> {
         @Param("managerMemberId") managerMemberId: Long?,
         @Param("mineOnlyMemberId") mineOnlyMemberId: Long?,
     ): List<Long>
+
+    @Query(
+        """
+        SELECT j FROM Job j
+        WHERE j.deletedAt IS NULL
+          AND (j.managerMemberId = :memberId OR j.createdByMemberId = :memberId)
+        ORDER BY j.id DESC
+        """,
+    )
+    fun findManagedByMemberId(
+        @Param("memberId") memberId: Long,
+        pageable: Pageable,
+    ): Page<Job>
 }

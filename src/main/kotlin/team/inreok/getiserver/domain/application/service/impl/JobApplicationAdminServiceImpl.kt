@@ -9,6 +9,8 @@ import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRe
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListItemResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationJobSummaryItemResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationJobSummaryResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusCountsResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.JobApplication
@@ -24,6 +26,7 @@ import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.link.FileLinkPort
+import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.query.JobApplicationAdminFilterQueryPort
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.job.query.JobApplicationSnapshotQueryPort
@@ -34,6 +37,7 @@ import tools.jackson.databind.ObjectMapper
 import java.time.LocalDateTime
 
 @Service
+@Suppress("TooManyFunctions")
 class JobApplicationAdminServiceImpl(
     private val jobApplicationRepository: JobApplicationRepository,
     private val jobApplicationSnapshotQueryPort: JobApplicationSnapshotQueryPort,
@@ -65,6 +69,43 @@ class JobApplicationAdminServiceImpl(
         return JobApplicationStatusCountsResponse(
             totalCount = countsByStatus.values.sum(),
             counts = countsByStatus,
+        )
+    }
+
+    @Transactional(readOnly = true)
+    override fun jobSummaries(
+        requesterMemberId: Long,
+        pageable: Pageable,
+    ): JobApplicationJobSummaryResponse {
+        val jobs = jobApplicationSnapshotQueryPort.findManagedByMemberId(requesterMemberId, pageable)
+        val jobIds = jobs.content.map { it.jobId }.toSet()
+        val countsByJobId =
+            if (jobIds.isEmpty()) {
+                emptyMap()
+            } else {
+                jobApplicationRepository
+                    .summarizeByJobIds(jobIds)
+                    .associateBy { it.jobId }
+            }
+
+        return JobApplicationJobSummaryResponse(
+            content =
+                jobs.content.map { job ->
+                    val counts = countsByJobId[job.jobId]
+                    JobApplicationJobSummaryItemResponse(
+                        jobId = job.jobId,
+                        jobTitle = job.title,
+                        jobStatus = JobStatus.valueOf(job.status),
+                        applicantCount = counts?.applicantCount ?: 0L,
+                        pendingCount = counts?.pendingCount ?: 0L,
+                    )
+                },
+            page = jobs.number,
+            size = jobs.size,
+            totalElements = jobs.totalElements,
+            totalPages = jobs.totalPages,
+            first = jobs.isFirst,
+            last = jobs.isLast,
         )
     }
 

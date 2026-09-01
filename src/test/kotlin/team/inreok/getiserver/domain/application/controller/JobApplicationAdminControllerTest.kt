@@ -27,6 +27,8 @@ import team.inreok.getiserver.domain.application.dto.JobApplicationAdminAction
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationJobSummaryItemResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationJobSummaryResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusCountsResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
@@ -34,6 +36,7 @@ import team.inreok.getiserver.domain.application.exception.ApplicationActionNotA
 import team.inreok.getiserver.domain.application.exception.ApplicationNotFoundException
 import team.inreok.getiserver.domain.application.exception.ApplicationReviewForbiddenException
 import team.inreok.getiserver.domain.application.service.JobApplicationAdminService
+import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.member.entity.type.DepartmentType
 import team.inreok.getiserver.global.security.JwtTokenProvider
 import team.inreok.getiserver.global.security.SecurityConfig
@@ -115,6 +118,39 @@ class JobApplicationAdminControllerTest
                 .andExpect(jsonPath("$.data.totalCount").value(3))
                 .andExpect(jsonPath("$.data.counts.SUBMITTED").value(2))
                 .andExpect(jsonPath("$.data.counts.APPROVED").value(1))
+        }
+
+        @Test
+        fun `담당 공고별 지원 현황을 조회하면 Page 응답을 반환한다`() {
+            given(jobApplicationAdminService.jobSummaries(eq(100L), anyPageable()))
+                .willReturn(
+                    JobApplicationJobSummaryResponse(
+                        content =
+                            listOf(
+                                JobApplicationJobSummaryItemResponse(
+                                    jobId = 10L,
+                                    jobTitle = "Backend 개발자 인턴",
+                                    jobStatus = JobStatus.PUBLISHED,
+                                    applicantCount = 12L,
+                                    pendingCount = 4L,
+                                ),
+                            ),
+                        page = 0,
+                        size = 20,
+                        totalElements = 1L,
+                        totalPages = 1,
+                        first = true,
+                        last = true,
+                    ),
+                )
+
+            mockMvc
+                .perform(get("/api/v1/admin/job-applications/job-summaries").with(authOf(100L, "TEACHER")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.content[0].jobId").value(10))
+                .andExpect(jsonPath("$.data.content[0].applicantCount").value(12))
+                .andExpect(jsonPath("$.data.content[0].pendingCount").value(4))
+                .andExpect(jsonPath("$.data.content[0].jobStatus").value("PUBLISHED"))
         }
 
         @Test

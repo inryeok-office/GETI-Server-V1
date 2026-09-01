@@ -4,6 +4,7 @@ import org.springframework.data.domain.Pageable
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminActionRequest
 import team.inreok.getiserver.domain.application.dto.JobApplicationAdminListResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationDraftResponse
+import team.inreok.getiserver.domain.application.dto.JobApplicationJobSummaryResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusCountsResponse
 import team.inreok.getiserver.domain.application.dto.JobApplicationStatusHistoryResponse
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
@@ -16,6 +17,12 @@ import java.time.LocalDateTime
 interface JobApplicationAdminService {
     /** 관리자 목록과 동일한 범위의 지원서 상태별 건수를 한 번에 조회한다(DRAFT 제외). */
     fun statusCounts(): JobApplicationStatusCountsResponse
+
+    /** 현재 사용자가 담당하거나 등록한 공고별 지원 현황을 페이지 단위로 조회한다. */
+    fun jobSummaries(
+        requesterMemberId: Long,
+        pageable: Pageable,
+    ): JobApplicationJobSummaryResponse
 
     /**
      * 모든 교사·개발자가 담당 공고 여부와 무관하게 조회할 수 있다(요구사항 "권한" 절). 모든
