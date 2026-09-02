@@ -49,6 +49,16 @@ class Notification(
     @Column(name = "target_id")
     var targetId: Long? = null
 
+    // Idempotency Identity의 나머지 두 축이다(recipientMemberId + 이 둘, Issue #193). 과거 Row에는
+    // 값이 없어(원본 Event를 다시 알 수 없다) DB Column은 nullable로 남아 있다 -- "새 알림 생성은
+    // 두 값을 필수로 요구한다"라는 규칙은 NotificationCreateCommand/NotificationServiceImpl.create가
+    // Kotlin 계약으로 강제하며, Entity/DB는 과거 Row와의 호환성을 위해 강제하지 않는다.
+    @Column(name = "source_event_type", length = 100)
+    var sourceEventType: String? = null
+
+    @Column(name = "source_event_id")
+    var sourceEventId: Long? = null
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     var createdAt: LocalDateTime? = null
@@ -60,9 +70,9 @@ class Notification(
     @Column(name = "read_at")
     var readAt: LocalDateTime? = null
 
-    // 알림 삭제 API는 요구사항에 없어(원본 요구사항 문서 4절) 이 Column을 채우는 코드는 아직
-    // 없다. V2 Schema에 이미 있으므로 Mapping만 유지하고, 조회 Query는 방어적으로
-    // deletedAt IS NULL을 건다.
+    // 삭제 시각. null이 아니면 목록·읽지 않은 개수·읽음 처리 대상에서 모두 제외된다
+    // (Issue #187에서 DELETE API가 이 Column을 채우기 시작했다 -- V16의 "이번 범위에서는
+    // 사용하지 않는다"라는 설명은 그 시점 기준이고, 이미 병합된 Migration이라 수정하지 않는다).
     @Column(name = "deleted_at")
     var deletedAt: LocalDateTime? = null
 
@@ -74,5 +84,14 @@ class Notification(
         if (isRead) return
         isRead = true
         this.readAt = readAt
+    }
+
+    /**
+     * 알림을 Soft Delete한다. 읽음 여부는 건드리지 않는다 -- 읽지 않은 알림을 삭제하면 조회
+     * Query가 `deletedAt IS NULL`을 걸고 있어 읽지 않은 개수에서 자연히 빠지므로, 상태를 함께
+     * 바꿔 "읽었다"라는 사실을 지어낼 필요가 없다.
+     */
+    fun softDelete(deletedAt: LocalDateTime) {
+        this.deletedAt = deletedAt
     }
 }

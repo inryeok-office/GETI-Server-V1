@@ -78,6 +78,8 @@ class InquiryAnswerNotificationFailureIntegrationTest {
                 type = NotificationType.SYSTEM,
                 title = "",
                 content = "",
+                sourceEventType = "",
+                sourceEventId = 0L,
             )
 
     @Test

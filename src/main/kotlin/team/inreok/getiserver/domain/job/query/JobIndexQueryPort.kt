@@ -48,4 +48,11 @@ data class JobIndexSnapshot(
     val endDate: LocalDateTime?,
     /** `jobs.source_name`(nullable). Search의 `sourceName` 필터가 그대로 비교하는 값이다. */
     val sourceName: String?,
+    /**
+     * 근무지역·고용형태(nullable). 정해진 값 집합이 없는 표시 전용 문자열이라 검색어 매칭
+     * 대상이 아니고 목록 응답에 그대로 실린다(Issue #169). 기존 호출부를 깨지 않도록 기본값을
+     * 둔 additive 확장이다(AI 분석 필드와 같은 방식, Issue #144).
+     */
+    val location: String? = null,
+    val employmentType: String? = null,
 )

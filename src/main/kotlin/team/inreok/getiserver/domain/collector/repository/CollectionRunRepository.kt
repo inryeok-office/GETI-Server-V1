@@ -10,6 +10,8 @@ import team.inreok.getiserver.domain.collector.entity.type.CollectionRunStatus
 import java.time.LocalDateTime
 
 interface CollectionRunRepository : JpaRepository<CollectionRun, Long> {
+    fun findFirstByOrderByStartedAtDescIdDesc(): CollectionRun?
+
     // 같은 Source에 이미 진행 중인 실행(PENDING/RUNNING)이 있는지 확인한다(COLLECTOR_ALREADY_RUNNING).
     fun existsBySourceIdAndStatusIn(
         sourceId: Long,

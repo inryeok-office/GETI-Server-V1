@@ -23,9 +23,6 @@ data class ProgramUpdateResponse(
     val vacancyNotificationCount: Int,
     @param:Schema(description = "빈자리 알림이 실제로 생성됐는지 여부. 구독 기능 미구현으로 항상 false", example = "false")
     val notificationCreated: Boolean,
-    // [DiscordDeliveryResult] KDoc 참고: Phase 7에서 공통 Discord Delivery 계약으로 교체 예정이며
-    // Breaking Change가 될 수 있다(PR #81 리뷰 MINOR 지적).
-    val discordDelivery: DiscordDeliveryResult,
     @param:Schema(description = "수정 시각", example = "2026-08-02T09:00:00", nullable = true)
     val updatedAt: LocalDateTime?,
 )

@@ -70,6 +70,11 @@ interface InquiryRepository : JpaRepository<Inquiry, Long> {
         SELECT i FROM Inquiry i
         WHERE (:type IS NULL OR i.type = :type)
           AND (:status IS NULL OR i.status = :status)
+          AND (
+            :answered IS NULL
+            OR (:answered = TRUE AND i.answeredAt IS NOT NULL)
+            OR (:answered = FALSE AND i.answeredAt IS NULL)
+          )
           AND (:assigneeId IS NULL OR i.assigneeMemberId = :assigneeId)
           AND (:mineOnlyMemberId IS NULL OR i.assigneeMemberId = :mineOnlyMemberId)
           AND (
@@ -84,6 +89,7 @@ interface InquiryRepository : JpaRepository<Inquiry, Long> {
     fun searchForAdmin(
         @Param("type") type: InquiryType?,
         @Param("status") status: InquiryStatus?,
+        @Param("answered") answered: Boolean? = null,
         @Param("assigneeId") assigneeId: Long?,
         @Param("mineOnlyMemberId") mineOnlyMemberId: Long?,
         @Param("hasQuery") hasQuery: Boolean,

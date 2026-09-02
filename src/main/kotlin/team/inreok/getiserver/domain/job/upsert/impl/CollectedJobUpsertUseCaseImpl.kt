@@ -58,6 +58,8 @@ class CollectedJobUpsertUseCaseImpl(
             externalUrl = command.externalUrl
             recruitmentStartedAt = command.startDate
             recruitmentEndedAt = command.endDate
+            location = normalizeShortText(command.location)
+            employmentType = normalizeShortText(command.employmentType)
         }
 
         validateCommon(job)
@@ -95,5 +97,27 @@ class CollectedJobUpsertUseCaseImpl(
             existing.bodyMarkdown != command.content ||
             existing.externalUrl != command.externalUrl ||
             existing.recruitmentStartedAt != command.startDate ||
-            existing.recruitmentEndedAt != command.endDate
+            existing.recruitmentEndedAt != command.endDate ||
+            existing.location != normalizeShortText(command.location) ||
+            existing.employmentType != normalizeShortText(command.employmentType)
+
+    /**
+     * 외부 Provider가 준 근무지역·고용형태를 Column 제약에 맞게 정리한다(Issue #169).
+     *
+     * 잘라서라도 저장하는 이유는, 값 하나가 길다는 이유로 예외를 던지면 그 공고 자체가 저장되지
+     * 않고 CollectionRunError로 버려지기 때문이다. 외부 값은 우리가 고칠 수 없으므로 표시용
+     * 문자열 하나 때문에 공고 전체를 잃지 않는다(`DiscordPayloadFactory`가 Bot Schema 길이
+     * 제한을 다루는 방식과 같다). 사용자가 직접 입력하는 등록·수정 API는 이 경로를 타지 않고
+     * Bean Validation이 먼저 400으로 막는다.
+     *
+     * [hasContentChanged]도 같은 정규화를 거친 값끼리 비교한다. 저장 값과 비교 값이 다르면 같은
+     * 입력인데도 매번 "변경됨"으로 판정해 불필요한 Update와 색인 이벤트가 반복된다.
+     */
+    private fun normalizeShortText(value: String?): String? =
+        value?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_SHORT_TEXT_LENGTH)
+
+    companion object {
+        /** `jobs.location`/`jobs.employment_type`의 Column 길이다(V26). */
+        private const val MAX_SHORT_TEXT_LENGTH = 255
+    }
 }

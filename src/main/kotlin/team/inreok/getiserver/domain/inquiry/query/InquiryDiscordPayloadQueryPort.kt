@@ -8,9 +8,11 @@ import java.time.LocalDateTime
  * (후속 요구사항 문서 §19·§28). 방향과 이유는
  * [team.inreok.getiserver.domain.job.query.JobDiscordPayloadQueryPort]와 같다.
  *
- * `domain.inquiry.service.InquiryDiscordDeliveryQueryPort`와 혼동하지 않는다 -- 그쪽은 문의
- * 응답에 실을 **전달 상태**를 읽는 Module 내부 계약이고(공개되지 않음), 이쪽은 다른 Module에
- * **문의 내용**을 넘기는 공개 계약이다.
+ * 문의 응답의 `discordDeliveryStatus`/`discordDelivered` 필드와, 그 값을 읽던 Module 내부 계약
+ * `InquiryDiscordDeliveryQueryPort`(항상 `PENDING`만 반환)는 제거됐다 -- Discord 상태는 이제
+ * `discord_deliveries`를 소유한 Notification의 별도 조회 API로만 제공한다
+ * (`discord-event-wiring-plan.md` §6.2). 이 Port는 그 정리와 무관하게 다른 Module에 **문의
+ * 내용**을 넘기는 공개 계약이다.
  *
  * ## 개인정보 최소화 (§40)
  *
@@ -27,6 +29,17 @@ import java.time.LocalDateTime
 interface InquiryDiscordPayloadQueryPort {
     /** 존재하지 않으면 null을 반환한다. */
     fun findById(inquiryId: Long): InquiryDiscordPayloadSnapshot?
+
+    /**
+     * 관리자 Discord 전달 목록에 표시할 문의 이름을 배치로 읽는다(Issue #206). 존재하지 않는
+     * id는 결과 Map에서 빠진다.
+     *
+     * **제목이 아니라 [InquiryDiscordPayloadSnapshot.category]와 같은 `InquiryType.name`을
+     * 돌려준다.** 위 "개인정보 최소화(§40)"가 제목과 작성자 이름을 Module 밖으로 내보내지 못하게
+     * 하기 때문이다. category는 이미 Discord 알림으로 나가는 값이라 노출 범위가 넓어지지 않고,
+     * 관리자는 유형과 `targetId`로 대상을 식별할 수 있다.
+     */
+    fun findDisplayNamesByIds(inquiryIds: Set<Long>): Map<Long, String>
 }
 
 @NamedInterface

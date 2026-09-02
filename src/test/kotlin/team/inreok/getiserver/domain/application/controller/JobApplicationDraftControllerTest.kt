@@ -29,7 +29,7 @@ import team.inreok.getiserver.global.security.SecurityConfig
 import java.time.LocalDateTime
 
 @WebMvcTest(controllers = [JobApplicationDraftController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class JobApplicationDraftControllerTest
     @Autowired
@@ -72,7 +72,9 @@ class JobApplicationDraftControllerTest
                 applicantDesiredJob = null,
                 applicantTechStacks = emptyList(),
                 answers = emptyList(),
+                files = emptyList(),
                 submittedAt = null,
+                withdrawnAt = null,
                 createdAt = fixedTime,
                 updatedAt = fixedTime,
             )

@@ -57,6 +57,7 @@ DECISION_REQUIRED     사용자 결정이 필요(대규모 변경 대상)
 | Monitoring | Actuator · Micrometer · Prometheus · Grafana | Actuator(`health`만) | IMPLEMENTATION_GAP | Observability 전용 PR | 이번 범위 아님 |
 | Logging/Tracing | Loki · OpenTelemetry · Grafana Tempo | 미구현 | IMPLEMENTATION_GAP | Observability 전용 PR | 이번 범위 아님 |
 | API 공통 응답 | `{success, data, meta.requestId}` / `{success:false, error:{code,message,fieldErrors}, meta}` | `{success, data, meta.requestId}` / `{success:false, error:{code,message,status,path,timestamp,fieldErrors}, meta}` | **RESOLVED** | 아래 상세 참고 | 사용자 결정에 따라 Notion 구조로 반영(아래 참고) |
+| 프로필 이미지 / 기업 로고 Field | `PATCH /api/v1/me/profile` 요청 `profileImageUrl`(String URL) | 요청 `profileImageFileId`(Long, nullable), 응답만 `profileImageUrl`(Presigned URL) | **RESOLVED** | 아래 상세 참고 | 사용자 결정에 따라 저장소 구현 유지, Notion 명세 갱신(아래 참고) |
 | Pagination | `page=0, size=20, 최대 size=100` | `page=0, size=20`(최대 제한 없었음) | IMPLEMENTATION_GAP | Notion 기준 채택 | **이번 PR에서 반영**(아래 참고) |
 | Git Branch | `feature/{n}-{domain}-{feature}`, `fix/`, `refactor/`, `chore/`, `release/vX.Y.Z`, `hotfix/` | `chore/{n}-{설명}`, `refactor/{n}-{설명}`(feature/fix/release/hotfix 미사용, 아직 기능 개발 전이라 자연스러움) | STALE_NOTION 가능성 | 아래 상세 참고 | 사용자 결정 필요 |
 | Issue/PR 제목 | `[Domain] 작업 내용` | `[TYPE] 작업 내용`(예: `[CHORE]`) | STALE_NOTION 가능성 | 아래 상세 참고 | 사용자 결정 필요 |
@@ -132,6 +133,32 @@ Notion 컨벤션은 영문 Commit(`type(scope): subject`)과 `[Domain]` Issue/PR
 **이번 PR에서 Git Convention을 변경하지 않았다.** 근거: 현재 저장소 우선순위(§ Source of Truth, 아래 참고)에서 "현재 사용자 명시 지시"와 "Repository의 실제 Build·Test·Code(이미 확립된 패턴)"가 Notion보다 상위이며, 이미 10개 PR이 한글 Commit으로 병합되어 있어 지금 영문으로 전환하면 History 내에서 언어가 섞이게 된다.
 
 **사용자 결정이 필요한 질문**: Notion 컨벤션이 실제 팀 표준이라면 (a) 이번 시점부터 영문 Commit + `[Domain]` 제목으로 전환하고 Notion을 Source of Truth로 삼을지, (b) 현재 한글 Commit 방식이 이 프로젝트의 실제 표준이므로 Notion 컨벤션 문서를 갱신해야 하는지. Branch Naming의 `{domain}` 조각(`feature/12-auth-dg-oauth-login`)은 실제 Domain 개발이 시작되면 자연스럽게 채택할 수 있어 보이며 큰 충돌은 아니다.
+
+## CONTRACT_MISMATCH 상세
+
+### 1. 프로필 이미지 / 기업 로고 File 연동 Field
+
+Notion API 명세서는 `PATCH /api/v1/me/profile` 요청이 `profileImageUrl`(String URL)을 받도록 기술했다. 그러나 실제 Schema는 `members.profile_image_file_id BIGINT`이고 File 도메인은 URL이 아니라 `fileId`를 발급하므로, 명세 그대로는 구현할 수 없다.
+
+**사용자 결정으로 `profileImageFileId` 수용을 선택했고 #86(PR #88)에서 구현·Merge했다(2026-08-08).**
+
+서버는 이 불일치를 조용히 무시하지 않고 명시적으로 거부한다. `profileImageUrl`을 받아 넘기면 Client가 이미지가 저장된 줄 오해하므로, 전용 안내 메시지와 함께 400을 반환한다(`MemberServiceImpl.kt:104-113`). 허용 Field 목록(`ALLOWED_PROFILE_UPDATE_FIELDS`, `MemberServiceImpl.kt:256-259`)에 `profileImageUrl`을 일부러 남겨 두어, "알 수 없는 Field" 오류 대신 이 안내가 나가게 했다.
+
+요청 Field만 바뀌고 **응답 Field 이름 `profileImageUrl`은 유지된다** -- 값이 하드코딩 `null`에서 실제 Presigned URL로 바뀌었을 뿐이다(`MemberServiceImpl.kt:64`, `:191`, `:218`). 요청과 응답의 Field 이름이 달라 혼동하기 쉬운 지점이라 명세에서 요청/응답을 분리해 기술해야 한다.
+
+기업 로고도 같은 패턴이다. 요청은 `logoFileId`(`CompanyCreateRequest.kt:62`, `CompanyUpdateRequest.kt:50`), 응답은 `logoUrl`(Presigned URL, 없으면 `null`)이다.
+
+`profileImageFileId`/`logoFileId` 도입으로 해당 Endpoint에 File 도메인 오류 계약이 추가됐다.
+
+| HTTP | Error Code | 발생 시점 |
+| --- | --- | --- |
+| 400 | `PROFILE_VALIDATION_FAILED` | 요청 값 형식 오류, 허용되지 않은 Field, `profileImageUrl` 전달, `links` 형식/개수/길이/scheme 오류 |
+| 400 | `FILE_PURPOSE_MISMATCH` | `PROFILE_IMAGE` 용도로 업로드하지 않은 파일 |
+| 403 | `FILE_NOT_OWNED` | 본인이 업로드하지 않은 파일을 연결하려 함 |
+| 404 | `FILE_NOT_FOUND` | 파일이 없거나 사용할 수 없는 상태 |
+| 409 | `FILE_ALREADY_LINKED` | 이미 다른 리소스에 연결된 파일 |
+
+**2026-09-02 갱신 (RESOLVED)**: 사용자가 Notion API 명세서를 위 실제 구현에 맞춰 직접 갱신했다(Issue #292). 저장소 애플리케이션 코드는 변경하지 않았다 -- #86(PR #88)에서 이미 완료된 상태이며, 이번 항목은 명세와 저장소의 기록을 일치시키는 문서 작업이다.
 
 ## Domain Map (문서화만, Package 미생성)
 

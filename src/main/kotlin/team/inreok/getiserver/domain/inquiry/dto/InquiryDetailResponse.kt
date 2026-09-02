@@ -1,7 +1,6 @@
 package team.inreok.getiserver.domain.inquiry.dto
 
 import io.swagger.v3.oas.annotations.media.Schema
-import team.inreok.getiserver.domain.inquiry.entity.type.InquiryDiscordDeliveryStatus
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryStatus
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryType
 import java.time.LocalDateTime
@@ -26,11 +25,6 @@ data class InquiryDetailResponse(
     val author: InquiryAuthorResponse,
     @param:Schema(description = "첨부파일 목록(연결한 파일이 없으면 빈 배열)")
     val files: List<InquiryFileResponse>,
-    @param:Schema(
-        description = "Discord 접수 알림 전달 상태. Notification 연동 전이라 항상 PENDING(Phase 5에서 실제 값 연결 예정)",
-        example = "PENDING",
-    )
-    val discordDeliveryStatus: InquiryDiscordDeliveryStatus,
     @param:Schema(
         description =
             "담당 개발자 정보. 학생·교사 응답에서는 항상 null이다 -- 개발자의 운영 정보를 " +
