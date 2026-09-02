@@ -53,7 +53,7 @@ interface JobRepository : JpaRepository<Job, Long> {
                 )
             )
         )
-          AND (:query IS NULL OR LOWER(j.title) LIKE LOWER(CONCAT('%', :query, '%')) ESCAPE '\')
+          AND (:query IS NULL OR LOWER(j.title) LIKE LOWER(CONCAT('%', CAST(:query AS string), '%')) ESCAPE '\')
         ORDER BY j.createdAt DESC, j.id DESC
         """,
     )
