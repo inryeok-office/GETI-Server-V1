@@ -1,11 +1,22 @@
 package team.inreok.getiserver.domain.job.service
 
+import org.springframework.data.domain.Pageable
+import team.inreok.getiserver.domain.job.dto.JobAdminListResponse
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
 import team.inreok.getiserver.domain.job.dto.JobUpdateRequest
+import team.inreok.getiserver.domain.job.entity.type.JobStatus
 
 interface JobService {
+    /** 관리자 공고 목록. 상태를 생략하면 삭제되지 않은 공고만, 지정하면 해당 상태를 조회한다. */
+    fun listForAdmin(
+        query: String?,
+        status: JobStatus?,
+        pageable: Pageable,
+        requesterId: Long,
+    ): JobAdminListResponse
+
     /** 공고를 등록하거나 임시저장한다. `status = PUBLISHED`면 게시 필수값을 모두 검증한다. */
     fun create(
         request: JobCreateRequest,

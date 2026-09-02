@@ -1,6 +1,7 @@
 package team.inreok.getiserver.domain.job.service.impl
 
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.company.query.CompanyQuery
@@ -14,6 +15,8 @@ import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessS
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
 import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
 import team.inreok.getiserver.domain.job.access.canViewJobFiles
+import team.inreok.getiserver.domain.job.dto.JobAdminListItemResponse
+import team.inreok.getiserver.domain.job.dto.JobAdminListResponse
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobFileResponse
@@ -33,6 +36,7 @@ import team.inreok.getiserver.domain.job.exception.JobValidationFailedException
 import team.inreok.getiserver.domain.job.repository.JobRepository
 import team.inreok.getiserver.domain.job.service.JobService
 import team.inreok.getiserver.domain.job.service.PUBLIC_VISIBLE_STATUSES
+import team.inreok.getiserver.domain.job.service.escapeLikePattern
 import team.inreok.getiserver.domain.job.service.validateCommon
 import team.inreok.getiserver.domain.job.service.validateForPublish
 import team.inreok.getiserver.domain.member.entity.type.RoleType
@@ -56,6 +60,31 @@ class JobServiceImpl(
     private val fileLinkPort: FileLinkPort,
     private val memberRoleQueryPort: MemberRoleQueryPort,
 ) : JobService {
+    @Transactional(readOnly = true)
+    override fun listForAdmin(
+        query: String?,
+        status: JobStatus?,
+        pageable: Pageable,
+        requesterId: Long,
+    ): JobAdminListResponse {
+        val normalizedQuery = query?.trim()?.takeIf { it.isNotEmpty() }?.let(::escapeLikePattern)
+        val page = jobRepository.searchForAdmin(normalizedQuery, status, pageable)
+        val companies =
+            companyQuery.findActiveSummaries(
+                companyIds = page.content.map { it.companyId }.toSet(),
+                requesterId = requesterId,
+            )
+        return JobAdminListResponse(
+            content = page.content.map { JobAdminListItemResponse.from(it, companies[it.companyId]) },
+            page = page.number,
+            size = page.size,
+            totalElements = page.totalElements,
+            totalPages = page.totalPages,
+            first = page.isFirst,
+            last = page.isLast,
+        )
+    }
+
     @Transactional
     override fun create(
         request: JobCreateRequest,

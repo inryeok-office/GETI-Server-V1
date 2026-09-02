@@ -10,6 +10,7 @@ import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
 import org.springframework.context.annotation.Import
+import org.springframework.data.domain.PageRequest
 import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
@@ -24,6 +25,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
+import team.inreok.getiserver.domain.job.dto.JobAdminListItemResponse
+import team.inreok.getiserver.domain.job.dto.JobAdminListResponse
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
@@ -67,6 +70,63 @@ class JobAdminControllerTest
                 roles.map { SimpleGrantedAuthority("ROLE_$it") },
             ),
         )
+
+        @Test
+        fun `교사는 관리자 공고 목록을 검색과 상태 필터로 조회한다`() {
+            given(jobService.listForAdmin("백엔드", JobStatus.DRAFT, PageRequest.of(1, 2), 7L))
+                .willReturn(adminListResponse())
+
+            mockMvc
+                .perform(
+                    get("/api/v1/admin/jobs")
+                        .with(authOf(7L, "TEACHER"))
+                        .param("query", "백엔드")
+                        .param("status", "DRAFT")
+                        .param("page", "1")
+                        .param("size", "2"),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content[0].jobId").value(1))
+                .andExpect(jsonPath("$.data.content[0].status").value("DRAFT"))
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+        }
+
+        @Test
+        fun `개발자도 관리자 공고 목록을 조회할 수 있다`() {
+            given(jobService.listForAdmin(null, null, PageRequest.of(0, 20), 7L)).willReturn(adminListResponse())
+
+            mockMvc
+                .perform(get("/api/v1/admin/jobs").with(authOf(7L, "DEVELOPER")))
+                .andExpect(status().isOk)
+        }
+
+        @Test
+        fun `학생은 관리자 공고 목록을 조회할 수 없다`() {
+            mockMvc
+                .perform(get("/api/v1/admin/jobs").with(authOf(7L, "STUDENT")))
+                .andExpect(status().isForbidden)
+
+            verify(jobService, never()).listForAdmin(any(), any(), anyPageable(), anyLong())
+        }
+
+        @Test
+        fun `인증 없이 관리자 공고 목록을 조회할 수 없다`() {
+            mockMvc
+                .perform(get("/api/v1/admin/jobs"))
+                .andExpect(status().isUnauthorized)
+
+            verify(jobService, never()).listForAdmin(any(), any(), anyPageable(), anyLong())
+        }
+
+        @Test
+        fun `잘못된 상태 값은 400을 반환한다`() {
+            mockMvc
+                .perform(get("/api/v1/admin/jobs").with(authOf(7L, "TEACHER")).param("status", "INVALID"))
+                .andExpect(status().isBadRequest)
+
+            verify(jobService, never()).listForAdmin(any(), any(), anyPageable(), anyLong())
+        }
 
         // --- 등록 ---
 
@@ -359,6 +419,34 @@ class JobAdminControllerTest
 
         private fun anyStatusRequest(): JobStatusUpdateRequest =
             any(JobStatusUpdateRequest::class.java) ?: JobStatusUpdateRequest(JobStatus.PUBLISHED)
+
+        private fun anyPageable(): org.springframework.data.domain.Pageable =
+            any(org.springframework.data.domain.Pageable::class.java) ?: PageRequest.of(0, 20)
+
+        private fun adminListResponse() =
+            JobAdminListResponse(
+                content =
+                    listOf(
+                        JobAdminListItemResponse(
+                            jobId = 1L,
+                            title = "2026 상반기 백엔드 채용",
+                            company = CompanySummary(1L, "인력개발원"),
+                            postingType = PostingType.MOU,
+                            applicationMethod = ApplicationMethod.EXTERNAL,
+                            status = JobStatus.DRAFT,
+                            startDate = null,
+                            endDate = null,
+                            createdAt = null,
+                            updatedAt = null,
+                        ),
+                    ),
+                page = 1,
+                size = 2,
+                totalElements = 1,
+                totalPages = 1,
+                first = false,
+                last = true,
+            )
 
         private fun createBody(
             companyId: Long = 1L,
