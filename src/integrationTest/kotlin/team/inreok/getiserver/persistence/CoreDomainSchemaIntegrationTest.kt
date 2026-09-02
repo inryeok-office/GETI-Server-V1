@@ -16,6 +16,9 @@ import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import team.inreok.getiserver.domain.ai.entity.JobAiAnalysis
+import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
+import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
+import team.inreok.getiserver.domain.ai.entity.type.AiStatus
 import team.inreok.getiserver.domain.ai.repository.JobAiAnalysisRepository
 import team.inreok.getiserver.domain.application.entity.JobApplication
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
@@ -66,7 +69,6 @@ import team.inreok.getiserver.domain.program.entity.type.ProgramType
 import team.inreok.getiserver.domain.program.repository.ProgramApplicationRepository
 import team.inreok.getiserver.domain.program.repository.ProgramRepository
 import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreference
-import team.inreok.getiserver.domain.recommendation.entity.MemberJobPreferenceId
 import team.inreok.getiserver.domain.recommendation.entity.Recommendation
 import team.inreok.getiserver.domain.recommendation.entity.type.ExclusionType
 import team.inreok.getiserver.domain.recommendation.entity.type.SuitabilityLevel
@@ -110,7 +112,7 @@ class CoreDomainSchemaIntegrationTest
         private val auditLogRepository: AuditLogRepository,
     ) {
         @Test
-        fun `Flyway로 생성한 Schema에는 정확히 36개의 비즈니스 Table이 있다`() {
+        fun `Flyway로 생성한 Schema에는 정확히 45개의 비즈니스 Table이 있다`() {
             // persistence_probe는 integrationTest 전용 기술 검증 Table(V1__create_persistence_probe.sql)이며
             // GETI 비즈니스 Domain을 나타내지 않으므로 집계에서 제외한다. 최소 19개 Table ERD 기준
             // (docs/architecture/erd.md) 이후 Member 도메인 전공/기술 스택 정규화를 위해
@@ -128,7 +130,22 @@ class CoreDomainSchemaIntegrationTest
             // inquiry_answers 1개 Table을 추가해 34개가 되었다(V18 Migration). Notification 도메인이
             // Discord 전달 상태의 Source of Truth가 되면서 discord_deliveries,
             // discord_delivery_attempts 2개 Table을 추가해 36개가 되었다(V19 Migration,
-            // docs/notification/discord-delivery-plan.md).
+            // docs/notification/discord-delivery-plan.md). Application Phase 5(Epic #75,
+            // Issue #133) 상태 이력·제출 Snapshot을 위해 job_application_status_histories,
+            // job_application_submissions 2개 Table을 추가해 38개가 되었다(V20 Migration).
+            // Recommendation R3(Issue #152) 추천 기능 ON/OFF 설정을 위해 recommendation_preferences
+            // 1개 Table을 추가해 39개가 되었다(V23 Migration). Recommendation R4(Issue #160) 일일
+            // 추천 Generation 상태 저장을 위해 recommendation_generation_states 1개 Table을
+            // 추가해 40개가 되었다(V25 Migration). Portfolio Core Phase 1(수합 요청)에서 제출 대상
+            // 학생을 저장하는 portfolio_request_targets 1개 Table을 추가해 41개가 되었다(V27 Migration).
+            // 회원 프로필 복수 링크 저장을 위해 member_profile_links 1개 Table을 추가해 42개가
+            // 되었다(V33 Migration). Push 기기 등록·해제 및 알림 설정(Issue #189)을 위해
+            // notification_devices, notification_settings 2개 Table을 추가해 44개가 되었다(V36
+            // Migration -- V33은 같은 시점에 병합된 다른 PR(#238, 회원 프로필 링크)이 먼저
+            // 선점해 충돌을 피하려 V34/V35(다른 진행 중 PR)를 건너뛰고 V36을 사용했다). FCM/APNs
+            // Push Provider 연동(Issue #190)의 Push Delivery 상태·재시도 관리를 위해
+            // push_deliveries 1개 Table을 추가해 45개가 되었다(V37 Migration -- V35는 같은 시점에
+            // 진행 중인 다른 PR(#194, 알림 보관 기한 정리)이 선점해 건너뛰었다).
             @Suppress("UNCHECKED_CAST")
             val tableCount =
                 entityManager
@@ -141,7 +158,7 @@ class CoreDomainSchemaIntegrationTest
                         """.trimIndent(),
                     ).singleResult as Number
 
-            assertThat(tableCount.toInt()).isEqualTo(36)
+            assertThat(tableCount.toInt()).isEqualTo(45)
         }
 
         @Test
@@ -327,24 +344,33 @@ class CoreDomainSchemaIntegrationTest
         }
 
         @Test
-        fun `member_job_preferences는 member_id와 job_id 복합키를 사용하고 exclusion은 NULL을 허용한다`() {
+        fun `member_job_preferences는 Surrogate id를 PK로 쓰고 member_id와 job_id 조합은 UNIQUE이며 exclusion은 NULL을 허용한다`() {
             val member = persistMember("preference-subject")
             val company = persistCompany()
             val job = jobRepository.saveAndFlush(newJob(company.id!!))
 
             val preference =
                 memberJobPreferenceRepository.saveAndFlush(
-                    MemberJobPreference(MemberJobPreferenceId(member.id!!, job.id!!), bookmarked = true),
+                    MemberJobPreference(memberId = member.id!!, jobId = job.id!!, bookmarked = true),
                 )
 
+            assertThat(preference.id).isNotNull
             assertThat(preference.exclusion).isNull()
 
             preference.exclusion = ExclusionType.SIMILAR_JOBS
             memberJobPreferenceRepository.saveAndFlush(preference)
 
-            val found = memberJobPreferenceRepository.findById(MemberJobPreferenceId(member.id!!, job.id!!))
+            val found = memberJobPreferenceRepository.findById(preference.id!!)
             assertThat(found).isPresent
             assertThat(found.get().exclusion).isEqualTo(ExclusionType.SIMILAR_JOBS)
+
+            // (member_id, job_id) 조합의 유일성은 이제 PK가 아니라
+            // uk_member_job_preferences_member_job UNIQUE 제약이 보존한다(V24 Migration).
+            assertThatThrownBy {
+                memberJobPreferenceRepository.saveAndFlush(
+                    MemberJobPreference(memberId = member.id!!, jobId = job.id!!),
+                )
+            }.isInstanceOf(DataIntegrityViolationException::class.java)
         }
 
         @Test
@@ -371,6 +397,57 @@ class CoreDomainSchemaIntegrationTest
         }
 
         @Test
+        fun `job_ai_analyses는 V21이 추가한 구조화 결과 Column을 저장·조회한다`() {
+            val company = persistCompany()
+            val job = jobRepository.saveAndFlush(newJob(company.id!!))
+
+            val saved =
+                jobAiAnalysisRepository.saveAndFlush(
+                    JobAiAnalysis(
+                        jobId = job.id!!,
+                        status = AiStatus.COMPLETED,
+                        requestedAt = LocalDateTime.now(),
+                    ).apply {
+                        summary = "요약"
+                        requiredSkills = """[{"techStackId":1,"name":"Spring Boot"}]"""
+                        preferredSkills = """[{"techStackId":null,"name":"Docker"}]"""
+                        highSchoolGraduateFit = AiFitLevel.SUITABLE
+                        entryLevelFit = AiFitLevel.SUITABLE
+                        difficulty = AiDifficulty.NORMAL
+                        provider = "OPENAI"
+                        model = "gpt-4o-mini"
+                        promptVersion = "JOB_ANALYSIS_V1"
+                        analysisVersion = 1
+                        completedAt = LocalDateTime.now()
+                    },
+                )
+            entityManager.flush()
+            entityManager.clear()
+
+            val found = jobAiAnalysisRepository.findById(saved.jobId).orElseThrow()
+            assertThat(found.requiredSkills).contains("Spring Boot")
+            assertThat(found.highSchoolGraduateFit).isEqualTo(AiFitLevel.SUITABLE)
+            assertThat(found.difficulty).isEqualTo(AiDifficulty.NORMAL)
+            assertThat(found.provider).isEqualTo("OPENAI")
+            assertThat(found.analysisVersion).isEqualTo(1)
+        }
+
+        @Test
+        fun `job_ai_analyses의 difficulty는 잘못된 값을 CHECK 제약으로 거부한다`() {
+            val company = persistCompany()
+            val job = jobRepository.saveAndFlush(newJob(company.id!!))
+
+            assertThatThrownBy {
+                entityManager
+                    .createNativeQuery(
+                        "INSERT INTO job_ai_analyses (job_id, status, reanalysis_count, requested_at, difficulty) " +
+                            "VALUES (:jobId, 'PENDING', 0, now(), 'IMPOSSIBLE')",
+                    ).setParameter("jobId", job.id!!)
+                    .executeUpdate()
+            }.isInstanceOf(Exception::class.java)
+        }
+
+        @Test
         fun `recommendations는 member_id, job_id, recommendation_date 조합이 유일해야 한다`() {
             val member = persistMember("recommend-subject")
             val company = persistCompany()
@@ -384,6 +461,8 @@ class CoreDomainSchemaIntegrationTest
                     recommendationDate = today,
                     score = BigDecimal("87.5000"),
                     suitability = SuitabilityLevel.RECOMMENDED,
+                    rank = 1,
+                    algorithmVersion = 1,
                 ),
             )
 
@@ -395,6 +474,8 @@ class CoreDomainSchemaIntegrationTest
                         recommendationDate = today,
                         score = BigDecimal("10.0000"),
                         suitability = SuitabilityLevel.UNSUITABLE,
+                        rank = 1,
+                        algorithmVersion = 1,
                     ),
                 )
             }.isInstanceOf(DataIntegrityViolationException::class.java)
@@ -456,9 +537,7 @@ class CoreDomainSchemaIntegrationTest
                     PortfolioRequest(
                         createdByMemberId = member.id!!,
                         title = "3학년 포트폴리오 제출",
-                        targetCondition = """{"grade":3}""",
-                        submissionStartedAt = LocalDateTime.now(),
-                        submissionEndedAt = LocalDateTime.now().plusDays(7),
+                        dueAt = LocalDateTime.now().plusDays(7),
                     ),
                 )
 

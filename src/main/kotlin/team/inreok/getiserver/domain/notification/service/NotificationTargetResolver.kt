@@ -1,10 +1,16 @@
 package team.inreok.getiserver.domain.notification.service
 
 import org.springframework.stereotype.Component
+import team.inreok.getiserver.domain.application.query.JobApplicationNotificationTargetQueryPort
+import team.inreok.getiserver.domain.application.query.JobApplicationNotificationTargetSnapshot
+import team.inreok.getiserver.domain.inquiry.query.InquiryNotificationTargetQueryPort
+import team.inreok.getiserver.domain.inquiry.query.InquiryNotificationTargetSnapshot
 import team.inreok.getiserver.domain.job.query.JobNotificationTargetQueryPort
+import team.inreok.getiserver.domain.job.query.JobNotificationTargetSnapshot
 import team.inreok.getiserver.domain.notification.entity.type.NotificationTargetType
 import team.inreok.getiserver.domain.notification.entity.type.NotificationTargetUnavailableReason
 import team.inreok.getiserver.domain.program.query.ProgramNotificationTargetQueryPort
+import team.inreok.getiserver.domain.program.query.ProgramNotificationTargetSnapshot
 
 /**
  * 알림이 가리키는 원본 리소스로 지금 이동할 수 있는지 서버에서 계산한다(원본 요구사항 문서
@@ -14,55 +20,98 @@ import team.inreok.getiserver.domain.program.query.ProgramNotificationTargetQuer
  * 응답 한 번에 최대 100건이 실릴 수 있으므로 대상을 [NotificationTargetType]별로 모아 Domain당
  * 최대 한 번만 조회한다(N+1 방지).
  *
- * 현재 해석할 수 있는 대상은 [NotificationTargetType.JOB]과 [NotificationTargetType.PROGRAM]
- * 뿐이다. `inquiry`/`portfolio`는 Domain에 Service 계층 자체가 없고, `JOB_APPLICATION`과
- * `MEMBER_APPROVAL`은 Domain Event를 연결하는 시점에 함께 붙인다. 그때까지 이 대상들은
- * "이동 불가, 이유 없음"으로 내려간다 — 없는 권한 판정을 지어내지 않기 위해서다.
+ * 판정 기준은 대상에 따라 두 갈래다.
+ * - 공개 리소스([NotificationTargetType.JOB], [NotificationTargetType.PROGRAM]): 상태가 공개
+ *   대상인지로 판정한다. 인증된 사용자면 누구나 볼 수 있어 요청자가 누구인지는 상관없다.
+ * - 소유 리소스([NotificationTargetType.INQUIRY], [NotificationTargetType.JOB_APPLICATION]):
+ *   요청자가 소유자인지로 판정한다(Issue #187). 둘 다 Soft Delete Column이 없어 Row가 없으면
+ *   [NotificationTargetUnavailableReason.DELETED]다.
+ *
+ * [NotificationTargetType.MEMBER_APPROVAL]과 [NotificationTargetType.PORTFOLIO_REQUEST]는 아직
+ * 해석하지 않는다 -- 승인 결과는 이동해서 볼 상세 화면 자체가 없고, `portfolio`는 Domain에
+ * Service 계층이 없다. 그때까지 이 대상들은 "이동 불가, 이유 없음"으로 내려간다(없는 판정을
+ * 지어내지 않기 위해서다).
  */
 @Component
 class NotificationTargetResolver(
     private val jobNotificationTargetQueryPort: JobNotificationTargetQueryPort,
     private val programNotificationTargetQueryPort: ProgramNotificationTargetQueryPort,
+    private val inquiryNotificationTargetQueryPort: InquiryNotificationTargetQueryPort,
+    private val jobApplicationNotificationTargetQueryPort: JobApplicationNotificationTargetQueryPort,
 ) {
     /**
      * [targets]에 담긴 (대상 유형, 대상 id) 쌍을 한 번에 해석한다. 결과 Map에는 [targets]의 모든
      * 항목이 그대로 담긴다.
      *
-     * `viewerMemberId`는 계약에만 남기고 아직 판정에 쓰지 않는다 — 소유자·역할 기반으로
-     * [NotificationTargetUnavailableReason.FORBIDDEN]을 판정해야 하는 대상(JOB_APPLICATION 등)이
-     * 아직 없기 때문이다. 공고·프로그램은 인증된 사용자면 누구나 볼 수 있다(SecurityConfig).
+     * [viewerMemberId]는 소유 리소스의 소유자 판정에 쓴다. 알림 수신자 본인의 권한으로만
+     * 계산해야 하며, 다른 사용자의 권한으로 판정하지 않는다.
      */
     fun resolveAll(
         targets: Set<NotificationTargetRef>,
-        @Suppress("UNUSED_PARAMETER") viewerMemberId: Long,
+        viewerMemberId: Long,
     ): Map<NotificationTargetRef, NotificationTargetAvailability> {
         if (targets.isEmpty()) return emptyMap()
 
-        // 해당 유형의 대상이 하나도 없으면 Port를 아예 호출하지 않는다 — 다른 Module에 빈 질의를
-        // 보내지 않기 위해서다("Domain당 최대 1회, 필요할 때만").
+        val snapshots = loadSnapshots(targets)
+        return targets.associateWith { target -> resolveOne(target, snapshots, viewerMemberId) }
+    }
+
+    /**
+     * 대상 Domain별로 한 번씩만 조회한다. 해당 유형의 대상이 하나도 없으면 Port를 아예 호출하지
+     * 않는다 — 다른 Module에 빈 질의를 보내지 않기 위해서다("Domain당 최대 1회, 필요할 때만").
+     */
+    private fun loadSnapshots(targets: Set<NotificationTargetRef>): TargetSnapshots {
         val jobIds = targets.idsOf(NotificationTargetType.JOB)
         val programIds = targets.idsOf(NotificationTargetType.PROGRAM)
-        val jobs = if (jobIds.isEmpty()) emptyMap() else jobNotificationTargetQueryPort.findAllByIds(jobIds)
-        val programs =
-            if (programIds.isEmpty()) emptyMap() else programNotificationTargetQueryPort.findAllByIds(programIds)
+        val inquiryIds = targets.idsOf(NotificationTargetType.INQUIRY)
+        val applicationIds = targets.idsOf(NotificationTargetType.JOB_APPLICATION)
+        return TargetSnapshots(
+            jobs = if (jobIds.isEmpty()) emptyMap() else jobNotificationTargetQueryPort.findAllByIds(jobIds),
+            programs =
+                if (programIds.isEmpty()) emptyMap() else programNotificationTargetQueryPort.findAllByIds(programIds),
+            inquiries =
+                if (inquiryIds.isEmpty()) emptyMap() else inquiryNotificationTargetQueryPort.findAllByIds(inquiryIds),
+            applications =
+                if (applicationIds.isEmpty()) {
+                    emptyMap()
+                } else {
+                    jobApplicationNotificationTargetQueryPort.findAllByIds(applicationIds)
+                },
+        )
+    }
 
-        return targets.associateWith { target ->
-            when (target.targetType) {
-                NotificationTargetType.JOB -> {
-                    jobs[target.targetId]?.let { availabilityOf(target, it.status, it.deleted) } ?: DELETED_AVAILABILITY
-                }
+    private fun resolveOne(
+        target: NotificationTargetRef,
+        snapshots: TargetSnapshots,
+        viewerMemberId: Long,
+    ): NotificationTargetAvailability =
+        when (target.targetType) {
+            NotificationTargetType.JOB -> {
+                snapshots.jobs[target.targetId]?.let { availabilityOf(target, it.status, it.deleted) }
+                    ?: DELETED_AVAILABILITY
+            }
 
-                NotificationTargetType.PROGRAM -> {
-                    programs[target.targetId]?.let { availabilityOf(target, it.status, it.deleted) }
-                        ?: DELETED_AVAILABILITY
-                }
+            NotificationTargetType.PROGRAM -> {
+                snapshots.programs[target.targetId]?.let { availabilityOf(target, it.status, it.deleted) }
+                    ?: DELETED_AVAILABILITY
+            }
 
-                else -> {
-                    UNSUPPORTED_AVAILABILITY
-                }
+            NotificationTargetType.INQUIRY -> {
+                snapshots.inquiries[target.targetId]
+                    ?.let { ownedAvailabilityOf(target, it.authorMemberId, viewerMemberId) }
+                    ?: DELETED_AVAILABILITY
+            }
+
+            NotificationTargetType.JOB_APPLICATION -> {
+                snapshots.applications[target.targetId]
+                    ?.let { ownedAvailabilityOf(target, it.applicantMemberId, viewerMemberId) }
+                    ?: DELETED_AVAILABILITY
+            }
+
+            else -> {
+                UNSUPPORTED_AVAILABILITY
             }
         }
-    }
 
     private fun availabilityOf(
         target: NotificationTargetRef,
@@ -83,16 +132,42 @@ class NotificationTargetResolver(
             }
 
             else -> {
-                NotificationTargetAvailability(
-                    available = true,
-                    reason = null,
-                    deepLink = NotificationDeepLink.of(target.targetType, target.targetId),
-                )
+                availableAt(target)
             }
         }
 
+    /**
+     * 소유자만 열람할 수 있는 대상을 판정한다. 상태는 보지 않는다 -- 문의는 상태와 무관하게
+     * 작성자가 볼 수 있고, 지원서도 지원자 본인은 DRAFT를 포함해 볼 수 있기 때문이다.
+     */
+    private fun ownedAvailabilityOf(
+        target: NotificationTargetRef,
+        ownerMemberId: Long,
+        viewerMemberId: Long,
+    ): NotificationTargetAvailability =
+        if (ownerMemberId == viewerMemberId) {
+            availableAt(target)
+        } else {
+            FORBIDDEN_AVAILABILITY
+        }
+
+    private fun availableAt(target: NotificationTargetRef): NotificationTargetAvailability =
+        NotificationTargetAvailability(
+            available = true,
+            reason = null,
+            deepLink = NotificationDeepLink.of(target.targetType, target.targetId),
+        )
+
     private fun Set<NotificationTargetRef>.idsOf(targetType: NotificationTargetType): Set<Long> =
         asSequence().filter { it.targetType == targetType }.map { it.targetId }.toSet()
+
+    /** 한 번의 해석에 필요한 대상 Domain 조회 결과를 함께 들고 다니기 위한 값이다. */
+    private data class TargetSnapshots(
+        val jobs: Map<Long, JobNotificationTargetSnapshot>,
+        val programs: Map<Long, ProgramNotificationTargetSnapshot>,
+        val inquiries: Map<Long, InquiryNotificationTargetSnapshot>,
+        val applications: Map<Long, JobApplicationNotificationTargetSnapshot>,
+    )
 
     companion object {
         /**
@@ -108,6 +183,14 @@ class NotificationTargetResolver(
             NotificationTargetAvailability(
                 available = false,
                 reason = NotificationTargetUnavailableReason.DELETED,
+                deepLink = null,
+            )
+
+        /** 대상은 남아 있지만 요청자가 소유자가 아닌 경우. 알림 수신자와 소유자가 다를 때만 생긴다. */
+        private val FORBIDDEN_AVAILABILITY =
+            NotificationTargetAvailability(
+                available = false,
+                reason = NotificationTargetUnavailableReason.FORBIDDEN,
                 deepLink = null,
             )
 

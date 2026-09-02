@@ -24,13 +24,10 @@ private const val ENROLLED_STATUS = "ENROLLED"
  * 정상 신청 가능까지를 담당한다). Repository/Port 호출이 없는 순수 함수로 둬 단위 Test에서
  * 모든 분기를 직접 검증할 수 있게 한다(JobApplicationEligibility.kt와 동일한 방식).
  *
- * 경고(PR #81 리뷰 MINOR 지적): 최상단 `status != PUBLISHED` 분기는 지금은 안전하다 —
- * 신청 종료 시각 도달 시 Program을 실제로 CLOSED로 바꾸는 Scheduler가 아직 없어(Phase 7
- * 범위), `status`가 CLOSED가 되는 경로 자체가 존재하지 않는다(신청 마감은 대신
- * `applicationEndedAt` 비교로 [PROGRAM_CLOSED]를 반환한다, 아래 참고). Phase 7에서 Scheduler가
- * `status=CLOSED`를 실제로 설정하기 시작하면, 이 분기가 CLOSED Program을 [PROGRAM_NOT_PUBLISHED]로
- * 오분류하게 된다 — 그 시점에 CLOSED를 [PROGRAM_NOT_PUBLISHED]보다 먼저 명시적으로 처리해
- * [PROGRAM_CLOSED]를 반환하도록 분기 순서를 조정해야 한다(회귀 테스트:
+ * `status == CLOSED`를 `status != PUBLISHED`(-> [PROGRAM_NOT_PUBLISHED])보다 먼저 명시적으로
+ * 처리한다 -- `ProgramCloseScheduler`가 신청 종료 시각이 지난 PUBLISHED Program을 실제로
+ * CLOSED로 전이하기 시작해(Phase 7) `status=CLOSED`인 Program이 이제 존재할 수 있고, 그 경우
+ * 오분류하지 않고 [PROGRAM_CLOSED]를 반환해야 한다(PR #81 리뷰 MINOR 지적, 회귀 테스트:
  * ProgramEligibilityTest 하단 참고).
  */
 @Suppress("ReturnCount", "LongParameterList")
@@ -42,6 +39,7 @@ fun computeProgramEligibilityReason(
     currentApplicants: Int,
     now: LocalDateTime,
 ): ProgramApplicationEligibilityReason {
+    if (program.status == ProgramStatus.CLOSED) return PROGRAM_CLOSED
     if (program.status != ProgramStatus.PUBLISHED) return PROGRAM_NOT_PUBLISHED
     if (member == null || member.academicStatus != ENROLLED_STATUS) return NOT_ENROLLED
     if (targetGrades.isNotEmpty() && member.grade !in targetGrades) return NOT_TARGET_GRADE

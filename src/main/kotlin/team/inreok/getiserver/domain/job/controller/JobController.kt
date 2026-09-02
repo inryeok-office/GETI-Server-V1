@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
@@ -43,6 +44,8 @@ class JobController(
 
             존재하지 않거나 삭제된 공고는 404, 아직 게시되지 않은(DRAFT) 공고는 403으로 처리한다.
             임시저장 공고를 확인하려면 관리자용 상세 조회 API를 사용한다.
+
+            `files`(첨부파일 목록)는 게시(PUBLISHED)·마감(CLOSED) 상태에서는 누구나 볼 수 있다.
         """,
     )
     @ApiResponses(
@@ -55,5 +58,7 @@ class JobController(
     @GetMapping("/{jobId}")
     fun getJob(
         @Parameter(description = "조회할 공고 ID", example = "1") @PathVariable jobId: Long,
-    ): ApiResponse<JobDetailResponse> = ApiResponse.of(jobService.getPublicDetail(jobId))
+        authentication: Authentication,
+    ): ApiResponse<JobDetailResponse> =
+        ApiResponse.of(jobService.getPublicDetail(jobId, authentication.principal as Long))
 }

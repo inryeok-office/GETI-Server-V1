@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension
 import team.inreok.getiserver.domain.auth.entity.RefreshToken
 import team.inreok.getiserver.domain.auth.exception.InvalidRefreshTokenException
 import team.inreok.getiserver.domain.auth.repository.RefreshTokenRepository
+import team.inreok.getiserver.domain.member.query.OAuthMemberPort
 import team.inreok.getiserver.global.security.JwtProperties
 import team.inreok.getiserver.global.security.JwtTokenProvider
 import java.time.LocalDateTime
@@ -26,6 +27,9 @@ class TokenServiceImplTest {
     @Mock
     private lateinit var jwtTokenProvider: JwtTokenProvider
 
+    @Mock
+    private lateinit var oAuthMemberPort: OAuthMemberPort
+
     private val jwtProperties =
         JwtProperties(
             secret = "test-secret",
@@ -34,7 +38,7 @@ class TokenServiceImplTest {
         )
 
     private val service: TokenServiceImpl by lazy {
-        TokenServiceImpl(refreshTokenRepository, jwtTokenProvider, jwtProperties)
+        TokenServiceImpl(refreshTokenRepository, jwtTokenProvider, jwtProperties, oAuthMemberPort)
     }
 
     private fun refreshToken(
@@ -47,10 +51,23 @@ class TokenServiceImplTest {
     private fun anyLocalDateTime(): LocalDateTime = any(LocalDateTime::class.java) ?: LocalDateTime.now()
 
     @Test
-    fun `refresh는 원자적 폐기 후 새 Access-Refresh Token을 발급한다`() {
+    fun `issueFor는 전달받은 roles로 Access Token을 만들고 Refresh Token을 저장한다`() {
+        given(jwtTokenProvider.createAccessToken(1L, listOf("TEACHER"))).willReturn("access-token")
+
+        val result = service.issueFor(memberId = 1L, roles = listOf("TEACHER"), deviceIdentifier = null)
+
+        assertThat(result.accessToken).isEqualTo("access-token")
+        assertThat(result.refreshToken).isNotBlank()
+        assertThat(result.accessTokenExpiresInSeconds).isEqualTo(1800)
+        verify(refreshTokenRepository).save(any())
+    }
+
+    @Test
+    fun `refresh는 원자적 폐기 후 Member 역할을 다시 조회해 새 Access-Refresh Token을 발급한다`() {
         given(refreshTokenRepository.findByTokenHash(anyString())).willReturn(refreshToken())
         given(refreshTokenRepository.revokeIfActive(anyString(), anyLocalDateTime())).willReturn(1)
-        given(jwtTokenProvider.createAccessToken(1L, emptyList())).willReturn("access-token")
+        given(oAuthMemberPort.getRoles(1L)).willReturn(listOf("TEACHER"))
+        given(jwtTokenProvider.createAccessToken(1L, listOf("TEACHER"))).willReturn("access-token")
 
         val result = service.refresh("raw-refresh-token", deviceIdentifier = null)
 

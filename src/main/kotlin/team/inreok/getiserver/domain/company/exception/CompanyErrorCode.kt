@@ -11,6 +11,7 @@ enum class CompanyErrorCode(
     COMPANY_NAME_REQUIRED(HttpStatus.BAD_REQUEST, "기업명을 입력해야 합니다."),
     DUPLICATE_COMPANY(HttpStatus.CONFLICT, "이미 등록된 기업입니다."),
     MOU_PERIOD_INVALID(HttpStatus.BAD_REQUEST, "MOU 협약 기간이 올바르지 않습니다."),
+    COMPANY_HAS_ACTIVE_JOBS(HttpStatus.CONFLICT, "현재 모집 중인 공고가 있어 기업을 삭제할 수 없습니다."),
     ;
 
     override val code: String get() = name

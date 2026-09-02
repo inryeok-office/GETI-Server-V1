@@ -43,6 +43,20 @@ data class CollectedJobUpsertCommand(
     val endDate: LocalDateTime?,
     @param:Schema(description = "true면 게시 필수값을 만족할 때 PUBLISHED로 반영을 시도한다. 실패하면 DRAFT로 저장된다.")
     val publish: Boolean,
+    @param:Schema(
+        description =
+            "Provider가 준 근무지역(nullable). 정해진 값 집합이 없는 표시 전용 문자열이며 " +
+                "255자를 넘으면 Job Module이 잘라서 저장한다.",
+        nullable = true,
+    )
+    val location: String? = null,
+    @param:Schema(
+        description =
+            "Provider가 준 고용형태(nullable). 정해진 값 집합이 없는 표시 전용 문자열이며 " +
+                "255자를 넘으면 Job Module이 잘라서 저장한다.",
+        nullable = true,
+    )
+    val employmentType: String? = null,
 )
 
 @NamedInterface

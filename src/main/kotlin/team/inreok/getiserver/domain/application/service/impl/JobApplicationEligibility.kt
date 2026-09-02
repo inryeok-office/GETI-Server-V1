@@ -1,5 +1,7 @@
 package team.inreok.getiserver.domain.application.service.impl
 
+import team.inreok.getiserver.domain.application.entity.Form
+import team.inreok.getiserver.domain.application.entity.type.FormStatus
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationEligibilityReason
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationEligibilityReason.AFTER_END
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationEligibilityReason.ALREADY_APPLIED
@@ -10,6 +12,8 @@ import team.inreok.getiserver.domain.application.entity.type.JobApplicationEligi
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationEligibilityReason.NOT_INTERNAL
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationEligibilityReason.NOT_TARGET_GRADE
 import team.inreok.getiserver.domain.application.entity.type.JobApplicationStatus
+import team.inreok.getiserver.domain.application.repository.FormRepository
+import team.inreok.getiserver.domain.application.repository.JobApplicationFormRepository
 import team.inreok.getiserver.domain.job.query.JobApplicationJobSnapshot
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshot
 import java.time.LocalDateTime
@@ -49,6 +53,23 @@ fun computeEligibilityReason(
     if (hasActiveApplication) return ALREADY_APPLIED
     return AVAILABLE
 }
+
+/**
+ * jobId에 연결된 ACTIVE 상태 양식을 반환한다(요구사항 7절 hasActiveLinkedForm 판정, 요구사항 8절
+ * createDraft가 지원서에 스냅샷할 form/formVersion 조회에도 재사용한다). JobApplicationServiceImpl의
+ * Method 개수를 detekt TooManyFunctions 한도 안에서 유지하기 위해 순수 함수로 분리했다
+ * (computeEligibilityReason과 같은 이유).
+ */
+fun activeLinkedForm(
+    jobApplicationFormRepository: JobApplicationFormRepository,
+    formRepository: FormRepository,
+    jobId: Long,
+): Form? =
+    jobApplicationFormRepository
+        .findById(jobId)
+        .orElse(null)
+        ?.let { link -> formRepository.findById(link.formId).orElse(null) }
+        ?.takeIf { it.status == FormStatus.ACTIVE }
 
 fun eligibilityMessageOf(reason: JobApplicationEligibilityReason): String =
     when (reason) {

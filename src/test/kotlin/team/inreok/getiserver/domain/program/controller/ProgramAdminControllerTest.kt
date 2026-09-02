@@ -1,6 +1,8 @@
 package team.inreok.getiserver.domain.program.controller
 
+import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyBoolean
 import org.mockito.ArgumentMatchers.anyLong
@@ -21,7 +23,6 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import team.inreok.getiserver.domain.program.dto.DiscordDeliveryResult
 import team.inreok.getiserver.domain.program.dto.ProgramCreateRequest
 import team.inreok.getiserver.domain.program.dto.ProgramCreateResponse
 import team.inreok.getiserver.domain.program.dto.ProgramStatusUpdateRequest
@@ -38,7 +39,7 @@ import java.time.LocalDateTime
 // SecurityConfig를 명시적으로 Import해 /api/v1/admin/programs가 실제로 TEACHER 또는 DEVELOPER
 // 역할을 요구하는지(401/403)까지 검증한다(CompanyAdminControllerTest/ProgramControllerTest와 동일한 방식).
 @WebMvcTest(controllers = [ProgramAdminController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class ProgramAdminControllerTest
     @Autowired
@@ -78,6 +79,11 @@ class ProgramAdminControllerTest
         private fun anyStatusUpdateRequest(): ProgramStatusUpdateRequest =
             any(ProgramStatusUpdateRequest::class.java) ?: ProgramStatusUpdateRequest(status = ProgramStatus.DELETED)
 
+        // captor.capture()의 Elvis 더미 전용이다(위 anyCreateRequest()와 달리 any() Matcher를
+        // 호출하지 않는다 -- capture()와 함께 쓰면 Matcher가 중복 기록된다).
+        private fun emptyCreateRequest(): ProgramCreateRequest =
+            ProgramCreateRequest(title = "", programType = ProgramType.SPECIAL_LECTURE, status = ProgramStatus.DRAFT)
+
         private val createResponse =
             ProgramCreateResponse(
                 programId = 1L,
@@ -89,7 +95,6 @@ class ProgramAdminControllerTest
                 firstComeServed = true,
                 manager = null,
                 status = ProgramStatus.DRAFT,
-                discordDelivery = DiscordDeliveryResult.SKIPPED_NOT_IMPLEMENTED,
                 createdAt = LocalDateTime.now(),
             )
 
@@ -101,7 +106,6 @@ class ProgramAdminControllerTest
                 remainingCapacity = 5,
                 vacancyNotificationCount = 0,
                 notificationCreated = false,
-                discordDelivery = DiscordDeliveryResult.SKIPPED_NOT_IMPLEMENTED,
                 updatedAt = LocalDateTime.now(),
             )
 
@@ -112,7 +116,6 @@ class ProgramAdminControllerTest
                 manager = null,
                 notificationCount = 0,
                 expiredVacancySubscriptionCount = 0,
-                discordDelivery = DiscordDeliveryResult.SKIPPED_NOT_IMPLEMENTED,
                 updatedAt = LocalDateTime.now(),
             )
 
@@ -156,6 +159,32 @@ class ProgramAdminControllerTest
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"))
 
             verify(programService, never()).create(anyCreateRequest(), anyLong())
+        }
+
+        @Test
+        fun `등록 요청의 fileIds가 Service로 그대로 전달된다`() {
+            given(programService.create(anyCreateRequest(), anyLong())).willReturn(createResponse)
+            val captor = ArgumentCaptor.forClass(ProgramCreateRequest::class.java)
+
+            mockMvc
+                .perform(
+                    post("/api/v1/admin/programs")
+                        .with(authOf(1L, "TEACHER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            """
+                            { "title": "여름방학 특강", "programType": "SPECIAL_LECTURE",
+                              "status": "DRAFT", "fileIds": [1, 2] }
+                            """,
+                        ),
+                ).andExpect(status().isCreated)
+
+            // captor.capture()는 Kotlin에서 null을 반환하는 Mockito의 알려진 특성이라, 실제 값
+            // 자체는 쓰이지 않는 더미로 Elvis를 채운다(ProgramServiceImplTest.publishedDiscordEvents와
+            // 동일한 이유). 여기서 any()류 Matcher를 다시 호출하면 Matcher가 중복 기록돼
+            // InvalidUseOfMatchersException이 된다.
+            verify(programService).create(captor.capture() ?: emptyCreateRequest(), anyLong())
+            assertThat(captor.value.fileIds).containsExactly(1L, 2L)
         }
 
         @Test
@@ -211,6 +240,26 @@ class ProgramAdminControllerTest
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"))
 
             verify(programService, never()).update(anyLong(), anyLong(), anyBoolean(), anyUpdateRequest())
+        }
+
+        @Test
+        fun `수정 요청의 fileIds가 Service로 그대로 전달된다`() {
+            given(programService.update(anyLong(), anyLong(), anyBoolean(), anyUpdateRequest()))
+                .willReturn(updateResponse)
+            val captor = ArgumentCaptor.forClass(ProgramUpdateRequest::class.java)
+
+            mockMvc
+                .perform(
+                    patch("/api/v1/admin/programs/1")
+                        .with(authOf(1L, "TEACHER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "fileIds": [] }"""),
+                ).andExpect(status().isOk)
+
+            verify(
+                programService,
+            ).update(anyLong(), anyLong(), anyBoolean(), captor.capture() ?: ProgramUpdateRequest())
+            assertThat(captor.value.fileIds).isEqualTo(emptyList<Long>())
         }
 
         @Test

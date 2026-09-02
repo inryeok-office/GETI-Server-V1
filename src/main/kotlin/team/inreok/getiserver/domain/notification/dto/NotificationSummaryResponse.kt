@@ -15,7 +15,7 @@ data class NotificationSummaryResponse(
     @param:Schema(description = "알림 ID", example = "1")
     val notificationId: Long,
     @param:Schema(description = "알림 종류", example = "PROGRAM_PUBLISHED")
-    val type: NotificationType,
+    val notificationType: NotificationType,
     @param:Schema(description = "알림 제목", example = "새 프로그램이 게시되었습니다")
     val title: String,
     @param:Schema(description = "알림 본문", example = "AI 특강 프로그램 모집이 시작되었습니다.")
@@ -44,7 +44,7 @@ data class NotificationSummaryResponse(
     )
     val deepLink: String?,
     @param:Schema(description = "읽음 여부", example = "false")
-    val isRead: Boolean,
+    val read: Boolean,
     @param:Schema(description = "읽은 시각. 읽지 않았으면 null이다.", nullable = true)
     val readAt: LocalDateTime?,
     @param:Schema(description = "알림 생성 시각")

@@ -87,6 +87,7 @@ class JobSourceServiceImplTest {
         val result = service.listPublic(activeOnly = true)
 
         assertThat(result.sources).hasSize(1)
+        assertThat(result.sources.single().sourceCode).isEqualTo(JobSourceCode.MMA)
         assertThat(result.sources.single().active).isTrue()
     }
 

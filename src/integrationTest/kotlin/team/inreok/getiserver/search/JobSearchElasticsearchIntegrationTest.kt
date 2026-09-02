@@ -17,7 +17,13 @@ import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.images.builder.ImageFromDockerfile
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
+import team.inreok.getiserver.domain.ai.entity.type.AiDifficulty
+import team.inreok.getiserver.domain.ai.entity.type.AiFitLevel
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
+import team.inreok.getiserver.domain.file.link.FileUrlPort
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
+import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
+import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import team.inreok.getiserver.domain.job.entity.type.PostingType
@@ -52,7 +58,18 @@ class JobSearchElasticsearchIntegrationTest {
     @BeforeEach
     fun setUp() {
         indexManager = JobSearchIndexManager(elasticsearchOperations, properties)
-        searchService = JobSearchServiceImpl(indexManager)
+        // 이 Test는 Elasticsearch Query 자체의 정확성만 다룬다 -- 로고 URL 발급(FileUrlPort),
+        // 지원 가능 여부 계산(JobApplicationEligibilityAccessor, Issue #136), 북마크 여부
+        // 계산(JobBookmarkAccessor, Issue #171)은 각각 JobSearchServiceImplTest(Unit
+        // Test)/JobApplicationEligibilityAccessorImplTest/JobBookmarkAccessorImplTest가 이미
+        // 검증하므로 여기서는 최소 구현으로 대체한다.
+        searchService =
+            JobSearchServiceImpl(
+                indexManager,
+                NoOpFileUrlPort,
+                NoOpJobApplicationEligibilityAccessor,
+                NoOpJobBookmarkAccessor,
+            )
 
         // 재색인(Alias 전환) 흐름은 SearchReindexServiceImplTest(Unit Test)가 이미 검증하므로,
         // 여기서는 검색 Query 자체의 정확성만 보기 위해 Alias 이름과 동일한 물리 Index를 직접
@@ -114,6 +131,30 @@ class JobSearchElasticsearchIntegrationTest {
     }
 
     @Test
+    fun `근무지역과 고용형태가 색인되어 목록 응답에 그대로 담긴다`() {
+        indexDocument(jobId = 1L, title = "채용 공고", location = "서울특별시 중구", employmentType = "인턴")
+        refresh()
+
+        val result = search()
+
+        assertThat(result.content).hasSize(1)
+        assertThat(result.content[0].location).isEqualTo("서울특별시 중구")
+        assertThat(result.content[0].employmentType).isEqualTo("인턴")
+    }
+
+    // 두 Field를 Keyword로 색인하고 multiMatch 대상에서 제외한 결정을 고정한다(Issue #169).
+    // 검색 대상에 넣으면 기존 검색 결과집합과 순위가 바뀌어 API 계약이 조용히 바뀐다.
+    @Test
+    fun `근무지역은 검색어 매칭 대상이 아니다`() {
+        indexDocument(jobId = 1L, title = "채용 공고", location = "서울특별시 중구")
+        refresh()
+
+        val result = search(query = "서울특별시")
+
+        assertThat(result.content).isEmpty()
+    }
+
+    @Test
     fun `공고 유형과 기업 유형 필터를 동시에 적용한다`() {
         indexDocument(jobId = 1L, title = "A", postingType = PostingType.MOU, companyType = CompanyType.GENERAL)
         indexDocument(jobId = 2L, title = "B", postingType = PostingType.MOU, companyType = CompanyType.FOREIGN)
@@ -135,6 +176,42 @@ class JobSearchElasticsearchIntegrationTest {
         val result = search(sourceName = "MMA", targetGrade = 3)
 
         assertThat(result.content.map { it.jobId }).containsExactly(1L)
+        assertThat(result.content.single().sourceName).isEqualTo("MMA")
+        assertThat(search(sourceName = "UNKNOWN_SOURCE").content).isEmpty()
+    }
+
+    @Test
+    fun `AI 적합성과 난이도 필터를 Elasticsearch에서 정확히 적용한다`() {
+        indexDocument(
+            jobId = 1L,
+            title = "고졸 가능 쉬운 공고",
+            highSchoolGraduateFit = AiFitLevel.SUITABLE,
+            entryLevelFit = AiFitLevel.CONDITIONAL,
+            difficulty = AiDifficulty.EASY,
+        )
+        indexDocument(
+            jobId = 2L,
+            title = "신입 가능 어려운 공고",
+            highSchoolGraduateFit = AiFitLevel.UNSUITABLE,
+            entryLevelFit = AiFitLevel.SUITABLE,
+            difficulty = AiDifficulty.HARD,
+        )
+        indexDocument(jobId = 3L, title = "AI 분석 전 공고")
+        refresh()
+
+        assertThat(search().content.map { it.jobId }).containsExactly(3L, 2L, 1L)
+        assertThat(search(highSchoolGraduateFit = AiFitLevel.SUITABLE).content.map { it.jobId })
+            .containsExactly(1L)
+        assertThat(search(entryLevelFit = AiFitLevel.SUITABLE).content.map { it.jobId })
+            .containsExactly(2L)
+        assertThat(search(difficulty = AiDifficulty.EASY).content.map { it.jobId }).containsExactly(1L)
+        assertThat(
+            search(
+                postingType = PostingType.MOU,
+                highSchoolGraduateFit = AiFitLevel.SUITABLE,
+                difficulty = AiDifficulty.EASY,
+            ).content.map { it.jobId },
+        ).containsExactly(1L)
     }
 
     @Test
@@ -296,6 +373,51 @@ class JobSearchElasticsearchIntegrationTest {
     }
 
     @Test
+    fun `AI 분석 결과 필드가 색인에 그대로 왕복된다`() {
+        // List<Long>/Keyword Field가 실제 Elasticsearch Mapping에서 깨지지 않는지 확인한다
+        // (Issue #144 -- JobSearchDocument.publishedAt의 Date Format처럼 실제 Elasticsearch로
+        // 확인하지 않으면 Mapping 문제를 놓칠 수 있다). JobSummaryResponse는 AI 필드를 그대로
+        // 노출하지 않으므로(Issue #144 제외 범위 -- 새 API Field 확장은 하지 않음), Elasticsearch
+        // Document를 직접 다시 읽어 검증한다.
+        indexManager.upsert(
+            documentOf(jobId = 1L, title = "AI 분석 완료 공고").copy(
+                requiredTechStackIds = listOf(10L, 11L),
+                preferredTechStackIds = listOf(20L),
+                highSchoolGraduateFit = "SUITABLE",
+                entryLevelFit = "CONDITIONAL",
+                difficulty = "HARD",
+            ),
+        )
+        refresh()
+
+        val stored =
+            elasticsearchOperations.get("1", JobSearchDocument::class.java, IndexCoordinates.of(TEST_INDEX))
+
+        assertThat(stored).isNotNull
+        assertThat(stored!!.requiredTechStackIds).containsExactlyInAnyOrder(10L, 11L)
+        assertThat(stored.preferredTechStackIds).containsExactly(20L)
+        assertThat(stored.highSchoolGraduateFit).isEqualTo("SUITABLE")
+        assertThat(stored.entryLevelFit).isEqualTo("CONDITIONAL")
+        assertThat(stored.difficulty).isEqualTo("HARD")
+    }
+
+    @Test
+    fun `AI 분석이 아직 없는 공고는 AI 필드가 빈 값으로 색인된다`() {
+        indexDocument(jobId = 1L, title = "AI 분석 전 공고")
+        refresh()
+
+        val stored =
+            elasticsearchOperations.get("1", JobSearchDocument::class.java, IndexCoordinates.of(TEST_INDEX))
+
+        assertThat(stored).isNotNull
+        assertThat(stored!!.requiredTechStackIds).isEmpty()
+        assertThat(stored.preferredTechStackIds).isEmpty()
+        assertThat(stored.highSchoolGraduateFit).isNull()
+        assertThat(stored.entryLevelFit).isNull()
+        assertThat(stored.difficulty).isNull()
+    }
+
+    @Test
     fun `Bulk 색인은 여러 건을 한 번에 반영한다`() {
         val documents = (1..5).map { documentOf(jobId = it.toLong(), title = "공고 $it") }
         indexManager.bulkIndex(TEST_INDEX, documents)
@@ -306,6 +428,67 @@ class JobSearchElasticsearchIntegrationTest {
         assertThat(result.totalElements).isEqualTo(5)
     }
 
+    @Test
+    fun `applicationMethod omitted returns all and each enum filters exact documents`() {
+        indexDocument(jobId = 1L, title = "A", applicationMethod = ApplicationMethod.INTERNAL)
+        indexDocument(jobId = 2L, title = "B", applicationMethod = ApplicationMethod.EXTERNAL)
+        refresh()
+
+        assertThat(search().content.map { it.jobId }).containsExactly(2L, 1L)
+        assertThat(search(applicationMethod = ApplicationMethod.EXTERNAL).content.map { it.jobId })
+            .containsExactly(2L)
+        assertThat(search(applicationMethod = ApplicationMethod.INTERNAL).content.map { it.jobId })
+            .containsExactly(1L)
+    }
+
+    @Test
+    fun `applicationMethod combines with postingType and companyType using AND`() {
+        indexDocument(
+            jobId = 1L,
+            title = "A",
+            applicationMethod = ApplicationMethod.INTERNAL,
+            postingType = PostingType.MOU,
+            companyType = CompanyType.GENERAL,
+            sourceName = "MMA",
+        )
+        indexDocument(
+            jobId = 2L,
+            title = "B",
+            applicationMethod = ApplicationMethod.INTERNAL,
+            postingType = PostingType.MOU,
+            companyType = CompanyType.FOREIGN,
+            sourceName = "JOB_ALIO",
+        )
+        indexDocument(
+            jobId = 3L,
+            title = "C",
+            applicationMethod = ApplicationMethod.EXTERNAL,
+            postingType = PostingType.MOU,
+            companyType = CompanyType.GENERAL,
+            sourceName = "MMA",
+        )
+        indexDocument(
+            jobId = 4L,
+            title = "D",
+            applicationMethod = ApplicationMethod.INTERNAL,
+            postingType = PostingType.GENERAL,
+            companyType = CompanyType.GENERAL,
+            sourceName = "MMA",
+        )
+        refresh()
+
+        val result =
+            search(
+                applicationMethod = ApplicationMethod.INTERNAL,
+                postingType = PostingType.MOU,
+                companyType = CompanyType.GENERAL,
+                status = PublicJobStatus.PUBLISHED,
+                sourceName = "MMA",
+            )
+
+        assertThat(result.content.map { it.jobId }).containsExactly(1L)
+    }
+
     private fun refresh() {
         elasticsearchOperations.indexOps(IndexCoordinates.of(TEST_INDEX)).refresh()
     }
@@ -314,10 +497,14 @@ class JobSearchElasticsearchIntegrationTest {
     private fun search(
         query: String? = null,
         postingType: PostingType? = null,
+        applicationMethod: ApplicationMethod? = null,
         status: PublicJobStatus? = null,
         companyType: CompanyType? = null,
         sourceName: String? = null,
         targetGrade: Int? = null,
+        highSchoolGraduateFit: AiFitLevel? = null,
+        entryLevelFit: AiFitLevel? = null,
+        difficulty: AiDifficulty? = null,
         openOnly: Boolean = false,
         sort: JobSort = JobSort.LATEST,
         direction: SortDirection? = null,
@@ -325,14 +512,19 @@ class JobSearchElasticsearchIntegrationTest {
     ) = searchService.search(
         query,
         postingType,
+        applicationMethod,
         status,
         companyType,
         sourceName,
         targetGrade,
+        highSchoolGraduateFit,
+        entryLevelFit,
+        difficulty,
         openOnly,
         sort,
         direction,
         pageable,
+        REQUESTER_ID,
     )
 
     @Suppress("LongParameterList")
@@ -341,14 +533,20 @@ class JobSearchElasticsearchIntegrationTest {
         title: String,
         content: String? = null,
         postingType: PostingType = PostingType.MOU,
+        applicationMethod: ApplicationMethod = ApplicationMethod.EXTERNAL,
         companyName: String? = "인력개발원",
         companyType: CompanyType = CompanyType.GENERAL,
         sourceName: String? = null,
         targetGrade: Int? = null,
+        highSchoolGraduateFit: AiFitLevel? = null,
+        entryLevelFit: AiFitLevel? = null,
+        difficulty: AiDifficulty? = null,
         status: JobStatus = JobStatus.PUBLISHED,
         viewCount: Long = 0,
         publishedAt: LocalDateTime? = LocalDateTime.now(),
         endDate: LocalDateTime? = null,
+        location: String? = null,
+        employmentType: String? = null,
     ) {
         indexManager.upsert(
             documentOf(
@@ -356,14 +554,20 @@ class JobSearchElasticsearchIntegrationTest {
                 title = title,
                 content = content,
                 postingType = postingType,
+                applicationMethod = applicationMethod,
                 companyName = companyName,
                 companyType = companyType,
                 sourceName = sourceName,
                 targetGrade = targetGrade,
+                highSchoolGraduateFit = highSchoolGraduateFit,
+                entryLevelFit = entryLevelFit,
+                difficulty = difficulty,
                 status = status,
                 viewCount = viewCount,
                 publishedAt = publishedAt,
                 endDate = endDate,
+                location = location,
+                employmentType = employmentType,
             ),
         )
     }
@@ -374,37 +578,85 @@ class JobSearchElasticsearchIntegrationTest {
         title: String,
         content: String? = null,
         postingType: PostingType = PostingType.MOU,
+        applicationMethod: ApplicationMethod = ApplicationMethod.EXTERNAL,
         companyName: String? = "인력개발원",
         companyType: CompanyType = CompanyType.GENERAL,
         sourceName: String? = null,
         targetGrade: Int? = null,
+        highSchoolGraduateFit: AiFitLevel? = null,
+        entryLevelFit: AiFitLevel? = null,
+        difficulty: AiDifficulty? = null,
         status: JobStatus = JobStatus.PUBLISHED,
         viewCount: Long = 0,
         publishedAt: LocalDateTime? = LocalDateTime.now(),
         endDate: LocalDateTime? = null,
+        location: String? = null,
+        employmentType: String? = null,
     ) = JobSearchDocument(
         id = jobId.toString(),
         jobId = jobId,
         title = title,
         content = content,
         postingType = postingType.name,
-        applicationMethod = ApplicationMethod.EXTERNAL.name,
+        applicationMethod = applicationMethod.name,
         status = status.name,
         companyId = 1L,
         companyName = companyName,
         companyType = companyType.name,
+        companyLogoFileId = null,
         sourceName = sourceName,
         targetGrade = targetGrade,
+        highSchoolGraduateFit = highSchoolGraduateFit?.name,
+        entryLevelFit = entryLevelFit?.name,
+        difficulty = difficulty?.name,
         capacity = null,
         firstComeServed = false,
         viewCount = viewCount,
         publishedAt = publishedAt,
         startDate = null,
         endDate = endDate,
+        location = location,
+        employmentType = employmentType,
     )
+
+    /** 항상 빈 Map을 돌려주는 최소 구현이다. 이 Test는 Query 정확성만 다루고 File URL 발급은 다루지 않는다. */
+    private object NoOpFileUrlPort : FileUrlPort {
+        override fun presignedImageUrls(
+            requesterId: Long,
+            fileIds: Collection<Long>,
+        ): Map<Long, String> = emptyMap()
+    }
+
+    private object NoOpJobApplicationEligibilityAccessor : JobApplicationEligibilityAccessor {
+        override fun findAllByJobIds(
+            jobIds: Set<Long>,
+            requesterMemberId: Long,
+        ): Map<Long, JobApplicationEligibilityAccessSnapshot> =
+            jobIds.associateWith {
+                JobApplicationEligibilityAccessSnapshot(
+                    canApply = false,
+                    eligibilityReason = "NOT_ENROLLED",
+                    eligibilityMessage = "",
+                    applicationId = null,
+                    applicationStatus = null,
+                    availableActions = emptyList(),
+                )
+            }
+    }
+
+    /** 항상 빈 값을 돌려주는 최소 구현이다. 이 Test는 Query 정확성만 다루고 북마크 여부·수는 다루지 않는다. */
+    private object NoOpJobBookmarkAccessor : JobBookmarkAccessor {
+        override fun findAllByJobIds(
+            jobIds: Set<Long>,
+            requesterMemberId: Long,
+        ): Set<Long> = emptySet()
+
+        override fun countAllByJobIds(jobIds: Set<Long>): Map<Long, Long> = emptyMap()
+    }
 
     companion object {
         private const val TEST_INDEX = "jobs-search-integration-test"
+        private const val REQUESTER_ID = 1L
 
         @Container
         @JvmStatic

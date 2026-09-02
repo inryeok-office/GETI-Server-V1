@@ -104,6 +104,8 @@ class CollectorExecutionServiceImplTest {
         externalJobId: String,
         quality: JobDataQualityStatus = JobDataQualityStatus.COMPLETE,
         companyName: String = "인력개발원",
+        workRegion: String? = null,
+        employmentType: String? = null,
     ) = NormalizedCollectedJob(
         sourceCode = JobSourceCode.MMA,
         externalJobId = externalJobId,
@@ -112,6 +114,8 @@ class CollectorExecutionServiceImplTest {
         collectedAt = now,
         dataQualityStatus = quality,
         missingFields = if (quality == JobDataQualityStatus.PARTIAL) listOf("content") else emptyList(),
+        workRegion = workRegion,
+        employmentType = employmentType,
     )
 
     // Kotlin non-null 파라미터에 bare any()를 쓰면 null 반환으로 NPE가 나므로 Elvis로 기본값을
@@ -122,6 +126,21 @@ class CollectorExecutionServiceImplTest {
     private fun anyCollectionRunError(): CollectionRunError =
         any(CollectionRunError::class.java)
             ?: CollectionRunError(runId = 0, code = "x", message = "x", occurredAt = now)
+
+    // ArgumentCaptor.capture()의 Elvis 대체값은 Matcher가 아닌 평범한 객체여야 한다 --
+    // anyUpsertCommand()를 쓰면 Matcher가 두 번 등록되어 InvalidUseOfMatchersException이 난다.
+    private fun fallbackUpsertCommand(): CollectedJobUpsertCommand =
+        CollectedJobUpsertCommand(
+            companyId = 0,
+            sourceName = "x",
+            externalJobId = "x",
+            title = "x",
+            content = null,
+            externalUrl = null,
+            startDate = null,
+            endDate = null,
+            publish = false,
+        )
 
     private fun anyUpsertCommand(): CollectedJobUpsertCommand =
         any(CollectedJobUpsertCommand::class.java) ?: CollectedJobUpsertCommand(
@@ -253,9 +272,75 @@ class CollectorExecutionServiceImplTest {
         val finalRun = captor.allValues.last()
         assertThat(finalRun.action).isEqualTo(CollectorAction.SYNC)
         assertThat(finalRun.status).isEqualTo(CollectionRunStatus.SUCCESS)
+        assertThat(finalRun.createdCount).isEqualTo(2)
+        assertThat(finalRun.updatedCount).isZero()
         assertThat(finalRun.successCount).isEqualTo(2)
         assertThat(finalRun.failureCount).isEqualTo(0)
         assertThat(finalRun.partialQualityCount).isEqualTo(1)
+    }
+
+    @Test
+    fun `생성 갱신 변경없음 실패를 분리 집계하고 기존 성공 실패 불변식을 유지한다`() {
+        val source = sourceOf()
+        given(jobSourceRepository.findAllByOrderBySourceCodeAsc()).willReturn(listOf(source))
+        given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
+        given(collectionRunRepository.saveAndFlush(anyCollectionRun())).willAnswer(::assignIdIfAbsent)
+        givenCompanyResolves()
+        given(collectedJobUpsertUseCase.upsert(anyUpsertCommand()))
+            .willReturn(CollectedJobUpsertResult(jobId = 1L, outcome = JobImportOutcome.CREATED, published = true))
+            .willReturn(CollectedJobUpsertResult(jobId = 2L, outcome = JobImportOutcome.UPDATED, published = true))
+            .willReturn(CollectedJobUpsertResult(jobId = 3L, outcome = JobImportOutcome.UNCHANGED, published = true))
+            .willThrow(IllegalStateException("upsert 실패"))
+        val provider =
+            FakeCollectorProvider(JobSourceCode.MMA) {
+                CollectorCollectionResult(
+                    jobs = listOf(jobOf("CREATED"), jobOf("UPDATED"), jobOf("UNCHANGED"), jobOf("FAILED")),
+                )
+            }
+
+        serviceWith(provider).runDailyCollection()
+
+        val captor = ArgumentCaptor.forClass(CollectionRun::class.java)
+        verify(collectionRunRepository, times(3)).saveAndFlush(captor.capture())
+        val finalRun = captor.allValues.last()
+        assertThat(finalRun.createdCount).isEqualTo(1)
+        assertThat(finalRun.updatedCount).isEqualTo(1)
+        assertThat(finalRun.successCount).isEqualTo(3)
+        assertThat(finalRun.failureCount).isEqualTo(1)
+        assertThat(finalRun.totalCount).isEqualTo(finalRun.successCount + finalRun.failureCount)
+        assertThat(finalRun.status).isEqualTo(CollectionRunStatus.PARTIAL_SUCCESS)
+        verify(collectionRunErrorRepository).save(anyCollectionRunError())
+    }
+
+    // Provider가 준 근무지·고용형태를 Job에 넘기지 않으면 외부 수집 공고의 공고 카드가 영원히
+    // 비어 있게 된다(Issue #169). 이전에는 Discord 알림과 적합성 판정에만 썼다.
+    @Test
+    fun `Provider가 준 근무지와 고용형태를 Upsert Command에 담아 전달한다`() {
+        val source = sourceOf()
+        given(jobSourceRepository.findAllByOrderBySourceCodeAsc()).willReturn(listOf(source))
+        given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
+        given(collectionRunRepository.saveAndFlush(anyCollectionRun()))
+            .willAnswer(::assignIdIfAbsent)
+        givenCompanyResolves()
+        given(collectedJobUpsertUseCase.upsert(anyUpsertCommand()))
+            .willReturn(CollectedJobUpsertResult(jobId = 1L, outcome = JobImportOutcome.CREATED, published = true))
+
+        val provider =
+            FakeCollectorProvider(JobSourceCode.MMA) {
+                CollectorCollectionResult(
+                    jobs =
+                        listOf(
+                            jobOf("EXT-1", workRegion = "경상남도 창원시 의창구", employmentType = "주5일"),
+                        ),
+                )
+            }
+
+        serviceWith(provider).runDailyCollection()
+
+        val captor = ArgumentCaptor.forClass(CollectedJobUpsertCommand::class.java)
+        verify(collectedJobUpsertUseCase).upsert(captor.capture() ?: fallbackUpsertCommand())
+        assertThat(captor.value.location).isEqualTo("경상남도 창원시 의창구")
+        assertThat(captor.value.employmentType).isEqualTo("주5일")
     }
 
     @Test
@@ -348,7 +433,12 @@ class CollectorExecutionServiceImplTest {
         verify(collectionRunErrorRepository, times(2)).save(anyCollectionRunError())
         val captor = ArgumentCaptor.forClass(CollectionRun::class.java)
         verify(collectionRunRepository, times(3)).saveAndFlush(captor.capture())
-        assertThat(captor.allValues.last().status).isEqualTo(CollectionRunStatus.FAILED)
+        val finalRun = captor.allValues.last()
+        assertThat(finalRun.status).isEqualTo(CollectionRunStatus.FAILED)
+        assertThat(finalRun.createdCount).isZero()
+        assertThat(finalRun.updatedCount).isZero()
+        assertThat(finalRun.successCount).isZero()
+        assertThat(finalRun.failureCount).isEqualTo(2)
     }
 
     @Test
@@ -442,6 +532,35 @@ class CollectorExecutionServiceImplTest {
             jobNotificationService,
             times(0),
         ).enqueueIfEligible(anyTrigger(), org.mockito.ArgumentMatchers.anyBoolean())
+        val captor = ArgumentCaptor.forClass(CollectionRun::class.java)
+        verify(collectionRunRepository, times(3)).saveAndFlush(captor.capture())
+        val finalRun = captor.allValues.last()
+        assertThat(finalRun.createdCount).isZero()
+        assertThat(finalRun.updatedCount).isZero()
+        assertThat(finalRun.successCount).isEqualTo(1)
+    }
+
+    @Test
+    fun `공고가 갱신되면 updatedCount만 증가한다`() {
+        val source = sourceOf()
+        given(jobSourceRepository.findAllByOrderBySourceCodeAsc()).willReturn(listOf(source))
+        given(collectionRunRepository.existsBySourceIdAndStatusIn(1L, ACTIVE_STATUSES)).willReturn(false)
+        given(collectionRunRepository.saveAndFlush(anyCollectionRun())).willAnswer(::assignIdIfAbsent)
+        givenCompanyResolves()
+        given(collectedJobUpsertUseCase.upsert(anyUpsertCommand()))
+            .willReturn(CollectedJobUpsertResult(jobId = 42L, outcome = JobImportOutcome.UPDATED, published = true))
+        val provider =
+            FakeCollectorProvider(JobSourceCode.MMA) { CollectorCollectionResult(jobs = listOf(jobOf("EXT-1"))) }
+
+        serviceWith(provider).runDailyCollection()
+
+        val captor = ArgumentCaptor.forClass(CollectionRun::class.java)
+        verify(collectionRunRepository, times(3)).saveAndFlush(captor.capture())
+        val finalRun = captor.allValues.last()
+        assertThat(finalRun.createdCount).isZero()
+        assertThat(finalRun.updatedCount).isEqualTo(1)
+        assertThat(finalRun.successCount).isEqualTo(1)
+        assertThat(finalRun.failureCount).isZero()
     }
 
     // --- triggerManual ---

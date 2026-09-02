@@ -1,6 +1,7 @@
 package team.inreok.getiserver.domain.company.service
 
 import org.springframework.data.domain.Pageable
+import team.inreok.getiserver.domain.company.dto.AdminCompanyDetailResponse
 import team.inreok.getiserver.domain.company.dto.CompanyCreateRequest
 import team.inreok.getiserver.domain.company.dto.CompanyResponse
 import team.inreok.getiserver.domain.company.dto.CompanySearchResponse
@@ -23,6 +24,11 @@ interface CompanyService {
         requesterId: Long,
     ): CompanyResponse
 
+    fun getAdminDetail(
+        companyId: Long,
+        requesterId: Long,
+    ): AdminCompanyDetailResponse
+
     fun search(
         requesterId: Long,
         query: String?,
@@ -40,4 +46,9 @@ interface CompanyService {
 
     /** 기업을 Soft Delete한다(`deleted_at` 기록). 이미 삭제된 기업은 찾을 수 없는 것으로 처리한다. */
     fun delete(companyId: Long)
+
+    fun delete(
+        companyId: Long,
+        requesterId: Long,
+    )
 }
