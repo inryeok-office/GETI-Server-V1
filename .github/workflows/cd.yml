@@ -209,7 +209,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: 서버 배포 (prod)
-        uses: appleboy/ssh-action@v1.0.0
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
