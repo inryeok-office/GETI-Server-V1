@@ -11,6 +11,7 @@ import team.inreok.getiserver.domain.job.entity.Job
 import team.inreok.getiserver.domain.job.entity.type.JobStatus
 import java.time.LocalDateTime
 
+@Suppress("TooManyFunctions")
 interface JobRepository : JpaRepository<Job, Long> {
     fun findBySourceNameAndExternalJobId(
         sourceName: String,
@@ -32,6 +33,35 @@ interface JobRepository : JpaRepository<Job, Long> {
     // Pagination 없이 한 번에 가져와도 충분하다 — findForReindex처럼 여러 상태를 한꺼번에
     // 받지 않고 PUBLISHED만 조회해, CLOSED까지 가져와 매번 걸러내는 낭비를 피한다.
     fun findAllByStatusAndDeletedAtIsNull(status: JobStatus): List<Job>
+
+    /** 관리자 목록용 원본 DB 조회. 상태 미지정 시 soft-deleted 공고를 제외하고, 상태를 지정하면 해당 상태를 그대로 조회한다. */
+    @Query(
+        """
+        SELECT j FROM Job j
+        WHERE (
+            (
+                :status IS NULL
+                AND j.status <> team.inreok.getiserver.domain.job.entity.type.JobStatus.DELETED
+                AND j.deletedAt IS NULL
+            )
+            OR (
+                :status IS NOT NULL
+                AND j.status = :status
+                AND (
+                    :status = team.inreok.getiserver.domain.job.entity.type.JobStatus.DELETED
+                    OR j.deletedAt IS NULL
+                )
+            )
+        )
+          AND (:query IS NULL OR LOWER(j.title) LIKE LOWER(CONCAT('%', CAST(:query AS string), '%')) ESCAPE '\')
+        ORDER BY j.createdAt DESC, j.id DESC
+        """,
+    )
+    fun searchForAdmin(
+        @Param("query") query: String?,
+        @Param("status") status: JobStatus?,
+        pageable: Pageable,
+    ): Page<Job>
 
     fun findAllByCompanyIdAndStatusInAndDeletedAtIsNull(
         companyId: Long,

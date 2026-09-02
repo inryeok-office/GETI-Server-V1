@@ -9,6 +9,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
+import org.springframework.data.domain.PageRequest
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
@@ -77,6 +78,43 @@ class CompanyJobQueryIntegrationTest
             assertThat(jobRepository.existsActiveByCompanyId(expiredCompanyId, now)).isFalse()
             assertThat(jobRepository.existsActiveByCompanyId(closedCompanyId, now)).isFalse()
             assertThat(jobRepository.existsActiveByCompanyId(deletedCompanyId, now)).isFalse()
+        }
+
+        @Test
+        fun `관리자 목록은 DB에서 상태·검색·페이지를 적용하고 삭제 공고는 기본 제외한다`() {
+            val companyId = persistCompany("관리 기업")
+            persistJob(companyId, "백엔드 공개", JobStatus.PUBLISHED)
+            persistJob(companyId, "백엔드 초안", JobStatus.DRAFT)
+            persistJob(companyId, "프론트 공개", JobStatus.PUBLISHED)
+            persistJob(companyId, "삭제 초안", JobStatus.DRAFT, deleted = true)
+            persistJob(companyId, "삭제 상태", JobStatus.DELETED)
+
+            val page = jobRepository.searchForAdmin("백엔드", null, PageRequest.of(0, 1))
+
+            assertThat(page.totalElements).isEqualTo(2)
+            assertThat(page.content).hasSize(1)
+            assertThat(page.content.single().title).isEqualTo("백엔드 초안")
+        }
+
+        @Test
+        fun `관리자 목록은 DELETED 상태를 명시하면 삭제 공고를 조회한다`() {
+            val companyId = persistCompany("관리 기업")
+            persistJob(companyId, "삭제 초안", JobStatus.DRAFT, deleted = true)
+            val deletedJob =
+                jobRepository.saveAndFlush(
+                    Job(
+                        companyId = companyId,
+                        type = PostingType.GENERAL,
+                        applicationMethod = ApplicationMethod.INTERNAL,
+                        title = "삭제 상태",
+                        status = JobStatus.DELETED,
+                    ).apply { deletedAt = LocalDateTime.now() },
+                )
+
+            val page = jobRepository.searchForAdmin(null, JobStatus.DELETED, PageRequest.of(0, 20))
+
+            assertThat(page.totalElements).isEqualTo(1)
+            assertThat(page.content.single().id).isEqualTo(deletedJob.id)
         }
 
         private fun persistCompany(name: String): Long =
