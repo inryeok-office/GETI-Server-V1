@@ -39,8 +39,19 @@ interface JobRepository : JpaRepository<Job, Long> {
         """
         SELECT j FROM Job j
         WHERE (
-            (:status IS NULL AND j.deletedAt IS NULL)
-            OR (:status IS NOT NULL AND j.status = :status)
+            (
+                :status IS NULL
+                AND j.status <> team.inreok.getiserver.domain.job.entity.type.JobStatus.DELETED
+                AND j.deletedAt IS NULL
+            )
+            OR (
+                :status IS NOT NULL
+                AND j.status = :status
+                AND (
+                    :status = team.inreok.getiserver.domain.job.entity.type.JobStatus.DELETED
+                    OR j.deletedAt IS NULL
+                )
+            )
         )
           AND (:query IS NULL OR LOWER(j.title) LIKE LOWER(CONCAT('%', :query, '%')) ESCAPE '\')
         ORDER BY j.createdAt DESC, j.id DESC

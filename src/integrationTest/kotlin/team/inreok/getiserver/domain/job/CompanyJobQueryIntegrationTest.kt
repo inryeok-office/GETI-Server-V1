@@ -87,6 +87,7 @@ class CompanyJobQueryIntegrationTest
             persistJob(companyId, "백엔드 초안", JobStatus.DRAFT)
             persistJob(companyId, "프론트 공개", JobStatus.PUBLISHED)
             persistJob(companyId, "삭제 초안", JobStatus.DRAFT, deleted = true)
+            persistJob(companyId, "삭제 상태", JobStatus.DELETED)
 
             val page = jobRepository.searchForAdmin("백엔드", null, PageRequest.of(0, 1))
 
