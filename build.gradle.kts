@@ -116,7 +116,7 @@ dependencies {
     // 파일을 막을 수 없다(Issue #85). 문서 본문을 파싱하는 tika-parsers는 쓰지 않는다 —
     // 형식 탐지에는 tika-core만 있으면 되고 Dependency도 훨씬 가볍다. Spring Boot Dependency
     // Management가 Tika를 관리하지 않아 Version을 직접 고정한다(4.0.0은 아직 beta라 제외).
-    implementation("org.apache.tika:tika-core:3.3.2")
+    implementation("org.apache.tika:tika-core:4.0.0")
 
     // Kotlin / Jackson
     implementation("org.jetbrains.kotlin:kotlin-reflect")
