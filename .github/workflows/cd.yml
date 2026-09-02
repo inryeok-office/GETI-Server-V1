@@ -121,7 +121,7 @@ jobs:
       # devops가 이미 구성해 둔 `sudo docker compose ...` 명령 자체(및 그 sudoers 권한)는
       # 그대로 유지된다. docs/development/cd.md 참고.
       - name: 서버 배포
-        uses: appleboy/ssh-action@v1.0.0
+        uses: appleboy/ssh-action@v1.2.5
         env:
           # appleboy/ssh-action의 envs 입력이 SSH 세션 시작 시 이 Job 환경의 값을 그대로
           # export한다. Secret 값 자체는 script 안에서 echo/log로 출력하지 않는다(GitHub
@@ -201,10 +201,74 @@ jobs:
 
             echo "배포 검증 완료: SHA=${DEPLOY_SHA}"
 
+  deploy-prod:
+    name: 서버 배포 (prod)
+    needs: [notify-start, deploy]
+    if: always() && needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 서버 배포 (prod)
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          timeout: 60s
+          command_timeout: 25m
+          script: |
+            set -e
+            cd ~/GETI-Server
+            git fetch origin develop
+            git reset --hard origin/develop
+
+            DEPLOY_SHA=$(git rev-parse HEAD)
+            APP_BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            APP_VERSION=$(grep -m1 '^version = ' build.gradle.kts | sed -E 's/version = "([^"]+)"/\1/')
+
+            sudo docker compose build \
+              --build-arg "APP_VERSION=${APP_VERSION}" \
+              --build-arg "APP_GIT_SHA=${DEPLOY_SHA}" \
+              --build-arg "APP_BUILD_TIME=${APP_BUILD_TIME}" \
+              --build-arg "APP_ENVIRONMENT=prod" \
+              app-prod
+            sudo docker compose --profile app-prod up -d
+
+            READY=false
+            for i in $(seq 1 24); do
+              sleep 5
+              if sudo docker compose exec -T app-prod wget -qO- http://localhost:8081/actuator/health/readiness 2>/dev/null; then
+                echo "Readiness check passed (prod)"
+                READY=true
+                break
+              fi
+              echo "Waiting for app-prod readiness... ($i/24)"
+            done
+
+            if [ "$READY" != "true" ]; then
+              echo "Readiness check failed after waiting (prod)"
+              sudo docker compose logs app-prod --tail=50
+              exit 1
+            fi
+
+            RUNNING_SHA=$(sudo docker compose exec -T app-prod printenv APP_GIT_SHA | tr -d '\r\n')
+
+            if [ -z "$RUNNING_SHA" ] || [ "$RUNNING_SHA" = "unknown" ]; then
+              echo "실행 중인 Container(prod)에서 APP_GIT_SHA를 확인할 수 없습니다."
+              exit 1
+            fi
+
+            if [ "$RUNNING_SHA" != "$DEPLOY_SHA" ]; then
+              echo "실행 중인 Container(prod)의 SHA(${RUNNING_SHA})가 배포 대상 SHA(${DEPLOY_SHA})와 일치하지 않습니다."
+              exit 1
+            fi
+
+            echo "배포 검증 완료(prod): SHA=${DEPLOY_SHA}"
+
   notify-success:
     name: Discord 배포 성공 알림
-    needs: [notify-start, deploy]
-    if: needs.deploy.result == 'success'
+    needs: [notify-start, deploy, deploy-prod]
+    if: needs.deploy.result == 'success' && needs.deploy-prod.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -296,8 +360,8 @@ jobs:
 
   notify-failure:
     name: Discord 배포 실패 알림
-    needs: [notify-start, deploy]
-    if: always() && needs.deploy.result == 'failure'
+    needs: [notify-start, deploy, deploy-prod]
+    if: always() && (needs.deploy.result == 'failure' || needs.deploy-prod.result == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -392,10 +456,10 @@ jobs:
 
   notify-cancelled:
     name: Discord 배포 취소 알림
-    needs: [notify-start, deploy]
+    needs: [notify-start, deploy, deploy-prod]
     # GitHub Actions가 Workflow Run 자체를 강제 취소하면 이 Job이 예약되지 않을 수 있어(대기 중인
     # Job까지 즉시 종료), 취소 알림은 Best Effort로만 보장한다(docs/development/cd.md 참고).
-    if: always() && (cancelled() || needs.deploy.result == 'cancelled')
+    if: always() && (cancelled() || needs.deploy.result == 'cancelled' || needs.deploy-prod.result == 'cancelled')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

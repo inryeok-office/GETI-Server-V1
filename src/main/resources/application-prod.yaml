@@ -15,6 +15,11 @@ spring:
     password: ${ELASTICSEARCH_PASSWORD:}
 
 app:
+  auth:
+    refresh-cookie:
+      # 운영은 HTTPS 전용이므로 Refresh Token Cookie에 Secure를 강제한다(Issue #105).
+      # local/common은 HTTP라 기본값 false를 쓴다(RefreshTokenCookieFactory 참고).
+      secure: true
   file:
     storage:
       # 안전하지 않은 기본값을 두지 않는다 — 값이 없으면 기동을 거부한다(elasticsearch.uris와 동일).

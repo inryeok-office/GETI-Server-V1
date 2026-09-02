@@ -1,7 +1,6 @@
 package team.inreok.getiserver.domain.inquiry.dto
 
 import io.swagger.v3.oas.annotations.media.Schema
-import team.inreok.getiserver.domain.inquiry.entity.type.InquiryDiscordDeliveryStatus
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryStatus
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryType
 import java.time.LocalDateTime
@@ -41,11 +40,6 @@ data class InquiryAdminListItemResponse(
     val author: InquiryAdminAuthorResponse,
     @param:Schema(description = "담당 개발자 정보. 지정되지 않았으면 null", nullable = true)
     val assignee: InquiryAssigneeResponse?,
-    @param:Schema(
-        description = "Discord 접수 알림 전달 상태. Notification 연동 전이라 항상 PENDING(Phase 5에서 실제 값 연결 예정)",
-        example = "PENDING",
-    )
-    val discordDeliveryStatus: InquiryDiscordDeliveryStatus,
     @param:Schema(description = "등록 시각")
     val createdAt: LocalDateTime,
     @param:Schema(description = "최초 답변 시각. 아직 답변이 없으면 null", nullable = true)

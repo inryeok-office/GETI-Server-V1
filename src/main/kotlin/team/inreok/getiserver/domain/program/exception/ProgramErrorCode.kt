@@ -25,6 +25,7 @@ enum class ProgramErrorCode(
     // 처리하려면 TARGET_GRADE_REQUIRED(값이 비어 있음)와 구분되는 코드가 필요해 추가했다.
     INVALID_TARGET_GRADE(HttpStatus.BAD_REQUEST, "대상 학년은 1, 2, 3 중 하나여야 하며 중복될 수 없습니다."),
     DISCORD_CHANNEL_REQUIRED(HttpStatus.BAD_REQUEST, "게시하려면 Discord 채널을 선택해야 합니다."),
+    DISCORD_CHANNEL_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "허용되지 않은 Discord 채널입니다."),
     PROGRAM_FORM_NOT_LINKABLE(HttpStatus.BAD_REQUEST, "연결할 수 없는 신청 양식입니다."),
 
     // 원본 문서 23절에는 없지만 6절 "필수 검증"(제목 공백, 본문 공백, 위치 필수, 게시 시 일정

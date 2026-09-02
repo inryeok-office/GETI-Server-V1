@@ -8,10 +8,11 @@ import java.time.LocalDateTime
  * 요구사항 문서 §19·§27). 방향과 이유는
  * [team.inreok.getiserver.domain.job.query.JobDiscordPayloadQueryPort]와 같다.
  *
- * `notification`이 `program`의 Discord 상태를 대신 소유하게 되면서(§32·§33) `program`은 자신의
- * `discord_channel_id`/`discord_message_id` Column과
- * `entity.type.DiscordDeliveryStatus(SUCCESS/FAILED/SKIPPED)`를 후속 PR에서 정리한다. 이 Port는
- * 그 정리와 무관하게 "Discord에 보여줄 프로그램 내용"만 읽는다.
+ * `notification`이 `program`의 Discord 상태를 대신 소유하면서(§32·§33) `program.entity.type.
+ * DiscordDeliveryStatus(SUCCESS/FAILED/SKIPPED)`와 `dto.DiscordDeliveryResult`는 제거됐고
+ * 세 응답 DTO의 `discordDelivery` 필드도 사라졌다(`discord-event-wiring-plan.md` §6.1,
+ * Breaking Change). `discord_channel_id`는 여전히 클라이언트가 채널을 지정하는 입력값이라
+ * 유지한다. 이 Port는 그 정리와 무관하게 "Discord에 보여줄 프로그램 내용"만 읽는다.
  */
 @NamedInterface
 interface ProgramDiscordPayloadQueryPort {
@@ -20,6 +21,15 @@ interface ProgramDiscordPayloadQueryPort {
      * 삭제된 프로그램의 제목으로 기존 메시지를 수정해야 하기 때문이다.
      */
     fun findById(programId: Long): ProgramDiscordPayloadSnapshot?
+
+    /**
+     * 관리자 Discord 전달 목록에 표시할 프로그램 제목을 배치로 읽는다(Issue #206). 존재하지 않는
+     * id는 결과 Map에서 빠지고, 삭제된 프로그램도 포함한다. 목적과 근거는
+     * [team.inreok.getiserver.domain.job.query.JobDiscordPayloadQueryPort.findDisplayNamesByIds]와
+     * 같다 -- 특히 [ProgramDiscordPayloadSnapshot.bodyMarkdown]은 본문 전체라, 제목만 필요한
+     * 목록에서 Snapshot을 그대로 100건 실어 오지 않으려고 String만 돌려준다.
+     */
+    fun findDisplayNamesByIds(programIds: Set<Long>): Map<Long, String>
 }
 
 /**
@@ -37,4 +47,13 @@ data class ProgramDiscordPayloadSnapshot(
     val bodyMarkdown: String?,
     val eventStartedAt: LocalDateTime?,
     val eventEndedAt: LocalDateTime?,
+    /** `Program.discordChannelId`(원시 Snowflake, 클라이언트가 등록 시 지정한 값). */
+    val discordChannelId: String?,
+    /** Mention Role 계산에 쓰는 대상 학년 목록. `program_target_grades` Table을 조회한 값이다. */
+    val targetGrades: List<Int>,
+    /**
+     * `discord-delivery-plan.md` §6.3의 UPDATE Idempotency Key를 만드는 데 쓴다. 저장된 Program은
+     * `@UpdateTimestamp`가 항상 채우므로 non-null이다.
+     */
+    val updatedAt: LocalDateTime,
 )

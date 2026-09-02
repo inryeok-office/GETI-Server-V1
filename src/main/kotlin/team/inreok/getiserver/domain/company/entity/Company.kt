@@ -65,4 +65,13 @@ class Company(
 
     @Column(name = "deleted_at")
     var deletedAt: LocalDateTime? = null
+
+    @Column(name = "representative_email", length = 320)
+    var representativeEmail: String? = null
+
+    @Column(name = "representative_phone", length = 100)
+    var representativePhone: String? = null
+
+    @Column(columnDefinition = "text")
+    var memo: String? = null
 }

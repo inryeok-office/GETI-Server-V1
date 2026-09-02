@@ -9,6 +9,7 @@ import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.DeleteMapping
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import team.inreok.getiserver.domain.company.dto.AdminCompanyDetailResponse
 import team.inreok.getiserver.domain.company.dto.CompanyCreateRequest
 import team.inreok.getiserver.domain.company.dto.CompanyResponse
 import team.inreok.getiserver.domain.company.dto.CompanyUpdateRequest
@@ -36,6 +38,23 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 class CompanyAdminController(
     private val companyService: CompanyService,
 ) {
+    @Operation(
+        summary = "관리자 기업 상세 조회",
+        description = "연락처, 내부 메모, 수정 이력, 연결된 공고와 관리자 통계를 포함한 기업 상세를 조회한다.",
+    )
+    @ApiResponses(
+        SwaggerApiResponse(responseCode = "200", description = "관리자 기업 상세 조회 성공"),
+        SwaggerApiResponse(responseCode = "401", description = "인증되지 않음"),
+        SwaggerApiResponse(responseCode = "403", description = "개발자 권한 없음"),
+        SwaggerApiResponse(responseCode = "404", description = "기업을 찾을 수 없음(COMPANY_NOT_FOUND)"),
+    )
+    @GetMapping("/{companyId}")
+    fun getCompanyDetail(
+        authentication: Authentication,
+        @Parameter(description = "조회할 기업 ID", example = "1") @PathVariable companyId: Long,
+    ): ApiResponse<AdminCompanyDetailResponse> =
+        ApiResponse.of(companyService.getAdminDetail(companyId, authentication.principal as Long))
+
     @Operation(
         summary = "기업 등록",
         description = """
@@ -125,7 +144,8 @@ class CompanyAdminController(
         description = """
             기업을 Soft Delete한다(`deleted_at` 기록). 기존 공고와 이력을 유지하기 위해 실제 행을
             삭제하지 않는다. 삭제된 기업은 이후 목록·상세 조회에서 제외된다. 이미 삭제된 기업은
-            404로 처리한다. 연결된 공개 공고가 있을 때의 차단은 Job 도메인 연동 후 추가된다.
+            404로 처리한다. PUBLISHED이면서 마감 시각이 지나지 않은 공고가 하나라도 있으면
+            COMPANY_HAS_ACTIVE_JOBS로 삭제를 거부한다.
         """,
     )
     @ApiResponses(
@@ -133,13 +153,15 @@ class CompanyAdminController(
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "403", description = "개발자 권한이 없음 (FORBIDDEN)"),
         SwaggerApiResponse(responseCode = "404", description = "기업이 없거나 이미 삭제됨 (COMPANY_NOT_FOUND)"),
+        SwaggerApiResponse(responseCode = "409", description = "현재 모집 중인 공고가 있음 (COMPANY_HAS_ACTIVE_JOBS)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
     )
     @DeleteMapping("/{companyId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun deleteCompany(
+        authentication: Authentication,
         @Parameter(description = "삭제할 기업 ID", example = "1") @PathVariable companyId: Long,
     ) {
-        companyService.delete(companyId)
+        companyService.delete(companyId, authentication.principal as Long)
     }
 }

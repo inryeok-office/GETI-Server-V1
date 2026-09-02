@@ -29,6 +29,17 @@ interface FileStoragePort {
     /** Object가 존재하는지. DB Metadata와 Storage의 정합성을 확인할 때 쓴다(지시서 §30). */
     fun exists(key: String): Boolean
 
+    /**
+     * Object 내용을 읽는다. [FileArchivePort][team.inreok.getiserver.domain.file.archive.FileArchivePort]가
+     * 여러 File을 하나의 ZIP으로 합칠 때만 쓴다 -- 그 외에는 항상 [presignedGetUrl]로 Client가
+     * Storage에서 직접 받게 하고, 서버가 Body를 대신 읽지 않는다(지시서 §42 "파일 전체를 메모리에
+     * 읽어 ... 처리" 금지와 같은 이유로 서버 경유 자체를 최소화한다).
+     *
+     * 반환한 [InputStream]은 호출자가 닫는다. 존재하지 않는 [key]를 읽으면 `FileStorageException`을
+     * 던진다(Metadata와 Storage가 어긋난 상태이므로 "없음"으로 조용히 넘기지 않는다).
+     */
+    fun download(key: String): InputStream
+
     /** Object를 지운다. 없는 Key를 지워도 오류가 아니다(보상 처리에서 반복 호출될 수 있다). */
     fun delete(key: String)
 

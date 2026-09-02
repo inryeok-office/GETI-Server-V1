@@ -14,9 +14,15 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import java.net.URI
 
 /**
- * AWS SDK Client를 구성한다. 같은 설정을 [S3Client]와 [S3Presigner]에 동일하게 적용해야
+ * AWS SDK Client를 구성한다. [S3Client]와 [S3Presigner]에 Path Style 설정은 동일하게 적용해야
  * Presigned URL이 실제 Endpoint와 어긋나지 않는다(MinIO는 Path Style, AWS S3는 Virtual Hosted
  * Style이라 이 값이 다르면 서명은 되는데 접속이 안 되는 형태로 실패한다).
+ *
+ * 다만 Endpoint 자체는 둘이 다를 수 있다. [S3Client]는 서버가 직접 호출하므로
+ * [FileStorageProperties.endpoint]를 쓰고, [S3Presigner]는 만든 URL을 외부 Client가 접속해야
+ * 하므로 [FileStorageProperties.resolvedPublicEndpoint]를 쓴다(`docker compose --profile app`
+ * 환경에서 `endpoint=http://minio:9000`처럼 Container 내부에서만 해석되는 이름을 그대로
+ * Presigned URL에 남기지 않기 위함).
  *
  * SDK Type이 등장하는 곳은 이 Configuration과 [S3FileStorageAdapter]뿐이다. Application 계층은
  * [FileStoragePort]만 본다(지시서 §2).
@@ -49,8 +55,13 @@ class FileStorageConfig {
                     .builder()
                     .pathStyleAccessEnabled(properties.pathStyleAccess)
                     .build(),
-            ).apply { properties.endpoint?.takeIf { it.isNotBlank() }?.let { endpointOverride(URI.create(it)) } }
-            .build()
+            ).apply {
+                properties.resolvedPublicEndpoint()?.takeIf { it.isNotBlank() }?.let {
+                    endpointOverride(
+                        URI.create(it),
+                    )
+                }
+            }.build()
 
     /**
      * 자격증명을 명시했으면 Static(local MinIO), 비웠으면 Default를 쓴다.

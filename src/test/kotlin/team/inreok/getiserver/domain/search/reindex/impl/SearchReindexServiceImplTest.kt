@@ -18,6 +18,8 @@ import org.mockito.junit.jupiter.MockitoSettings
 import org.mockito.quality.Strictness
 import org.springframework.core.task.SyncTaskExecutor
 import org.springframework.dao.DataIntegrityViolationException
+import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchQueryPort
+import team.inreok.getiserver.domain.ai.query.AiAnalysisSearchSnapshot
 import team.inreok.getiserver.domain.job.query.JobIndexQueryPort
 import team.inreok.getiserver.domain.job.query.JobIndexSnapshot
 import team.inreok.getiserver.domain.search.config.SearchProperties
@@ -49,6 +51,9 @@ class SearchReindexServiceImplTest {
     private lateinit var documentBuilder: JobIndexDocumentBuilder
 
     @Mock
+    private lateinit var aiAnalysisSearchQueryPort: AiAnalysisSearchQueryPort
+
+    @Mock
     private lateinit var indexManager: JobSearchIndexManager
 
     private val properties = SearchProperties(reindexBatchSize = 2)
@@ -58,6 +63,7 @@ class SearchReindexServiceImplTest {
             reindexRunRepository,
             jobIndexQueryPort,
             documentBuilder,
+            aiAnalysisSearchQueryPort,
             indexManager,
             SyncTaskExecutor(),
             properties,
@@ -101,7 +107,7 @@ class SearchReindexServiceImplTest {
 
         given(jobIndexQueryPort.findForReindex(0L, 2)).willReturn(listOf(snapshotOf(1L), snapshotOf(2L)))
         given(jobIndexQueryPort.findForReindex(2L, 2)).willReturn(emptyList())
-        given(documentBuilder.build(anySnapshot())).willReturn(documentOf(1L))
+        given(documentBuilder.build(anySnapshot(), anyAiSnapshot())).willReturn(documentOf(1L))
 
         val run = service.triggerReindex()
 
@@ -127,12 +133,53 @@ class SearchReindexServiceImplTest {
 
         given(jobIndexQueryPort.findForReindex(0L, 2)).willReturn(listOf(snapshotOf(1L), snapshotOf(2L)))
         given(jobIndexQueryPort.findForReindex(2L, 2)).willReturn(emptyList())
-        given(documentBuilder.build(snapshotOf(1L))).willReturn(documentOf(1L))
-        willThrow(RuntimeException("bad data")).given(documentBuilder).build(snapshotOf(2L))
+        given(documentBuilder.build(snapshotOf(1L), null)).willReturn(documentOf(1L))
+        willThrow(RuntimeException("bad data")).given(documentBuilder).build(snapshotOf(2L), null)
 
         service.triggerReindex()
 
         verify(indexManager).switchAlias(anyString(), anySet() ?: emptySet())
+    }
+
+    @Test
+    fun `AI 분석 결과를 Page 단위로 한 번만 Batch 조회해서 N+1 없이 각 Document에 반영한다`() {
+        given(reindexRunRepository.existsByStatusIn(anyStatuses())).willReturn(false)
+        given(reindexRunRepository.saveAndFlush(anyRun())).willAnswer {
+            (it.arguments[0] as SearchReindexRun).apply {
+                id =
+                    1L
+            }
+        }
+        given(reindexRunRepository.findById(1L)).willAnswer { Optional.of(runOf(1L)) }
+        given(indexManager.createNewPhysicalIndex()).willReturn("jobs-search-1")
+        given(indexManager.resolveIndicesBehindAlias()).willReturn(emptySet())
+
+        // 같은 Snapshot 객체를 Stub 설정과 검증 양쪽에서 재사용한다 -- snapshotOf가 내부적으로
+        // LocalDateTime.now()를 담으므로, 매번 새로 호출하면 Data Class equals()가 나노초
+        // 단위 차이로 서로 다른 값을 만들어 Argument 매칭이 깨질 수 있다.
+        val snapshot1 = snapshotOf(1L)
+        val snapshot2 = snapshotOf(2L)
+        given(jobIndexQueryPort.findForReindex(0L, 2)).willReturn(listOf(snapshot1, snapshot2))
+        given(jobIndexQueryPort.findForReindex(2L, 2)).willReturn(emptyList())
+        val aiSnapshot =
+            AiAnalysisSearchSnapshot(
+                requiredTechStackIds = listOf(10L),
+                preferredTechStackIds = emptyList(),
+                highSchoolGraduateFit = "SUITABLE",
+                entryLevelFit = "SUITABLE",
+                difficulty = "NORMAL",
+            )
+        given(aiAnalysisSearchQueryPort.findCompletedByJobIds(listOf(1L, 2L)))
+            .willReturn(mapOf(1L to aiSnapshot))
+        given(documentBuilder.build(snapshot1, aiSnapshot)).willReturn(documentOf(1L))
+        given(documentBuilder.build(snapshot2, null)).willReturn(documentOf(2L))
+
+        service.triggerReindex()
+
+        // Page(공고 2건)당 정확히 한 번만 호출된다 -- 공고 건수만큼 반복 조회하면 N+1이 된다.
+        verify(aiAnalysisSearchQueryPort, org.mockito.Mockito.times(1)).findCompletedByJobIds(listOf(1L, 2L))
+        verify(documentBuilder).build(snapshot1, aiSnapshot)
+        verify(documentBuilder).build(snapshot2, null)
     }
 
     @Test
@@ -164,6 +211,10 @@ class SearchReindexServiceImplTest {
 
     private fun anySnapshot(): JobIndexSnapshot =
         org.mockito.ArgumentMatchers.any(JobIndexSnapshot::class.java) ?: snapshotOf(0L)
+
+    // AiAnalysisSearchSnapshot?는 Kotlin에서 Nullable 파라미터이므로(null도 유효한 값), Class를
+    // 지정하지 않은 any()로 null을 포함해 무엇이든 매칭한다.
+    private fun anyAiSnapshot(): AiAnalysisSearchSnapshot? = org.mockito.ArgumentMatchers.any()
 
     private fun anyString(): String = org.mockito.ArgumentMatchers.anyString() ?: ""
 
@@ -206,6 +257,7 @@ class SearchReindexServiceImplTest {
             companyId = 1L,
             companyName = "인력개발원",
             companyType = "GENERAL",
+            companyLogoFileId = null,
             sourceName = null,
             targetGrade = null,
             capacity = null,

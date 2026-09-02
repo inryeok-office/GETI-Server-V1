@@ -19,15 +19,21 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.inreok.getiserver.domain.company.dto.AdminCompanyAuditLogEntryResponse
+import team.inreok.getiserver.domain.company.dto.AdminCompanyConnectedJobResponse
+import team.inreok.getiserver.domain.company.dto.AdminCompanyDetailResponse
+import team.inreok.getiserver.domain.company.dto.AdminCompanyStatsResponse
 import team.inreok.getiserver.domain.company.dto.CompanyCreateRequest
 import team.inreok.getiserver.domain.company.dto.CompanyResponse
 import team.inreok.getiserver.domain.company.dto.CompanyUpdateRequest
 import team.inreok.getiserver.domain.company.entity.type.CompanyType
 import team.inreok.getiserver.domain.company.entity.type.MouStatus
+import team.inreok.getiserver.domain.company.exception.CompanyHasActiveJobsException
 import team.inreok.getiserver.domain.company.exception.CompanyNameRequiredException
 import team.inreok.getiserver.domain.company.exception.CompanyNotFoundException
 import team.inreok.getiserver.domain.company.exception.DuplicateCompanyException
@@ -41,7 +47,7 @@ import java.time.LocalDateTime
 // SecurityConfig를 명시적으로 Import해 /api/v1/admin/companies가 실제로 DEVELOPER 권한을
 // 요구하는지(401/403)까지 검증한다.
 @WebMvcTest(controllers = [CompanyAdminController::class])
-@Import(SecurityConfig::class)
+@Import(team.inreok.getiserver.global.security.NormalSecurityTestConfig::class)
 @EnableWebSecurity
 class CompanyAdminControllerTest
     @Autowired
@@ -73,6 +79,57 @@ class CompanyAdminControllerTest
 
         private fun anyUpdateRequest(): CompanyUpdateRequest =
             any(CompanyUpdateRequest::class.java) ?: CompanyUpdateRequest()
+
+        private fun adminCompanyDetailResponse() =
+            AdminCompanyDetailResponse(
+                companyId = 1L,
+                name = "테스트 기업",
+                companyType = CompanyType.PUBLIC_INSTITUTION,
+                mouStatus = MouStatus.ACTIVE,
+                sourceName = "manual",
+                homepageUrl = "https://example.com",
+                logoUrl = null,
+                description = null,
+                industry = null,
+                address = null,
+                mouStartDate = null,
+                mouEndDate = null,
+                representativeEmail = "contact@example.com",
+                representativePhone = "02-1234-5678",
+                memo = "관리 메모",
+                lastEditedBy = "관리자",
+                lastEditedAt = LocalDateTime.of(2026, 3, 2, 9, 0),
+                stats = AdminCompanyStatsResponse(3, 2, 27),
+                connectedJobs = listOf(AdminCompanyConnectedJobResponse(10, "공고", "GENERAL", "PUBLISHED", 3)),
+                recentChanges = listOf(AdminCompanyAuditLogEntryResponse(20, "COMPANY_UPDATED", "2026-03-02 · 관리자")),
+                createdAt = LocalDateTime.of(2026, 3, 1, 10, 0),
+                updatedAt = LocalDateTime.of(2026, 3, 2, 9, 0),
+            )
+
+        @Test
+        fun `관리자 기업 상세는 민감 필드와 연결 데이터를 반환한다`() {
+            given(companyService.getAdminDetail(1L, 1L)).willReturn(adminCompanyDetailResponse())
+
+            mockMvc
+                .perform(get("/api/v1/admin/companies/1").with(authOf(1L, "DEVELOPER")))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.representativeEmail").value("contact@example.com"))
+                .andExpect(jsonPath("$.data.representativePhone").value("02-1234-5678"))
+                .andExpect(jsonPath("$.data.memo").value("관리 메모"))
+                .andExpect(jsonPath("$.data.stats.totalConnectedJobs").value(3))
+                .andExpect(jsonPath("$.data.connectedJobs[0].applicantCount").value(3))
+                .andExpect(jsonPath("$.data.recentChanges[0].title").value("COMPANY_UPDATED"))
+        }
+
+        @Test
+        fun `없는 관리자 기업 상세는 404를 반환한다`() {
+            given(companyService.getAdminDetail(999L, 1L)).willThrow(CompanyNotFoundException(999L))
+
+            mockMvc
+                .perform(get("/api/v1/admin/companies/999").with(authOf(1L, "DEVELOPER")))
+                .andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.error.code").value("COMPANY_NOT_FOUND"))
+        }
 
         private fun companyResponse(name: String = "인력개발원") =
             CompanyResponse(
@@ -263,13 +320,13 @@ class CompanyAdminControllerTest
                 .perform(delete("/api/v1/admin/companies/1").with(authOf(1L, "DEVELOPER")))
                 .andExpect(status().isNoContent)
 
-            verify(companyService).delete(1L)
+            verify(companyService).delete(1L, 1L)
         }
 
         @Test
         fun `존재하지 않는 기업을 삭제하면 404 COMPANY_NOT_FOUND를 반환한다`() {
             // delete는 반환값이 없어(Unit → void) given(...)으로 스텁할 수 없으므로 willThrow를 먼저 쓴다.
-            willThrow(CompanyNotFoundException(999L)).given(companyService).delete(999L)
+            willThrow(CompanyNotFoundException(999L)).given(companyService).delete(999L, 1L)
 
             mockMvc
                 .perform(delete("/api/v1/admin/companies/999").with(authOf(1L, "DEVELOPER")))
@@ -278,12 +335,22 @@ class CompanyAdminControllerTest
         }
 
         @Test
+        fun `현재 모집 중인 공고가 있으면 기업 삭제는 409를 반환한다`() {
+            willThrow(CompanyHasActiveJobsException()).given(companyService).delete(1L, 1L)
+
+            mockMvc
+                .perform(delete("/api/v1/admin/companies/1").with(authOf(1L, "DEVELOPER")))
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.error.code").value("COMPANY_HAS_ACTIVE_JOBS"))
+        }
+
+        @Test
         fun `교사는 기업을 삭제할 수 없고 403을 반환한다`() {
             mockMvc
                 .perform(delete("/api/v1/admin/companies/1").with(authOf(2L, "TEACHER")))
                 .andExpect(status().isForbidden)
 
-            verify(companyService, never()).delete(anyLong())
+            verify(companyService, never()).delete(anyLong(), anyLong())
         }
 
         @Test

@@ -53,6 +53,7 @@ interface InquiryService {
         mineOnly: Boolean,
         requesterMemberId: Long,
         pageable: Pageable,
+        answered: Boolean? = null,
     ): InquiryAdminListResponse
 
     /**

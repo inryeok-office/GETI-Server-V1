@@ -157,8 +157,7 @@ class CollectorExecutionServiceImpl(
                 return
             }
 
-        var successCount = 0
-        var failureCount = 0
+        val upsertStats = UpsertStats()
         var partialQualityCount = 0
         val eligibility = EligibilityStats()
         // finishAsCompleted가 source.lastSuccessAt을 갱신하기 전에 판정해야 한다 — "이 Provider의
@@ -174,18 +173,22 @@ class CollectorExecutionServiceImpl(
                 itemError.message,
                 emptyList(),
             )
-            failureCount++
+            upsertStats.record(JobProcessOutcome.FAILURE)
         }
 
         result.jobs.forEach { job ->
-            when (processCollectedJob(requireNotNull(current.id), source, job, isInitialImport, eligibility)) {
-                JobProcessOutcome.SUCCESS -> {
-                    successCount++
+            val outcome = processCollectedJob(requireNotNull(current.id), source, job, isInitialImport, eligibility)
+            when (outcome) {
+                JobProcessOutcome.CREATED,
+                JobProcessOutcome.UPDATED,
+                JobProcessOutcome.UNCHANGED,
+                -> {
+                    upsertStats.record(outcome)
                     if (job.dataQualityStatus == JobDataQualityStatus.PARTIAL) partialQualityCount++
                 }
 
                 JobProcessOutcome.FAILURE -> {
-                    failureCount++
+                    upsertStats.record(outcome)
                 }
 
                 JobProcessOutcome.EXCLUDED -> {
@@ -198,15 +201,14 @@ class CollectorExecutionServiceImpl(
             finishAsCompleted(
                 current,
                 source,
-                successCount,
-                failureCount,
+                upsertStats,
                 partialQualityCount,
                 eligibility,
                 result.requestCount,
             )
     }
 
-    private enum class JobProcessOutcome { SUCCESS, FAILURE, EXCLUDED }
+    private enum class JobProcessOutcome { CREATED, UPDATED, UNCHANGED, FAILURE, EXCLUDED }
 
     /**
      * 공고 하나를 적합성 판정 → (통과 시) Upsert 순서로 처리한다. GETI는 최대한 많은 공고를
@@ -234,11 +236,7 @@ class CollectorExecutionServiceImpl(
         }
 
         eligibility.record(decision.category, decision.status == JobEligibilityStatus.REVIEW_REQUIRED)
-        return if (upsertJob(runId, source, job, isInitialImport, decision.category)) {
-            JobProcessOutcome.SUCCESS
-        } else {
-            JobProcessOutcome.FAILURE
-        }
+        return upsertJob(runId, source, job, isInitialImport, decision.category)
     }
 
     /** Provider가 반환한 공고를 적합성 판정 결과별로 집계한다(제외 이유별 상세는 로그에만 남긴다). */
@@ -264,7 +262,7 @@ class CollectorExecutionServiceImpl(
     }
 
     /**
-     * 저장 성공이면 true, CollectionRunError를 기록하고 실패로 집계했으면 false. Job Upsert가
+     * 저장 결과를 생성/갱신/변경 없음으로 반환한다. 실패하면 CollectionRunError를 기록하고 FAILURE를 반환한다. Job Upsert가
      * 어떤 예외로 실패하든(BusinessException, DataIntegrityViolationException 등) 이 공고 하나만
      * 실패로 집계하고 나머지 공고 처리를 계속해야 하므로 의도적으로 RuntimeException을 넓게 잡는다.
      */
@@ -275,7 +273,7 @@ class CollectorExecutionServiceImpl(
         job: NormalizedCollectedJob,
         isInitialImport: Boolean,
         category: JobRelevanceCategory?,
-    ): Boolean =
+    ): JobProcessOutcome =
         try {
             val company =
                 companyExternalImportUseCase.findOrCreateExternal(
@@ -293,17 +291,51 @@ class CollectorExecutionServiceImpl(
                         startDate = job.startDate,
                         endDate = job.endDate,
                         publish = job.dataQualityStatus == JobDataQualityStatus.COMPLETE,
+                        // Provider가 준 근무지·고용형태를 Job Entity에도 반영한다(Issue #169). 이전에는
+                        // Discord 알림 표시와 적합성 판정에만 썼는데, 그러면 외부 수집 공고의 공고
+                        // 카드에는 두 값이 영원히 비어 있었다. 길이 초과 처리는 Job Module이 한다.
+                        location = job.workRegion,
+                        employmentType = job.employmentType,
                     ),
                 )
             if (result.outcome == JobImportOutcome.CREATED) {
                 notifyNewJob(result.jobId, source, job, isInitialImport, category)
             }
-            true
+            when (result.outcome) {
+                JobImportOutcome.CREATED -> JobProcessOutcome.CREATED
+                JobImportOutcome.UPDATED -> JobProcessOutcome.UPDATED
+                JobImportOutcome.UNCHANGED -> JobProcessOutcome.UNCHANGED
+                JobImportOutcome.FAILED -> JobProcessOutcome.FAILURE
+            }
         } catch (ex: RuntimeException) {
             recordError(runId, job.externalJobId, CODE_UPSERT_FAILED, "공고 저장에 실패했습니다.", job.missingFields)
             log.warn("수집 공고 Job 반영 실패: sourceCode={}, externalJobId={}", source.sourceCode, job.externalJobId, ex)
-            false
+            JobProcessOutcome.FAILURE
         }
+
+    private class UpsertStats {
+        var createdCount = 0
+            private set
+        var updatedCount = 0
+            private set
+        var unchangedCount = 0
+            private set
+        var failureCount = 0
+            private set
+
+        val successCount: Int
+            get() = createdCount + updatedCount + unchangedCount
+
+        fun record(outcome: JobProcessOutcome) {
+            when (outcome) {
+                JobProcessOutcome.CREATED -> createdCount++
+                JobProcessOutcome.UPDATED -> updatedCount++
+                JobProcessOutcome.UNCHANGED -> unchangedCount++
+                JobProcessOutcome.FAILURE -> failureCount++
+                JobProcessOutcome.EXCLUDED -> Unit
+            }
+        }
+    }
 
     // Discord 알림 실패가 이미 성공한 Job/Company 저장의 성공 처리(successCount)에 영향을 주면
     // 안 되므로, 여기서 발생하는 어떤 예외도 Job 반영 결과와 분리해 삼킨다(로그만 남긴다).
@@ -360,6 +392,8 @@ class CollectorExecutionServiceImpl(
     ) {
         recordError(requireNotNull(run.id), externalJobId = null, code = code, message = message, emptyList())
         run.status = CollectionRunStatus.FAILED
+        run.createdCount = 0
+        run.updatedCount = 0
         run.failureCount = 1
         run.totalCount = 1
         run.finishedAt = LocalDateTime.now()
@@ -378,20 +412,21 @@ class CollectorExecutionServiceImpl(
     private fun finishAsCompleted(
         run: CollectionRun,
         source: JobSource,
-        successCount: Int,
-        failureCount: Int,
+        upsertStats: UpsertStats,
         partialQualityCount: Int,
         eligibility: EligibilityStats,
         requestCount: Int,
     ): CollectionRun {
-        run.successCount = successCount
-        run.failureCount = failureCount
+        run.createdCount = upsertStats.createdCount
+        run.updatedCount = upsertStats.updatedCount
+        run.successCount = upsertStats.successCount
+        run.failureCount = upsertStats.failureCount
         run.partialQualityCount = partialQualityCount
-        run.totalCount = successCount + failureCount
+        run.totalCount = upsertStats.successCount + upsertStats.failureCount
         run.status =
             when {
-                failureCount == 0 -> CollectionRunStatus.SUCCESS
-                successCount == 0 && failureCount > 0 -> CollectionRunStatus.FAILED
+                upsertStats.failureCount == 0 -> CollectionRunStatus.SUCCESS
+                upsertStats.successCount == 0 && upsertStats.failureCount > 0 -> CollectionRunStatus.FAILED
                 else -> CollectionRunStatus.PARTIAL_SUCCESS
             }
         run.finishedAt = LocalDateTime.now()
@@ -401,18 +436,21 @@ class CollectorExecutionServiceImpl(
         if (saved.status != CollectionRunStatus.FAILED) source.lastSuccessAt = saved.finishedAt
         if (saved.status != CollectionRunStatus.SUCCESS) {
             source.lastFailureAt = saved.finishedAt
-            source.lastError = "일부 또는 전체 공고 처리에 실패했습니다(failureCount=$failureCount)."
+            source.lastError = "일부 또는 전체 공고 처리에 실패했습니다(failureCount=${upsertStats.failureCount})."
         }
         jobSourceRepository.saveAndFlush(source)
 
         log.info(
-            "Collector 실행 완료: sourceCode={}, runId={}, 원본조회={}, 성공={}, 실패={}, 품질경고={}, " +
+            "Collector 실행 완료: sourceCode={}, runId={}, 원본조회={}, 생성={}, 갱신={}, 변경없음={}, 성공={}, 실패={}, 품질경고={}, " +
                 "적합성제외={}, DIRECT_IT={}, RELATED_TECH={}, PUBLIC_FINANCE_GENERAL={}, 확인필요={}, API요청={}",
             source.sourceCode,
             saved.id,
-            successCount + failureCount + eligibility.excludedCount,
-            successCount,
-            failureCount,
+            upsertStats.successCount + upsertStats.failureCount + eligibility.excludedCount,
+            upsertStats.createdCount,
+            upsertStats.updatedCount,
+            upsertStats.unchangedCount,
+            upsertStats.successCount,
+            upsertStats.failureCount,
             partialQualityCount,
             eligibility.excludedCount,
             eligibility.directItCount,

@@ -39,6 +39,15 @@ class Recommendation(
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     var suitability: SuitabilityLevel,
+    // 같은 memberId+recommendationDate Batch 안에서의 순위(1부터 시작, score DESC ->
+    // publishedAt DESC -> jobId DESC로 이미 확정된 순서를 그대로 저장한다). 조회 시점에 다시
+    // 정렬하지 않고 그대로 ORDER BY rank로 읽을 수 있게 하기 위한 Snapshot 값이다(R2 설계).
+    @Column(nullable = false)
+    var rank: Int,
+    // 추천 계산식이 바뀌어도 과거 추천 결과를 구분할 수 있도록 계산 당시의
+    // RECOMMENDATION_ALGORITHM_VERSION을 그대로 저장한다(R2 설계).
+    @Column(name = "algorithm_version", nullable = false)
+    var algorithmVersion: Int,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

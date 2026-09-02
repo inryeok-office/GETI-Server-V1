@@ -29,7 +29,6 @@ import team.inreok.getiserver.domain.inquiry.dto.InquiryStatusUpdateRequest
 import team.inreok.getiserver.domain.inquiry.dto.InquiryStatusUpdateResponse
 import team.inreok.getiserver.domain.inquiry.entity.Inquiry
 import team.inreok.getiserver.domain.inquiry.entity.InquiryAnswer
-import team.inreok.getiserver.domain.inquiry.entity.type.InquiryDiscordDeliveryStatus
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryStatus
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryType
 import team.inreok.getiserver.domain.inquiry.event.InquiryAnsweredEvent
@@ -42,7 +41,6 @@ import team.inreok.getiserver.domain.inquiry.exception.InquiryStatusInvalidExcep
 import team.inreok.getiserver.domain.inquiry.exception.InvalidInquiryAssigneeException
 import team.inreok.getiserver.domain.inquiry.repository.InquiryAnswerRepository
 import team.inreok.getiserver.domain.inquiry.repository.InquiryRepository
-import team.inreok.getiserver.domain.inquiry.service.InquiryDiscordDeliveryQueryPort
 import team.inreok.getiserver.domain.inquiry.service.InquiryService
 import team.inreok.getiserver.domain.inquiry.service.escapeLikePattern
 import team.inreok.getiserver.domain.member.query.InquiryAssigneeCandidateQueryPort
@@ -61,7 +59,6 @@ class InquiryServiceImpl(
     private val inquiryMemberSnapshotQueryPort: InquiryMemberSnapshotQueryPort,
     private val inquiryAssigneeCandidateQueryPort: InquiryAssigneeCandidateQueryPort,
     private val inquiryAuthorSearchQueryPort: InquiryAuthorSearchQueryPort,
-    private val inquiryDiscordDeliveryQueryPort: InquiryDiscordDeliveryQueryPort,
     private val fileLinkPort: FileLinkPort,
     private val fileUrlPort: FileUrlPort,
     private val eventPublisher: ApplicationEventPublisher,
@@ -101,12 +98,12 @@ class InquiryServiceImpl(
             }
 
         val createdAt = requireNotNull(saved.createdAt) { "저장된 Inquiry는 createdAt을 가져야 합니다." }
-        val discordDeliveryStatus = safeDiscordStatus(inquiryId)
 
-        // 다른 Module이 아직 이 Event를 구독하지 않지만(InquiryCreatedEvent KDoc 참고), Commit
-        // 이후에만 반영돼야 하는 Hook Point이므로 Phase 4의 InquiryAnsweredEvent와 동일하게
-        // Transaction 안에서 발행한다. publishEvent 자체가 예외를 던질 이유가 없지만(구독자
-        // 없음), 향후 구독자가 생겨도 이 발행이 문의 등록 자체를 막지 않도록 방어적으로 감싼다.
+        // domain.notification의 InquiryDiscordEventListener가 이 Event를 구독해 Discord 접수
+        // 알림 Delivery를 예약한다(Issue #97). Commit 이후에만 반영돼야 하는 Hook Point이므로
+        // Phase 4의 InquiryAnsweredEvent와 동일하게 Transaction 안에서 발행한다. publishEvent
+        // 자체가 예외를 던질 이유가 없지만, 이 발행이 문의 등록 자체를 막지 않도록 방어적으로
+        // 감싼다.
         runCatching {
             eventPublisher.publishEvent(
                 InquiryCreatedEvent(
@@ -127,13 +124,9 @@ class InquiryServiceImpl(
             status = saved.status,
             author = authorResponseOf(authorMemberId, requesterId = authorMemberId),
             files = fileSnapshots.map { it.toResponse() },
-            discordDeliveryStatus = discordDeliveryStatus,
             answers = emptyList(),
             createdAt = createdAt,
             updatedAt = requireNotNull(saved.updatedAt) { "저장된 Inquiry는 updatedAt을 가져야 합니다." },
-            // discordDelivered는 discordDeliveryStatus로부터 파생된 값이며 별도로 저장하지
-            // 않는다(discordDeliveredFrom KDoc 참고, 요구사항 §84).
-            discordDelivered = discordDeliveredFrom(discordDeliveryStatus),
         )
     }
 
@@ -197,7 +190,6 @@ class InquiryServiceImpl(
             status = inquiry.status,
             author = authorResponseOf(inquiry.authorMemberId, requesterId = requesterMemberId),
             files = files,
-            discordDeliveryStatus = safeDiscordStatus(inquiryId),
             assignee = assignee,
             answers = answers,
             createdAt = requireNotNull(inquiry.createdAt) { "저장된 Inquiry는 createdAt을 가져야 합니다." },
@@ -214,6 +206,7 @@ class InquiryServiceImpl(
         mineOnly: Boolean,
         requesterMemberId: Long,
         pageable: Pageable,
+        answered: Boolean?,
     ): InquiryAdminListResponse {
         // 검색어를 보내지 않은 경우와 공백만 보낸 경우를 모두 "검색어 없음"으로 취급한다
         // (CompanyServiceImpl.search와 동일한 관례).
@@ -232,6 +225,7 @@ class InquiryServiceImpl(
             inquiryRepository.searchForAdmin(
                 type = inquiryType,
                 status = status,
+                answered = answered,
                 assigneeId = assigneeId,
                 mineOnlyMemberId = mineOnlyMemberId,
                 // :query를 null로 바인딩하지 않는 이유는 InquiryRepository.searchForAdmin KDoc 참고
@@ -412,34 +406,6 @@ class InquiryServiceImpl(
         inquiryRepository.findByIdForUpdate(inquiryId) ?: throw InquiryNotFoundException(inquiryId)
 
     /**
-     * [InquiryDiscordDeliveryQueryPort]를 안전하게 호출한다. Program 도메인의 선례(§`DiscordDeliveryResult`
-     * KDoc, "Discord 실패는 Program 저장/상태변경 자체를 막지 않는다")와 같은 원칙을 따른다 --
-     * Discord 상태 조회는 부가 정보일 뿐이라, 이 조회가 실패해도 문의 등록·조회 자체가 막히거나
-     * (특히 `create`처럼 같은 Transaction 안에서 호출되는 경우) Rollback되면 안 된다(요구사항
-     * §42, 사용자 확인 완료 -- Discord 실패 격리 통합 테스트로 고정). 현재 유일한 구현체
-     * ([team.inreok.getiserver.domain.inquiry.service.impl.InquiryDiscordDeliveryQueryPortImpl])는
-     * 실패할 수 없지만, 실제 연동이 들어오면 실패할 수 있으므로 지금부터 방어적으로 감싼다.
-     */
-    private fun safeDiscordStatus(inquiryId: Long): InquiryDiscordDeliveryStatus =
-        runCatching { inquiryDiscordDeliveryQueryPort.statusOf(inquiryId) }
-            .getOrDefault(InquiryDiscordDeliveryStatus.PENDING)
-
-    /**
-     * `discordDelivered`는 별도로 저장하지 않는 파생 값이다(요구사항 §84) -- `discordDeliveryStatus`가
-     * DELIVERED일 때만 true다. 다만 [InquiryDiscordDeliveryStatus]는 이번 Phase에 [PENDING]만
-     * 갖도록 확정했다(사용자 확인 완료, Enum KDoc 참고) -- 쓰지 않는 값(PROCESSING/DELIVERED/FAILED)을
-     * 미리 선반영하지 않기로 한 결정과 이 파생 로직이 충돌하지 않도록, "DELIVERED와 같다"는 비교를
-     * Enum 값이 아니라 이 함수 하나로 대신한다. 지금은 항상 false를 반환하고, 실제 Discord 연동
-     * (discord_deliveries 테이블) 도입으로 DELIVERED 값이 추가되면 이 함수 Body만 고치면 된다 --
-     * 호출부를 다시 찾아다닐 필요가 없다.
-     */
-    @Suppress("FunctionOnlyReturningConstant", "UNUSED_PARAMETER")
-    // 지금은 상수를 그대로 반환하지만 의도적이다(위 KDoc 참고) -- Enum에 DELIVERED가 생기는 순간
-    // `status == InquiryDiscordDeliveryStatus.DELIVERED`로 바뀌어야 하는 자리 표시자라, 호출부가
-    // 이미 상태 값을 넘기는 형태를 지금부터 고정해 둔다.
-    private fun discordDeliveredFrom(status: InquiryDiscordDeliveryStatus): Boolean = false
-
-    /**
      * 담당자 후보를 검증한다. role=DEVELOPER AND status=ACTIVE를 모두 만족해야 한다(요구사항
      * 32절). 회원 자체가 없으면 404, 있지만 조건을 만족하지 않으면 400이다 -- 두 실패를 같은
      * Code로 뭉치면 "존재하지 않는 회원"과 "지정할 수 없는 회원"을 클라이언트가 구분할 수 없다.
@@ -501,7 +467,6 @@ class InquiryServiceImpl(
                 assigneeMemberId?.let {
                     InquiryAssigneeResponse(memberId = it, name = snapshots[it]?.name)
                 },
-            discordDeliveryStatus = safeDiscordStatus(inquiryId),
             createdAt = requireNotNull(createdAt) { "저장된 Inquiry는 createdAt을 가져야 합니다." },
             answeredAt = answeredAt,
         )

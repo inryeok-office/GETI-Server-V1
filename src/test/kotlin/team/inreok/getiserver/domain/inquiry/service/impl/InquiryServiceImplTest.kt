@@ -25,14 +25,12 @@ import team.inreok.getiserver.domain.inquiry.dto.InquiryCreateRequest
 import team.inreok.getiserver.domain.inquiry.dto.InquiryStatusUpdateRequest
 import team.inreok.getiserver.domain.inquiry.entity.Inquiry
 import team.inreok.getiserver.domain.inquiry.entity.InquiryAnswer
-import team.inreok.getiserver.domain.inquiry.entity.type.InquiryDiscordDeliveryStatus
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryStatus
 import team.inreok.getiserver.domain.inquiry.entity.type.InquiryType
 import team.inreok.getiserver.domain.inquiry.exception.InquiryStatusInvalidException
 import team.inreok.getiserver.domain.inquiry.exception.InvalidInquiryAssigneeException
 import team.inreok.getiserver.domain.inquiry.repository.InquiryAnswerRepository
 import team.inreok.getiserver.domain.inquiry.repository.InquiryRepository
-import team.inreok.getiserver.domain.inquiry.service.InquiryDiscordDeliveryQueryPort
 import team.inreok.getiserver.domain.inquiry.service.InquiryService
 import team.inreok.getiserver.domain.member.query.InquiryAssigneeCandidate
 import team.inreok.getiserver.domain.member.query.InquiryAssigneeCandidateQueryPort
@@ -60,9 +58,6 @@ class InquiryServiceImplTest {
     private lateinit var inquiryAuthorSearchQueryPort: InquiryAuthorSearchQueryPort
 
     @Mock
-    private lateinit var inquiryDiscordDeliveryQueryPort: InquiryDiscordDeliveryQueryPort
-
-    @Mock
     private lateinit var fileLinkPort: FileLinkPort
 
     @Mock
@@ -78,7 +73,6 @@ class InquiryServiceImplTest {
             inquiryMemberSnapshotQueryPort,
             inquiryAssigneeCandidateQueryPort,
             inquiryAuthorSearchQueryPort,
-            inquiryDiscordDeliveryQueryPort,
             fileLinkPort,
             fileUrlPort,
             eventPublisher,
@@ -92,7 +86,6 @@ class InquiryServiceImplTest {
     @Test
     fun `개발자가 아니면 담당자가 지정돼 있어도 assignee를 노출하지 않는다`() {
         given(inquiryRepository.findById(1L)).willReturn(Optional.of(inquiryOf(assigneeMemberId = 5L)))
-        given(inquiryDiscordDeliveryQueryPort.statusOf(anyLong())).willReturn(InquiryDiscordDeliveryStatus.PENDING)
 
         val response = service.getDetail(1L, requesterMemberId = 1L, isDeveloper = false)
 
@@ -104,7 +97,6 @@ class InquiryServiceImplTest {
         given(
             inquiryRepository.findById(1L),
         ).willReturn(Optional.of(inquiryOf(authorMemberId = 2L, assigneeMemberId = 5L)))
-        given(inquiryDiscordDeliveryQueryPort.statusOf(anyLong())).willReturn(InquiryDiscordDeliveryStatus.PENDING)
 
         val response = service.getDetail(1L, requesterMemberId = 9L, isDeveloper = true)
 
@@ -116,7 +108,6 @@ class InquiryServiceImplTest {
     @Test
     fun `상세 조회는 배치로 받은 답변 첨부파일을 answerId별로 매칭한다`() {
         given(inquiryRepository.findById(1L)).willReturn(Optional.of(inquiryOf()))
-        given(inquiryDiscordDeliveryQueryPort.statusOf(anyLong())).willReturn(InquiryDiscordDeliveryStatus.PENDING)
         val firstAnswer = answerOf(id = 10L, content = "첫 번째 답변")
         val secondAnswer = answerOf(id = 20L, content = "두 번째 답변")
         given(inquiryAnswerRepository.findAllByInquiryIdOrderByCreatedAtAscIdAsc(1L))
@@ -238,6 +229,7 @@ class InquiryServiceImplTest {
             inquiryRepository.searchForAdmin(
                 type = null,
                 status = null,
+                answered = false,
                 assigneeId = null,
                 mineOnlyMemberId = null,
                 hasQuery = true,
@@ -250,6 +242,7 @@ class InquiryServiceImplTest {
         service.listAdmin(
             inquiryType = null,
             status = null,
+            answered = false,
             query = rawQuery,
             assigneeId = null,
             mineOnly = false,
@@ -261,6 +254,7 @@ class InquiryServiceImplTest {
         verify(inquiryRepository).searchForAdmin(
             type = null,
             status = null,
+            answered = false,
             assigneeId = null,
             mineOnlyMemberId = null,
             hasQuery = true,
@@ -281,7 +275,6 @@ class InquiryServiceImplTest {
                 updatedAt = now
             }
         }
-        given(inquiryDiscordDeliveryQueryPort.statusOf(anyLong())).willReturn(InquiryDiscordDeliveryStatus.PENDING)
 
         val response = service.create(createRequest(), authorMemberId = 1L)
 

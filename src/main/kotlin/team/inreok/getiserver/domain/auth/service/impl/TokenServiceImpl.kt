@@ -7,6 +7,7 @@ import team.inreok.getiserver.domain.auth.exception.InvalidRefreshTokenException
 import team.inreok.getiserver.domain.auth.repository.RefreshTokenRepository
 import team.inreok.getiserver.domain.auth.service.IssuedTokens
 import team.inreok.getiserver.domain.auth.service.TokenService
+import team.inreok.getiserver.domain.member.query.OAuthMemberPort
 import team.inreok.getiserver.global.security.JwtProperties
 import team.inreok.getiserver.global.security.JwtTokenProvider
 import java.security.MessageDigest
@@ -19,7 +20,23 @@ class TokenServiceImpl(
     private val refreshTokenRepository: RefreshTokenRepository,
     private val jwtTokenProvider: JwtTokenProvider,
     private val jwtProperties: JwtProperties,
+    private val oAuthMemberPort: OAuthMemberPort,
 ) : TokenService {
+    @Transactional
+    override fun issueFor(
+        memberId: Long,
+        roles: List<String>,
+        deviceIdentifier: String?,
+    ): IssuedTokens {
+        val accessToken = jwtTokenProvider.createAccessToken(memberId, roles)
+        val refreshToken = issueRefreshToken(memberId, deviceIdentifier)
+        return IssuedTokens(
+            accessToken = accessToken,
+            refreshToken = refreshToken,
+            accessTokenExpiresInSeconds = jwtProperties.accessTokenExpirationSeconds,
+        )
+    }
+
     @Transactional
     override fun refresh(
         refreshToken: String,
@@ -33,7 +50,8 @@ class TokenServiceImpl(
             throw InvalidRefreshTokenException()
         }
 
-        val newAccessToken = jwtTokenProvider.createAccessToken(existing.memberId, emptyList())
+        val roles = oAuthMemberPort.getRoles(existing.memberId)
+        val newAccessToken = jwtTokenProvider.createAccessToken(existing.memberId, roles)
         val newRefreshToken = issueRefreshToken(existing.memberId, deviceIdentifier ?: existing.deviceIdentifier)
         return IssuedTokens(
             accessToken = newAccessToken,
