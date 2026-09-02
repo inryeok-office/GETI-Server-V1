@@ -123,7 +123,9 @@ services:
       # GETI-Client-V1(`next dev`)의 Local 기본 Origin. Staging/Production은 실제 Client
       # 배포 Domain을 APP_WEB_CORS_ALLOWED_ORIGINS 환경 변수로 주입한다.
       APP_WEB_CORS_ALLOWED_ORIGINS: ${APP_WEB_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      # 비어 있으면 clientType=WEB 로그인만 OAUTH_WEB_REDIRECT_NOT_CONFIGURED로 실패한다.
       # Host(localhost)가 아닌 Compose Service 이름으로 접속한다.
+      APP_WEB_OAUTH_CALLBACK_REDIRECT_URL: ${APP_WEB_OAUTH_CALLBACK_REDIRECT_URL}
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-geti}
       DATABASE_USERNAME: ${POSTGRES_USER:-geti}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-geti-local-only}
@@ -161,8 +163,6 @@ services:
       # 넘기면 Boolean Binding에 실패해 기동이 깨진다). Host에서 재정의하려면 이 Compose를
       # 실행하는 Shell/서버 .env에 COLLECTOR_SEED_ENABLED를 직접 export한다.
       COLLECTOR_EXTERNAL_SCHEDULER_ENABLED: ${COLLECTOR_EXTERNAL_SCHEDULER_ENABLED:-false}
-      APP_WEB_OAUTH_CALLBACK_REDIRECT_URL: ${APP_WEB_OAUTH_CALLBACK_REDIRECT_URL}
-    ports:
       - "0.0.0.0:${SERVER_PORT:-8080}:8080"
     healthcheck:
       # 단순 Process 생존(/actuator/health)이 아니라 PostgreSQL/Redis까지 연결된 실제 요청
