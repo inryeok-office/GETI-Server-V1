@@ -21,6 +21,7 @@ import org.mockito.quality.Strictness
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import team.inreok.getiserver.domain.company.query.CompanyQuery
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
@@ -875,6 +876,20 @@ class JobServiceTest {
         )
         verify(jobRepository).searchForAdmin("백엔드\\%", JobStatus.DRAFT, pageable)
         verify(companyQuery).findActiveSummaries(setOf(1L), REQUESTER_ID)
+    }
+
+    @Test
+    fun `관리자 목록은 client sort를 무시하고 안정적인 DB 정렬을 사용한다`() {
+        val pageable = PageRequest.of(1, 2, Sort.by(Sort.Order.asc("title")))
+        val queryPageable = PageRequest.of(1, 2)
+        val job = jobOf(status = JobStatus.PUBLISHED)
+        given(jobRepository.searchForAdmin(null, null, queryPageable))
+            .willReturn(PageImpl(listOf(job), queryPageable, 3))
+        given(companyQuery.findActiveSummaries(setOf(1L), REQUESTER_ID)).willReturn(mapOf(1L to companySummary))
+
+        service.listForAdmin(null, null, pageable, REQUESTER_ID)
+
+        verify(jobRepository).searchForAdmin(null, null, queryPageable)
     }
 
     // --- Fixture ---

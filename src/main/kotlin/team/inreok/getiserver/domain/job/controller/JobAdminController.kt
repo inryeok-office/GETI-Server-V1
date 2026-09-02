@@ -67,7 +67,9 @@ class JobAdminController(
         @Parameter(description = "공고 상태 필터(선택). 생략하면 삭제된 공고를 제외한다.", example = "DRAFT")
         @RequestParam(required = false)
         status: JobStatus?,
-        @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20, 최대 100)")
+        @Parameter(
+            description = "Pagination(page: 0부터 시작, size: 기본 20, 최대 100). sort 파라미터는 무시하고 최신 생성 시각순으로 조회한다.",
+        )
         pageable: Pageable,
         authentication: Authentication,
     ): ApiResponse<JobAdminListResponse> =

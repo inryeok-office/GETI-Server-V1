@@ -1,6 +1,7 @@
 package team.inreok.getiserver.domain.job.service.impl
 
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -68,7 +69,10 @@ class JobServiceImpl(
         requesterId: Long,
     ): JobAdminListResponse {
         val normalizedQuery = query?.trim()?.takeIf { it.isNotEmpty() }?.let(::escapeLikePattern)
-        val page = jobRepository.searchForAdmin(normalizedQuery, status, pageable)
+        // The repository query defines a stable createdAt/id order. Do not append a client Sort
+        // after that ORDER BY because it would either be ineffective or fail for unsupported fields.
+        val queryPageable = PageRequest.of(pageable.pageNumber, pageable.pageSize)
+        val page = jobRepository.searchForAdmin(normalizedQuery, status, queryPageable)
         val companies =
             companyQuery.findActiveSummaries(
                 companyIds = page.content.map { it.companyId }.toSet(),
