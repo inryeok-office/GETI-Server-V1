@@ -163,6 +163,7 @@ services:
       # 넘기면 Boolean Binding에 실패해 기동이 깨진다). Host에서 재정의하려면 이 Compose를
       # 실행하는 Shell/서버 .env에 COLLECTOR_SEED_ENABLED를 직접 export한다.
       COLLECTOR_EXTERNAL_SCHEDULER_ENABLED: ${COLLECTOR_EXTERNAL_SCHEDULER_ENABLED:-false}
+    ports:
       - "0.0.0.0:${SERVER_PORT:-8080}:8080"
     healthcheck:
       # 단순 Process 생존(/actuator/health)이 아니라 PostgreSQL/Redis까지 연결된 실제 요청
