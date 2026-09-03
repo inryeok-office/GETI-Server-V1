@@ -34,6 +34,8 @@ data class JobAdminListItemResponse(
     val title: String,
     @param:Schema(description = "기업 요약. 기업이 삭제되면 null이 될 수 있다.", nullable = true)
     val company: CompanySummary?,
+    @param:Schema(description = "공고 담당자. 명시 담당자가 없으면 등록자이며, 둘 다 없으면 null입니다.", nullable = true)
+    val manager: JobManagerResponse? = null,
     @param:Schema(description = "공고 유형", example = "MOU")
     val postingType: PostingType,
     @param:Schema(description = "지원 방식", example = "EXTERNAL")
@@ -53,11 +55,13 @@ data class JobAdminListItemResponse(
         fun from(
             job: Job,
             company: CompanySummary?,
+            manager: JobManagerResponse? = null,
         ): JobAdminListItemResponse =
             JobAdminListItemResponse(
                 jobId = requireNotNull(job.id) { "저장된 Job은 id를 가져야 합니다." },
                 title = job.title,
                 company = company,
+                manager = manager,
                 postingType = job.type,
                 applicationMethod = job.applicationMethod,
                 status = job.status,

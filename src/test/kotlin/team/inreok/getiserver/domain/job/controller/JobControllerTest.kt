@@ -70,6 +70,7 @@ class JobControllerTest
                 .andExpect(jsonPath("$.data.jobId").value(1))
                 .andExpect(jsonPath("$.data.viewCount").value(11))
                 .andExpect(jsonPath("$.data.sourceName").value("MMA"))
+                .andExpect(jsonPath("$.data.manager").doesNotExist())
                 .andExpect(jsonPath("$.data.company.companyId").value(1))
                 .andExpect(
                     jsonPath("$.data.company.logoUrl").value("https://storage.example/company-logo?signature=test"),

@@ -16,11 +16,13 @@ import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessS
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessor
 import team.inreok.getiserver.domain.job.access.JobBookmarkAccessor
 import team.inreok.getiserver.domain.job.access.canViewJobFiles
+import team.inreok.getiserver.domain.job.dto.JobAdminDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobAdminListItemResponse
 import team.inreok.getiserver.domain.job.dto.JobAdminListResponse
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobFileResponse
+import team.inreok.getiserver.domain.job.dto.JobManagerResponse
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
 import team.inreok.getiserver.domain.job.dto.JobUpdateRequest
 import team.inreok.getiserver.domain.job.entity.Job
@@ -41,6 +43,7 @@ import team.inreok.getiserver.domain.job.service.escapeLikePattern
 import team.inreok.getiserver.domain.job.service.validateCommon
 import team.inreok.getiserver.domain.job.service.validateForPublish
 import team.inreok.getiserver.domain.member.entity.type.RoleType
+import team.inreok.getiserver.domain.member.query.JobManagerSnapshotQueryPort
 import team.inreok.getiserver.domain.member.query.MemberRoleQueryPort
 import team.inreok.getiserver.global.discord.DiscordChannelResolver
 import java.time.LocalDateTime
@@ -60,6 +63,7 @@ class JobServiceImpl(
     private val jobBookmarkAccessor: JobBookmarkAccessor,
     private val fileLinkPort: FileLinkPort,
     private val memberRoleQueryPort: MemberRoleQueryPort,
+    private val jobManagerSnapshotQueryPort: JobManagerSnapshotQueryPort,
 ) : JobService {
     @Transactional(readOnly = true)
     override fun listForAdmin(
@@ -78,8 +82,12 @@ class JobServiceImpl(
                 companyIds = page.content.map { it.companyId }.toSet(),
                 requesterId = requesterId,
             )
+        val managers = findManagers(page.content)
         return JobAdminListResponse(
-            content = page.content.map { JobAdminListItemResponse.from(it, companies[it.companyId]) },
+            content =
+                page.content.map { job ->
+                    JobAdminListItemResponse.from(job, companies[job.companyId], managers[job.id])
+                },
             page = page.number,
             size = page.size,
             totalElements = page.totalElements,
@@ -279,17 +287,33 @@ class JobServiceImpl(
     override fun getForAdmin(
         jobId: Long,
         requesterId: Long,
-    ): JobDetailResponse {
+    ): JobAdminDetailResponse {
         // 관리자는 삭제 이력까지 확인해야 하므로 deletedAt 조건 없이 조회한다.
         val job = jobRepository.findById(jobId).orElseThrow { JobNotFoundException(jobId) }
-        return JobDetailResponse.from(
-            job,
-            findCompanySummary(job.companyId, requesterId),
-            aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
-            application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
-            bookmarked = bookmarkedOf(jobBookmarkAccessor, jobId, requesterId),
-            files = jobFilesFor(job, jobId, requesterId),
-        )
+        val detail =
+            JobDetailResponse.from(
+                job,
+                findCompanySummary(job.companyId, requesterId),
+                aiAnalysis = jobAiAnalysisAccessor.findSnapshot(jobId),
+                application = applicationEligibilityOf(jobApplicationEligibilityAccessor, jobId, requesterId),
+                bookmarked = bookmarkedOf(jobBookmarkAccessor, jobId, requesterId),
+                files = jobFilesFor(job, jobId, requesterId),
+            )
+        return JobAdminDetailResponse.from(detail, findManagers(listOf(job))[job.id])
+    }
+
+    private fun findManagers(jobs: Collection<Job>): Map<Long, JobManagerResponse> {
+        val memberIds = jobs.flatMap { listOfNotNull(it.managerMemberId, it.createdByMemberId) }.toSet()
+        val snapshots = jobManagerSnapshotQueryPort.findAllByIds(memberIds)
+        return jobs
+            .mapNotNull { job ->
+                val manager =
+                    sequenceOf(job.managerMemberId, job.createdByMemberId)
+                        .filterNotNull()
+                        .mapNotNull { memberId -> snapshots[memberId]?.let(JobManagerResponse::from) }
+                        .firstOrNull()
+                job.id?.let { jobId -> manager?.let { jobId to it } }
+            }.toMap()
     }
 
     // 조회수를 증가시키므로 readOnly Transaction을 쓸 수 없다.

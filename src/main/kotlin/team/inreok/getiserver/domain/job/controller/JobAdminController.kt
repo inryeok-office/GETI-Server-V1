@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import team.inreok.getiserver.domain.job.dto.JobAdminDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobAdminListResponse
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
@@ -228,5 +229,6 @@ class JobAdminController(
     fun getJobForAdmin(
         @Parameter(description = "조회할 공고 ID", example = "1") @PathVariable jobId: Long,
         authentication: Authentication,
-    ): ApiResponse<JobDetailResponse> = ApiResponse.of(jobService.getForAdmin(jobId, authentication.principal as Long))
+    ): ApiResponse<JobAdminDetailResponse> =
+        ApiResponse.of(jobService.getForAdmin(jobId, authentication.principal as Long))
 }
