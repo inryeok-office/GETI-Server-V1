@@ -23,6 +23,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
 import team.inreok.getiserver.domain.application.query.ProgramFormLinkQueryPort
 import team.inreok.getiserver.domain.file.entity.type.FileOwnerType
 import team.inreok.getiserver.domain.file.entity.type.FilePurpose
@@ -33,6 +34,7 @@ import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshot
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
 import team.inreok.getiserver.domain.member.query.MemberRoleQueryPort
+import team.inreok.getiserver.domain.program.dto.ProgramAdminListResponse
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionRequest
 import team.inreok.getiserver.domain.program.dto.ProgramCreateRequest
 import team.inreok.getiserver.domain.program.dto.ProgramStatusUpdateRequest
@@ -127,6 +129,42 @@ class ProgramServiceImplTest {
     }
 
     private val now = LocalDateTime.of(2026, 8, 5, 12, 0, 0)
+
+    @Test
+    fun `관리자 목록은 검색과 상태를 DB 조회에 전달하고 평평한 페이지 계약으로 반환한다`() {
+        val pageable = PageRequest.of(1, 2)
+        val program = programOf(status = ProgramStatus.DRAFT).apply { title = "백엔드% 특강" }
+        given(programRepository.searchForAdmin("백엔드\\%", ProgramStatus.DRAFT, pageable))
+            .willReturn(PageImpl(listOf(program), pageable, 3))
+
+        val response = service.listForAdmin(" 백엔드% ", ProgramStatus.DRAFT, pageable)
+
+        assertThat(response).isEqualTo(
+            ProgramAdminListResponse(
+                content = listOf(response.content.single()),
+                page = 1,
+                size = 2,
+                totalElements = 3,
+                totalPages = 2,
+                first = false,
+                last = true,
+            ),
+        )
+        assertThat(response.content.single().title).isEqualTo("백엔드% 특강")
+        verify(programRepository).searchForAdmin("백엔드\\%", ProgramStatus.DRAFT, pageable)
+    }
+
+    @Test
+    fun `관리자 목록은 client sort를 무시하고 repository의 안정 정렬을 사용한다`() {
+        val pageable = PageRequest.of(1, 2, Sort.by(Sort.Order.asc("title")))
+        val queryPageable = PageRequest.of(1, 2)
+        given(programRepository.searchForAdmin(null, null, queryPageable))
+            .willReturn(PageImpl(emptyList(), queryPageable, 0))
+
+        service.listForAdmin(null, null, pageable)
+
+        verify(programRepository).searchForAdmin(null, null, queryPageable)
+    }
 
     // --- 등록 ---
 

@@ -1,6 +1,7 @@
 package team.inreok.getiserver.domain.program.service
 
 import org.springframework.data.domain.Pageable
+import team.inreok.getiserver.domain.program.dto.ProgramAdminListResponse
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionRequest
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionResponse
 import team.inreok.getiserver.domain.program.dto.ProgramCreateRequest
@@ -15,6 +16,12 @@ import team.inreok.getiserver.domain.program.entity.type.ProgramStatus
 import team.inreok.getiserver.domain.program.entity.type.ProgramType
 
 interface ProgramService {
+    fun listForAdmin(
+        query: String?,
+        status: ProgramStatus?,
+        pageable: Pageable,
+    ): ProgramAdminListResponse
+
     fun create(
         request: ProgramCreateRequest,
         createdByMemberId: Long,
