@@ -124,8 +124,8 @@ services:
       # 배포 Domain을 APP_WEB_CORS_ALLOWED_ORIGINS 환경 변수로 주입한다.
       APP_WEB_CORS_ALLOWED_ORIGINS: ${APP_WEB_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
       # 비어 있으면 clientType=WEB 로그인만 OAUTH_WEB_REDIRECT_NOT_CONFIGURED로 실패한다.
-      # Host(localhost)가 아닌 Compose Service 이름으로 접속한다.
       APP_WEB_OAUTH_CALLBACK_REDIRECT_URL: ${APP_WEB_OAUTH_CALLBACK_REDIRECT_URL}
+      # Host(localhost)가 아닌 Compose Service 이름으로 접속한다.
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-geti}
       DATABASE_USERNAME: ${POSTGRES_USER:-geti}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-geti-local-only}
