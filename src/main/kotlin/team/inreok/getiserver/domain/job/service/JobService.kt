@@ -1,6 +1,7 @@
 package team.inreok.getiserver.domain.job.service
 
 import org.springframework.data.domain.Pageable
+import team.inreok.getiserver.domain.job.dto.JobAdminDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobAdminListResponse
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
@@ -47,7 +48,7 @@ interface JobService {
     fun getForAdmin(
         jobId: Long,
         requesterId: Long,
-    ): JobDetailResponse
+    ): JobAdminDetailResponse
 
     /** 공개 상세 조회. 조회할 때마다 조회수를 1 증가시킨다. [requesterId]는 [update]와 같다. */
     fun getPublicDetail(

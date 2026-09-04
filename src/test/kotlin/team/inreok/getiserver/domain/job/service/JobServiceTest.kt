@@ -53,6 +53,8 @@ import team.inreok.getiserver.domain.job.exception.JobValidationFailedException
 import team.inreok.getiserver.domain.job.repository.JobRepository
 import team.inreok.getiserver.domain.job.service.impl.JobServiceImpl
 import team.inreok.getiserver.domain.member.entity.type.RoleType
+import team.inreok.getiserver.domain.member.query.JobManagerSnapshot
+import team.inreok.getiserver.domain.member.query.JobManagerSnapshotQueryPort
 import team.inreok.getiserver.domain.member.query.MemberRoleQueryPort
 import team.inreok.getiserver.global.discord.DiscordChannelResolver
 import java.time.LocalDateTime
@@ -97,6 +99,9 @@ class JobServiceTest {
     @Mock
     private lateinit var memberRoleQueryPort: MemberRoleQueryPort
 
+    @Mock
+    private lateinit var jobManagerSnapshotQueryPort: JobManagerSnapshotQueryPort
+
     @Captor
     private lateinit var jobCaptor: ArgumentCaptor<Job>
 
@@ -124,6 +129,7 @@ class JobServiceTest {
             jobBookmarkAccessor,
             fileLinkPort,
             memberRoleQueryPort,
+            jobManagerSnapshotQueryPort,
         )
     }
 
@@ -890,6 +896,40 @@ class JobServiceTest {
         service.listForAdmin(null, null, pageable, REQUESTER_ID)
 
         verify(jobRepository).searchForAdmin(null, null, queryPageable)
+    }
+
+    @Test
+    fun `관리자 목록은 명시 담당자를 우선하고 등록자를 fallback으로 한 번에 조회한다`() {
+        val pageable = PageRequest.of(0, 20)
+        val assigned = jobOf(id = 1L, status = JobStatus.DRAFT, createdByMemberId = 1L, managerMemberId = 2L)
+        val fallback = jobOf(id = 2L, status = JobStatus.DRAFT, createdByMemberId = 3L)
+        val missing = jobOf(id = 3L, status = JobStatus.DRAFT)
+        given(
+            jobRepository.searchForAdmin(null, null, pageable),
+        ).willReturn(PageImpl(listOf(assigned, fallback, missing), pageable, 3))
+        given(companyQuery.findActiveSummaries(setOf(1L), REQUESTER_ID)).willReturn(mapOf(1L to companySummary))
+        given(jobManagerSnapshotQueryPort.findAllByIds(setOf(1L, 2L, 3L))).willReturn(
+            mapOf(2L to JobManagerSnapshot(2L, "담당 교사"), 3L to JobManagerSnapshot(3L, "등록 교사")),
+        )
+
+        val response = service.listForAdmin(null, null, pageable, REQUESTER_ID)
+
+        assertThat(response.content.map { it.manager?.memberId }).containsExactly(2L, 3L, null)
+        verify(jobManagerSnapshotQueryPort).findAllByIds(setOf(1L, 2L, 3L))
+    }
+
+    @Test
+    fun `관리자 상세는 명시 담당자를 찾지 못하면 등록자를 반환한다`() {
+        val job = jobOf(status = JobStatus.DRAFT, createdByMemberId = 3L, managerMemberId = 2L)
+        given(jobRepository.findById(1L)).willReturn(Optional.of(job))
+        givenActiveCompany()
+        given(jobManagerSnapshotQueryPort.findAllByIds(setOf(2L, 3L))).willReturn(
+            mapOf(3L to JobManagerSnapshot(3L, "등록 교사")),
+        )
+
+        val response = service.getForAdmin(1L, REQUESTER_ID)
+
+        assertThat(response.manager?.memberId).isEqualTo(3L)
     }
 
     // --- Fixture ---

@@ -25,10 +25,12 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import team.inreok.getiserver.domain.company.query.CompanySummary
 import team.inreok.getiserver.domain.job.access.JobApplicationEligibilityAccessSnapshot
+import team.inreok.getiserver.domain.job.dto.JobAdminDetailResponse
 import team.inreok.getiserver.domain.job.dto.JobAdminListItemResponse
 import team.inreok.getiserver.domain.job.dto.JobAdminListResponse
 import team.inreok.getiserver.domain.job.dto.JobCreateRequest
 import team.inreok.getiserver.domain.job.dto.JobDetailResponse
+import team.inreok.getiserver.domain.job.dto.JobManagerResponse
 import team.inreok.getiserver.domain.job.dto.JobStatusUpdateRequest
 import team.inreok.getiserver.domain.job.dto.JobUpdateRequest
 import team.inreok.getiserver.domain.job.entity.type.ApplicationMethod
@@ -383,12 +385,16 @@ class JobAdminControllerTest
 
         @Test
         fun `관리자는 임시저장 공고의 상세를 조회할 수 있다`() {
-            given(jobService.getForAdmin(1L, 7L)).willReturn(detailResponse(status = JobStatus.DRAFT))
+            given(jobService.getForAdmin(1L, 7L)).willReturn(
+                adminDetailResponse(status = JobStatus.DRAFT, manager = JobManagerResponse(2L, "담당 교사")),
+            )
 
             mockMvc
                 .perform(get("/api/v1/admin/jobs/1").with(authOf(7L, "TEACHER")))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.data.status").value("DRAFT"))
+                .andExpect(jsonPath("$.data.manager.memberId").value(2))
+                .andExpect(jsonPath("$.data.manager.name").value("담당 교사"))
         }
 
         @Test
@@ -500,4 +506,9 @@ class JobAdminControllerTest
             bookmarked = false,
             files = emptyList(),
         )
+
+        private fun adminDetailResponse(
+            status: JobStatus = JobStatus.DRAFT,
+            manager: JobManagerResponse? = null,
+        ) = JobAdminDetailResponse.from(detailResponse(status = status), manager)
     }
