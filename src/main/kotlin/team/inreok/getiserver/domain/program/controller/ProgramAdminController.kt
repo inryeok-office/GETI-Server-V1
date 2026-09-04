@@ -6,21 +6,26 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import team.inreok.getiserver.domain.program.dto.ProgramAdminListResponse
 import team.inreok.getiserver.domain.program.dto.ProgramCreateRequest
 import team.inreok.getiserver.domain.program.dto.ProgramCreateResponse
 import team.inreok.getiserver.domain.program.dto.ProgramStatusUpdateRequest
 import team.inreok.getiserver.domain.program.dto.ProgramStatusUpdateResponse
 import team.inreok.getiserver.domain.program.dto.ProgramUpdateRequest
 import team.inreok.getiserver.domain.program.dto.ProgramUpdateResponse
+import team.inreok.getiserver.domain.program.entity.type.ProgramStatus
 import team.inreok.getiserver.domain.program.service.ProgramService
 import team.inreok.getiserver.global.openapi.BEARER_AUTH_SCHEME
 import team.inreok.getiserver.global.web.ApiResponse
@@ -40,6 +45,34 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 class ProgramAdminController(
     private val programService: ProgramService,
 ) {
+    @Operation(
+        summary = "관리자 프로그램 목록 조회",
+        description = """
+            관리자 프로그램 관리 화면에서 DRAFT, PUBLISHED, CLOSED 프로그램을 조회합니다. `status`를 생략하면
+            삭제된 프로그램을 제외하고, `status=DELETED`를 지정하면 삭제 이력을 조회합니다. `query`는 제목 부분
+            일치 검색이며 page는 0부터 시작하고 size의 최대값은 100입니다. 최신 생성 순으로 정렬하며 생성 시각이
+            같으면 프로그램 ID 내림차순을 적용합니다. 교사와 개발자만 사용할 수 있습니다.
+        """,
+    )
+    @ApiResponses(
+        SwaggerApiResponse(responseCode = "200", description = "조회 성공(결과가 없으면 빈 목록)"),
+        SwaggerApiResponse(responseCode = "400", description = "잘못된 상태 값 또는 페이지네이션 파라미터"),
+        SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
+        SwaggerApiResponse(responseCode = "403", description = "교사 또는 개발자 권한이 없음 (FORBIDDEN)"),
+        SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
+    )
+    @GetMapping
+    fun listPrograms(
+        @Parameter(description = "프로그램 제목 부분 일치 검색어(선택)", example = "백엔드")
+        @RequestParam(required = false)
+        query: String?,
+        @Parameter(description = "프로그램 상태 필터(선택). 생략하면 삭제된 프로그램을 제외합니다.", example = "DRAFT")
+        @RequestParam(required = false)
+        status: ProgramStatus?,
+        @Parameter(description = "페이지네이션(page: 0부터 시작, size: 기본 20, 최대 100). sort 파라미터는 무시하고 최신 생성 순으로 조회합니다.")
+        pageable: Pageable,
+    ): ApiResponse<ProgramAdminListResponse> = ApiResponse.of(programService.listForAdmin(query, status, pageable))
+
     @Operation(
         summary = "프로그램 등록·임시저장",
         description = """

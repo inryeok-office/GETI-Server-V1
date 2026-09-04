@@ -12,6 +12,7 @@ import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
 import org.springframework.context.annotation.Import
+import org.springframework.data.domain.PageRequest
 import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
@@ -19,10 +20,12 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import team.inreok.getiserver.domain.program.dto.ProgramAdminListResponse
 import team.inreok.getiserver.domain.program.dto.ProgramCreateRequest
 import team.inreok.getiserver.domain.program.dto.ProgramCreateResponse
 import team.inreok.getiserver.domain.program.dto.ProgramStatusUpdateRequest
@@ -97,6 +100,69 @@ class ProgramAdminControllerTest
                 status = ProgramStatus.DRAFT,
                 createdAt = LocalDateTime.now(),
             )
+
+        private val adminListResponse =
+            ProgramAdminListResponse(
+                content = emptyList(),
+                page = 0,
+                size = 20,
+                totalElements = 0,
+                totalPages = 0,
+                first = true,
+                last = true,
+            )
+
+        @Test
+        fun `teacher can list admin programs`() {
+            given(
+                programService.listForAdmin("backend", ProgramStatus.DRAFT, PageRequest.of(1, 2)),
+            ).willReturn(adminListResponse)
+
+            mockMvc
+                .perform(
+                    get(
+                        "/api/v1/admin/programs",
+                    ).param("query", "backend")
+                        .param("status", "DRAFT")
+                        .param("page", "1")
+                        .param("size", "2")
+                        .with(authOf(1L, "TEACHER")),
+                ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.data.totalElements").value(0))
+        }
+
+        @Test
+        fun `developer can list admin programs`() {
+            given(programService.listForAdmin(null, null, PageRequest.of(0, 20))).willReturn(adminListResponse)
+
+            mockMvc.perform(get("/api/v1/admin/programs").with(authOf(2L, "DEVELOPER"))).andExpect(status().isOk)
+        }
+
+        @Test
+        fun `invalid program status returns bad request`() {
+            mockMvc
+                .perform(get("/api/v1/admin/programs").param("status", "INVALID").with(authOf(1L, "TEACHER")))
+                .andExpect(status().isBadRequest)
+
+            verify(programService, never()).listForAdmin(any(), any(), anyPageable())
+        }
+
+        @Test
+        fun `student cannot list admin programs`() {
+            mockMvc.perform(get("/api/v1/admin/programs").with(authOf(3L, "STUDENT"))).andExpect(status().isForbidden)
+
+            verify(programService, never()).listForAdmin(any(), any(), anyPageable())
+        }
+
+        @Test
+        fun `unauthenticated request cannot list admin programs`() {
+            mockMvc.perform(get("/api/v1/admin/programs")).andExpect(status().isUnauthorized)
+
+            verify(programService, never()).listForAdmin(any(), any(), anyPageable())
+        }
+
+        private fun anyPageable(): org.springframework.data.domain.Pageable =
+            any(org.springframework.data.domain.Pageable::class.java) ?: PageRequest.of(0, 20)
 
         private val updateResponse =
             ProgramUpdateResponse(

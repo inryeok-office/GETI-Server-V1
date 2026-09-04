@@ -19,6 +19,35 @@ interface ProgramRepository : JpaRepository<Program, Long> {
     // 삭제 이력까지 확인해야 하므로 findById를 그대로 쓴다(JobRepository와 동일한 관례).
     fun findByIdAndDeletedAtIsNull(id: Long): Program?
 
+    /** 관리자 목록의 기본 DB 조회. 상태 미지정 시 soft-deleted Program을 제외하고, DELETED를 명시하면 삭제 이력을 조회한다. */
+    @Query(
+        """
+        SELECT p FROM Program p
+        WHERE (
+            (
+                :status IS NULL
+                AND p.status <> team.inreok.getiserver.domain.program.entity.type.ProgramStatus.DELETED
+                AND p.deletedAt IS NULL
+            )
+            OR (
+                :status IS NOT NULL
+                AND p.status = :status
+                AND (
+                    :status = team.inreok.getiserver.domain.program.entity.type.ProgramStatus.DELETED
+                    OR p.deletedAt IS NULL
+                )
+            )
+        )
+          AND (:query IS NULL OR LOWER(p.title) LIKE LOWER(CONCAT('%', CAST(:query AS string), '%')) ESCAPE '\')
+        ORDER BY p.createdAt DESC, p.id DESC
+        """,
+    )
+    fun searchForAdmin(
+        @Param("query") query: String?,
+        @Param("status") status: ProgramStatus?,
+        pageable: Pageable,
+    ): Page<Program>
+
     /**
      * 정원 초과를 막기 위해 Program Row에 Pessimistic Write Lock을 건다(요구사항 11절/22절
      * 동시성). 신청(APPLY)·취소(CANCEL)·정원 수정·상태(삭제) 변경이 모두 이 Method로 조회한
