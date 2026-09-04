@@ -3,6 +3,7 @@ package team.inreok.getiserver.domain.program.service.impl
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -15,6 +16,8 @@ import team.inreok.getiserver.domain.member.entity.type.RoleType
 import team.inreok.getiserver.domain.member.query.MemberApplicantSnapshotQueryPort
 import team.inreok.getiserver.domain.member.query.MemberRoleQueryPort
 import team.inreok.getiserver.domain.program.access.canViewProgramFiles
+import team.inreok.getiserver.domain.program.dto.ProgramAdminListItemResponse
+import team.inreok.getiserver.domain.program.dto.ProgramAdminListResponse
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionRequest
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationActionResponse
 import team.inreok.getiserver.domain.program.dto.ProgramApplicationAnswer
@@ -64,6 +67,7 @@ import team.inreok.getiserver.domain.program.repository.ProgramRepository
 import team.inreok.getiserver.domain.program.repository.ProgramTargetGradeRepository
 import team.inreok.getiserver.domain.program.service.ProgramService
 import team.inreok.getiserver.domain.program.service.computeProgramEligibilityReason
+import team.inreok.getiserver.domain.program.service.escapeLikePattern
 import team.inreok.getiserver.domain.program.service.programEligibilityMessageOf
 import team.inreok.getiserver.domain.program.service.validateProgramCommon
 import team.inreok.getiserver.domain.program.service.validateProgramForPublish
@@ -92,6 +96,27 @@ class ProgramServiceImpl(
     private val eventPublisher: ApplicationEventPublisher,
     private val discordChannelResolver: DiscordChannelResolver,
 ) : ProgramService {
+    @Transactional(readOnly = true)
+    override fun listForAdmin(
+        query: String?,
+        status: ProgramStatus?,
+        pageable: Pageable,
+    ): ProgramAdminListResponse {
+        val normalizedQuery = query?.trim()?.takeIf { it.isNotEmpty() }?.let(::escapeLikePattern)
+        // Repository의 createdAt/id 정렬을 보장하기 위해 클라이언트 sort는 전달하지 않는다.
+        val queryPageable = PageRequest.of(pageable.pageNumber, pageable.pageSize)
+        val page = programRepository.searchForAdmin(normalizedQuery, status, queryPageable)
+        return ProgramAdminListResponse(
+            content = page.content.map(ProgramAdminListItemResponse::from),
+            page = page.number,
+            size = page.size,
+            totalElements = page.totalElements,
+            totalPages = page.totalPages,
+            first = page.isFirst,
+            last = page.isLast,
+        )
+    }
+
     private val log = LoggerFactory.getLogger(ProgramServiceImpl::class.java)
 
     @Transactional

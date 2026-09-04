@@ -8,6 +8,9 @@ import team.inreok.getiserver.domain.program.exception.ProgramValidationFailedEx
 import team.inreok.getiserver.domain.program.exception.TargetGradeRequiredException
 import java.time.LocalDateTime
 
+internal fun escapeLikePattern(value: String): String =
+    value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
 // 프로그램 값 검증 규칙이다(원본 요구사항 문서 6절). Job 도메인(JobValidation.kt)과 같은 원칙을
 // 따른다 — 상태와 무관하게 항상 지켜야 하는 값 "형식"은 [validateProgramCommon]이 검증하고,
 // 게시(PUBLISHED)에만 필요한 값 "존재"는 [validateProgramForPublish]가 검증한다.
