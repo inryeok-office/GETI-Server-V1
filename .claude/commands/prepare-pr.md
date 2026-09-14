@@ -1,39 +1,41 @@
 ---
-description: 현재 작업을 검증하고 Commit, Push, develop 대상 Draft PR까지 준비한다 (사용자 명시적 요청 시에만)
+description: Verifies the current work and prepares a Commit, Push, and Draft PR targeting develop (only on the user's explicit request)
 ---
 
-## 목적
+## Purpose
 
-현재 작업을 검증한 뒤 Commit, Push, Draft Pull Request 생성까지 진행한다.
+Verify the current work, then proceed through Commit, Push, and Draft Pull Request creation.
 
-**이 Command는 사용자가 Commit, Push, PR 생성을 명시적으로 요청한 경우에만 실행한다.**
+**Run this Command only when the user has explicitly requested a Commit, Push, and PR creation.**
 
-## 참조
+## References
 
-상세 기준은 [`pull-request` Skill](../skills/pull-request/SKILL.md)과 [`test-and-verify` Skill](../skills/test-and-verify/SKILL.md)을 따른다.
+Follow the [`pull-request` Skill](../skills/pull-request/SKILL.md) and the [`test-and-verify` Skill](../skills/test-and-verify/SKILL.md) for detailed criteria.
 
-## 수행 절차
+## Procedure
 
-1. [`AGENTS.md`](../../AGENTS.md), [`CLAUDE.md`](../../CLAUDE.md), 현재 Issue를 확인한다.
-2. 현재 Branch를 확인한다.
-3. `gh pr list --head <branch>`로 동일 Head Branch의 기존 PR을 확인한다. 있으면 새로 만들지 않고 기존 PR을 갱신한다.
-4. `git status`, `git diff`로 Working Tree를 확인한다.
-5. Issue 요구사항과 제외 범위를 대조한다.
-6. 관련 Test를 실행한다.
-7. 전체 Test와 Build를 실행한다.
-8. `git diff --check`를 실행한다.
-9. Secret과 불필요한 파일이 포함되지 않았는지 확인한다.
-10. 관련된 파일만 Stage한다.
-11. Commit 메시지를 작성한다 (`<type>: <한글 작업 내용>`).
-12. Commit한다.
-13. Push한다 (Force Push 금지).
-14. `develop`을 대상으로 Draft PR을 생성한다 (기존 PR이 있으면 본문을 갱신한다).
-15. PR 본문에 관련 Issue를 `Closes #{issue-number}`로 연결한다.
-16. 저장소에 실제 존재하는 Label을 PR에 적용한다.
-17. Issue 상태 Label을 `review`로 변경한다.
-18. 결과를 보고한다.
+1. Check [`AGENTS.md`](../../AGENTS.md), [`CLAUDE.md`](../../CLAUDE.md), and the current Issue.
+2. Check the current Branch.
+3. Check for an existing PR from the same Head Branch with `gh pr list --head <branch>`. If one exists, update it instead of creating a new one.
+4. Check the Working Tree with `git status` and `git diff`.
+5. Compare against the Issue requirements and out-of-scope items.
+6. Run related Tests.
+7. Run the full Test suite and Build.
+8. Run `git diff --check`.
+9. Confirm that no Secrets or unnecessary files are included.
+10. Stage only related files.
+11. Write the Commit message (`<type>: <한글 작업 내용>`).
+12. Commit.
+13. Push (Force Push is forbidden).
+14. Create a Draft PR targeting `develop` (if a PR already exists, update its body).
+15. Link the related Issue in the PR body with `Closes #{issue-number}`.
+16. Apply Labels that actually exist in the repository to the PR.
+17. Change the Issue status Label to `review`.
+18. Report the results.
 
-## PR 본문 기본 구조
+## Default PR Body Structure
+
+The PR body is written in Korean, matching the repository's PR template.
 
 ```markdown
 ## 작업 배경
@@ -64,21 +66,21 @@ description: 현재 작업을 검증하고 Commit, Push, develop 대상 Draft PR
 Closes #이슈번호
 ```
 
-실제로 검증한 항목만 체크한다.
+Check only items that were actually verified.
 
-## 금지 사항
+## Prohibited Actions
 
-- 사용자 요청 없이 Commit, Push, PR 생성
+- Creating a Commit, Push, or PR without the user's request
 - Force Push
-- 중복 PR 생성
-- 사용자 요청 없는 Merge
-- 검증하지 않은 항목을 체크
+- Creating duplicate PRs
+- Merging without the user's request
+- Checking unverified items
 
-## 결과 보고
+## Result Report
 
-- 검증 결과 (Test, Build)
+- Verification results (Test, Build)
 - Commit hash
-- Push 결과
-- PR 번호와 URL, base/head, Draft 여부
-- Issue Label 변경
-- 남은 작업
+- Push result
+- PR number and URL, base/head, whether it is a Draft
+- Issue Label changes
+- Remaining work

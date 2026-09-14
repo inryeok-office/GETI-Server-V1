@@ -1,37 +1,37 @@
 ---
 name: issue-workflow
-description: GitHub Issue 기반 작업의 시작부터 PR 연결까지 일관된 절차를 제공한다. Issue 분석, Branch, 상태 Label 흐름, 진행 댓글, 실패 처리 기준을 다룬다.
+description: Provides a consistent procedure for GitHub Issue-based work, from start through PR linking. Covers Issue analysis, Branches, the status Label flow, progress comments, and failure-handling criteria.
 ---
 
 # Issue Workflow
 
-GETI-Server에서 GitHub Issue 기반 작업을 시작하고 진행할 때 참고하는 상세 판단 기준이다. [`start-issue` Command](../../commands/start-issue.md)가 이 Skill을 참조한다.
+Detailed decision criteria to consult when starting and progressing GitHub Issue-based work in GETI-Server. The [`start-issue` Command](../../commands/start-issue.md) references this Skill.
 
-## Issue 분석
+## Issue Analysis
 
-Issue를 확인할 때 다음을 모두 읽는다.
+When reviewing an Issue, read all of the following.
 
-- 제목
-- 배경
-- 작업 내용 (체크리스트)
-- 완료 조건 (Acceptance Criteria)
-- 제외 범위
-- 선행 Issue와 PR (본문이나 댓글에서 언급되었는지)
-- Label (작업 유형, 우선순위, 영향 영역)
-- 담당 범위 (Assignee가 있다면 충돌 여부)
+- Title
+- Background
+- Tasks (checklist)
+- Completion conditions (Acceptance Criteria)
+- Out-of-scope items
+- Prerequisite Issues and PRs (whether they are mentioned in the body or comments)
+- Labels (work type, priority, affected area)
+- Ownership (if there is an Assignee, whether there is a conflict)
 
-완료 조건과 제외 범위를 확인하지 않고 작업 범위를 임의로 판단하지 않는다.
+Do not decide the work scope arbitrarily without checking the completion conditions and out-of-scope items.
 
 ## Branch
 
-- Base Branch는 기본적으로 `develop`이다. 작업 전 `git pull --ff-only origin develop`로 최신화한다.
-- Branch 이름에 Issue 번호를 포함한다: `<type>/{issue-number}-{short-description}`.
-- 이미 해당 Issue 번호의 작업 Branch가 로컬 또는 원격에 있는지 확인하고, 있으면 중복 생성하지 않고 그 Branch를 사용한다.
-- `main`, `develop`에서 직접 작업하지 않는다.
+- The Base Branch is `develop` by default. Update it with `git pull --ff-only origin develop` before starting work.
+- Include the Issue number in the Branch name: `<type>/{issue-number}-{short-description}`.
+- Check whether a work Branch for that Issue number already exists locally or remotely; if it does, use that Branch instead of creating a duplicate.
+- Do not work directly on `main` or `develop`.
 
-## 상태 Label 흐름
+## Status Label Flow
 
-실제 저장소에 존재하는 상태 Label(`gh label list`로 확인)을 기준으로 다음 흐름을 따른다.
+Follow the flow below, based on the status Labels that actually exist in the repository (check with `gh label list`).
 
 ```text
 📋 backlog → 📝 ready → 🚧 in progress → 👀 review → (Issue Close)
@@ -39,35 +39,35 @@ Issue를 확인할 때 다음을 모두 읽는다.
                               ⛔ blocked
 ```
 
-- 작업을 시작하면 `ready`를 제거하고 `in progress`를 추가한다.
-- 구현과 검증이 끝나 리뷰를 기다리면 `in progress`를 제거하고 `review`를 추가한다.
-- 외부 요인으로 막히면 `blocked`를 추가하고, 해결되면 이전 상태로 되돌린다.
-- 상태 Label은 항상 하나만 유지한다.
-- `✅ done` Label은 이 저장소에 존재하지 않는다. Issue Close 상태 자체가 완료를 의미한다 ([`docs/ai/git-conventions.md`](../../../docs/ai/git-conventions.md) 참고).
+- When starting work, remove `ready` and add `in progress`.
+- When implementation and verification are done and the work is awaiting review, remove `in progress` and add `review`.
+- When blocked by external factors, add `blocked`, and restore the previous status once resolved.
+- Always keep exactly one status Label.
+- The `✅ done` Label does not exist in this repository. The Issue's Closed state itself means completion (see [`docs/ai/git-conventions.md`](../../../docs/ai/git-conventions.md)).
 
-## 진행 댓글
+## Progress Comments
 
-다음 시점에 Issue 댓글을 남길 수 있다.
+You may leave Issue comments at the following points.
 
-- 작업 시작
-- 주요 단계 완료 (예: 여러 Commit으로 나뉜 작업의 중간 지점)
-- Blocked 상태 진입
-- PR 생성
-- 검증 실패로 방향 전환이 필요할 때
-- 작업 범위 변경이 필요할 때
+- Work start
+- Completion of a major step (e.g., a midpoint of work split into multiple Commits)
+- Entering the Blocked state
+- PR creation
+- When a verification failure requires a change of direction
+- When the work scope needs to change
 
-댓글에는 실제로 수행한 결과, 실제 Commit hash, 실제 Test/Build 결과만 작성한다. 사소한 중간 상태까지 매번 댓글을 남기지 않는다.
+Comments must contain only results actually produced, actual Commit hashes, and actual Test/Build results. Do not comment on every minor intermediate state.
 
-## 실패 처리
+## Failure Handling
 
-다음 상황에서는 임의로 진행하지 않고 원인을 보고한다.
+In the following situations, do not proceed on your own; report the cause.
 
-- GitHub 인증 실패 (`gh auth status`로 확인)
-- Issue 조회 실패 (잘못된 번호, 권한 없음)
-- 필요한 Label이 저장소에 없음 — 임의로 만들지 않고 실제 존재하는 Label로 대체하거나 사용자에게 보고한다
-- 선행 PR이 아직 Merge/반영되지 않음
-- `develop` 최신화 실패 (Fast-forward 불가, 충돌 등)
-- Push 실패
-- 동일 Head Branch의 PR이 이미 존재함 (새로 만들지 않고 기존 PR을 갱신)
+- GitHub authentication failure (check with `gh auth status`)
+- Issue lookup failure (wrong number, no permission)
+- A required Label does not exist in the repository — do not create it; substitute an existing Label or report to the user
+- A prerequisite PR has not yet been merged/applied
+- Failure to update `develop` (Fast-forward not possible, conflicts, etc.)
+- Push failure
+- A PR for the same Head Branch already exists (update the existing PR instead of creating a new one)
 
-임의의 Issue 번호나 없는 Label을 지어내지 않는다.
+Do not invent Issue numbers or nonexistent Labels.

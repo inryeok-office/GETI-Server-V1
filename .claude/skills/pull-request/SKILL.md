@@ -1,77 +1,77 @@
 ---
 name: pull-request
-description: 검증된 변경만 안전하게 Commit, Push, Draft Pull Request로 연결하는 절차와 기준을 다룬다.
+description: Covers the procedure and criteria for safely turning only verified changes into a Commit, Push, and Draft Pull Request.
 ---
 
 # Pull Request
 
-GETI-Server에서 Commit, Push, PR을 준비할 때 참고하는 상세 기준이다. [`prepare-pr` Command](../../commands/prepare-pr.md)가 이 Skill을 참조한다.
+Detailed criteria to consult when preparing a Commit, Push, and PR in GETI-Server. The [`prepare-pr` Command](../../commands/prepare-pr.md) references this Skill.
 
-## PR 전 확인
+## Pre-PR Checks
 
-- 현재 Issue의 완료 조건과 제외 범위
-- 현재 Branch가 올바른 작업 Branch인지
-- Base Branch(`develop`)가 최신인지
-- 동일 Head Branch의 기존 PR 존재 여부 (`gh pr list --head <branch>`)
-- Working Tree와 Diff
-- Test와 Build 결과
-- Secret과 불필요한 파일 포함 여부
+- The current Issue's completion conditions and out-of-scope items
+- Whether the current Branch is the correct work Branch
+- Whether the Base Branch (`develop`) is up to date
+- Whether a PR for the same Head Branch already exists (`gh pr list --head <branch>`)
+- Working Tree and Diff
+- Test and Build results
+- Whether Secrets or unnecessary files are included
 
 ## Commit
 
-- 관련된 파일만 Stage한다.
-- 하나의 Commit에는 하나의 논리적 단위만 담는다.
-- Type은 영문 소문자, 설명은 한글로 작성한다: `<type>: <한글 작업 내용>`.
-- Commit이 실패하면(Hook 실패 등) 원인을 파악하고, 실패를 성공으로 보고하지 않는다.
+- Stage only related files.
+- Put only one logical unit in each Commit.
+- Write the Type in lowercase English and the description in Korean: `<type>: <한글 작업 내용>`.
+- If a Commit fails (Hook failure, etc.), identify the cause and do not report the failure as a success.
 
 ## Push
 
-- 현재 Branch와 Upstream을 확인한다.
-- 일반 `git push`만 사용한다.
-- Force Push(`--force`, `--force-with-lease`)를 하지 않는다.
-- Push가 실패하면 정확한 오류를 보고한다.
+- Check the current Branch and Upstream.
+- Use only a plain `git push`.
+- Do not Force Push (`--force`, `--force-with-lease`).
+- If the Push fails, report the exact error.
 
 ## Draft PR
 
-- Base Branch는 기본적으로 `develop`이다.
-- 동일 Head Branch의 PR이 이미 있으면 새로 만들지 않고 기존 PR 본문을 갱신한다.
-- PR 본문에 다음을 포함한다.
-  - 관련 Issue 연결 (`Closes #{issue-number}`)
-  - 변경 내용
-  - 주요 설계 판단
-  - 실제 실행한 검증과 결과
-  - 영향 범위
-  - 제외 범위
-  - 실제로 검증한 항목만 체크된 체크리스트
+- The Base Branch is `develop` by default.
+- If a PR for the same Head Branch already exists, update the existing PR body instead of creating a new one.
+- Include the following in the PR body.
+  - Related Issue link (`Closes #{issue-number}`)
+  - Changes
+  - Key design decisions
+  - Verification actually run and its results
+  - Impact scope
+  - Out-of-scope items
+  - A checklist in which only actually verified items are checked
 
 ## Label
 
-- `gh label list`로 저장소에 실제 존재하는 Label만 확인해서 적용한다.
-- 존재하지 않는 Label을 임의로 새로 만들지 않는다.
-- 작업 유형(`🧹 chore` 등)과 영향 영역(`area:` 등) Label은 PR에도 적용한다.
-- 상태 Label(`in progress`, `review` 등)은 Issue에만 적용하고 PR에는 적용하지 않는다 ([`docs/ai/git-conventions.md`](../../../docs/ai/git-conventions.md) 참고).
+- Apply only Labels confirmed to actually exist in the repository via `gh label list`.
+- Do not arbitrarily create nonexistent Labels.
+- Apply work type (`🧹 chore`, etc.) and affected area (`area:`, etc.) Labels to the PR as well.
+- Apply status Labels (`in progress`, `review`, etc.) only to Issues, not to PRs (see [`docs/ai/git-conventions.md`](../../../docs/ai/git-conventions.md)).
 
-## CI 확인
+## CI Checks
 
-- Draft PR을 생성한 뒤 `gh pr checks {pr-number}`로 GitHub Actions(`CI` Workflow, [`docs/development/ci.md`](../../../docs/development/ci.md) 참고)가 실제로 실행되고 통과하는지 확인한다.
-- 실패한 Job이 있으면 `gh run view {run-id} --log-failed`로 원인을 확인하고 수정한 뒤 새 Commit으로 Push한다(Amend나 Force Push 사용 금지).
-- 실제 GitHub Actions Run 결과를 확인하지 않고 CI가 통과했다고 보고하지 않는다.
-- Workflow 파일(`.github/workflows/*.yml`)을 수정하는 경우 최소 권한(`permissions`)을 유지하고, `pull_request_target` 등 위험한 Trigger를 근거 없이 추가하지 않는다.
+- After creating the Draft PR, confirm with `gh pr checks {pr-number}` that GitHub Actions (the `CI` Workflow, see [`docs/development/ci.md`](../../../docs/development/ci.md)) actually runs and passes.
+- If a Job fails, check the cause with `gh run view {run-id} --log-failed`, fix it, and Push a new Commit (Amend and Force Push are forbidden).
+- Do not report that CI passed without checking the actual GitHub Actions Run result.
+- When modifying Workflow files (`.github/workflows/*.yml`), keep least-privilege `permissions` and do not add risky Triggers such as `pull_request_target` without justification.
 
-## Issue 상태
+## Issue Status
 
-PR을 생성하면 Issue 상태 Label을 다음과 같이 전환한다.
+When a PR is created, transition the Issue status Label as follows.
 
 ```text
 in progress → review
 ```
 
-PR이 Merge된 뒤 Issue를 Close하고 `review` 이후 상태를 정리하는 것은 이 Skill의 범위가 아니라 별도 작업(사용자 요청 또는 Merge 시점)으로 남긴다.
+Closing the Issue after the PR is merged and cleaning up statuses after `review` is not within this Skill's scope; leave it as separate work (on user request or at Merge time).
 
-## 금지 사항
+## Prohibited Actions
 
-- 사용자의 명시적 요청 없이 Commit, Push, PR 생성
+- Creating a Commit, Push, or PR without the user's explicit request
 - Force Push
-- 중복 PR 생성
-- 사용자 요청 없는 Merge
-- 검증하지 않은 항목을 체크리스트에서 체크 표시
+- Creating duplicate PRs
+- Merging without the user's request
+- Checking off unverified items in the checklist

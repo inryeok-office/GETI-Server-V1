@@ -1,16 +1,16 @@
 # Security (Claude Code)
 
-Claude Code가 파일, Shell, Dependency, Git을 다룰 때 지키는 보안 규칙이다. 배경과 상세 원칙은 [`docs/ai/security-policy.md`](../../docs/ai/security-policy.md)를 따른다. 이 저장소에는 아직 실제 Spring Security 구현이 없으며, 이 문서는 그 구현을 다루지 않는다.
+Security rules Claude Code observes when handling files, Shell, Dependencies, and Git. Follow [`docs/ai/security-policy.md`](../../docs/ai/security-policy.md) for background and detailed principles. This repository does not yet have an actual Spring Security implementation, and this document does not cover that implementation.
 
 ## Secret
 
-- Secret, Token, Password, API Key를 출력하지 않는다.
-- `.env` 파일의 전체 내용을 읽어서 그대로 출력하지 않는다.
-- 환경변수 값을 보고할 때는 실제 값 대신 마스킹된 형태를 사용한다.
-- Private Key, 인증서(`*.pem`, `*.key`, `*.p12`), Credential 파일을 읽어 내용을 노출하거나 Commit하지 않는다.
-- 실제로 동작 가능한 Secret 값을 예시나 문서에 사용하지 않는다.
+- Do not output Secrets, Tokens, Passwords, or API Keys.
+- Do not read and output the entire contents of a `.env` file as-is.
+- When reporting environment variable values, use a masked form instead of the actual value.
+- Do not read and expose, or Commit, the contents of Private Keys, certificates (`*.pem`, `*.key`, `*.p12`), or Credential files.
+- Do not use actually working Secret values in examples or documentation.
 
-민감정보를 보고할 때는 다음 형태를 사용한다.
+Use the following form when reporting sensitive information.
 
 ```text
 OPENAI_API_KEY=<configured>
@@ -18,31 +18,31 @@ DATABASE_PASSWORD=<redacted>
 JWT_SECRET=<redacted>
 ```
 
-## 사용자 데이터
+## User Data
 
-- 실제 사용자 데이터를 조회하지 않는다.
-- 실제 사용자 정보를 Test Data로 사용하지 않는다.
-- 운영 DB에 직접 접근하거나 수정하지 않는다.
-- 로그에 개인정보를 출력하지 않는다.
-- 사용자 Token, Session 정보를 출력하지 않는다.
+- Do not query real user data.
+- Do not use real user information as Test Data.
+- Do not directly access or modify the production DB.
+- Do not output personal information in logs.
+- Do not output user Token or Session information.
 
 ## Shell
 
-다음 방식을 사용하지 않는다.
+Do not use the following patterns.
 
 ```bash
 curl ... | sh
 wget ... | sh
 eval "$(...)"
-rm -rf <검증되지 않은 경로>
+rm -rf <unverified path>
 ```
 
-- 출처와 내용을 검토하지 않은 외부 Script를 실행하지 않는다.
-- 사용자 입력이나 외부 데이터를 검증 없이 Shell 명령에 그대로 결합하지 않는다.
+- Do not run external Scripts whose origin and contents have not been reviewed.
+- Do not combine user input or external data into Shell commands as-is without validation.
 
 ## Git
 
-사용자의 명시적 요청과 영향 범위 확인 없이 다음을 실행하지 않는다.
+Do not run the following without the user's explicit request and confirmation of the impact scope.
 
 ```bash
 git reset --hard
@@ -55,38 +55,38 @@ git push --force-with-lease
 
 ## Docker
 
-- Image는 공식 Image와 고정 Version(Patch/Release Tag)만 사용한다. `latest`나 Major-only Tag를 사용하지 않는다.
-- `privileged`, Docker Socket Mount, Host Network를 사용하지 않는다.
-- Local 전용 Compose Credential은 운영에서 재사용할 수 없다고 문서화한다.
-- 다음은 Local 데이터를 삭제하는 파괴적 명령이다. 사용자의 명시적 요청 없이 실행하지 않는다.
+- Use only official Images with pinned Versions (Patch/Release Tags). Do not use `latest` or Major-only Tags.
+- Do not use `privileged`, Docker Socket Mounts, or Host Network.
+- Document that Local-only Compose Credentials must not be reused in production.
+- The following is a destructive command that deletes Local data. Do not run it without the user's explicit request.
 
 ```bash
 docker compose down -v
 ```
 
-세부 내용은 [`docs/development/docker.md`](../../docs/development/docker.md)를 따른다.
+Follow [`docs/development/docker.md`](../../docs/development/docker.md) for details.
 
 ## Dependency
 
-새 Dependency를 추가하기 전에 다음을 확인한다.
+Check the following before adding a new Dependency.
 
-- 공식 또는 신뢰할 수 있는 출처인지
-- 유지보수 상태
-- 프로젝트 Java/Kotlin/Spring Boot 버전과의 호환성
-- 알려진 보안 취약점
-- 불필요한 Transitive Dependency를 끌고 오지 않는지
-- License 검토가 필요한지
+- Whether it comes from an official or trusted source
+- Maintenance status
+- Compatibility with the project's Java/Kotlin/Spring Boot versions
+- Known security vulnerabilities
+- Whether it pulls in unnecessary Transitive Dependencies
+- Whether a License review is needed
 
-## 인증 및 인가
+## Authentication and Authorization
 
-아직 인증/인가가 구현되지 않은 현재 단계에서도 다음을 미리 방지한다.
+Even at the current stage, where authentication/authorization is not yet implemented, prevent the following in advance.
 
-- 테스트 편의를 위해 인증을 비활성화하는 코드를 추가하지 않는다.
-- 인가 검사를 제거하거나 모든 Endpoint를 허용하는 임시 코드를 남기지 않는다.
-- Token 검증을 우회하는 코드를 추가하지 않는다.
-- Security 관련 Test를 삭제하지 않는다.
+- Do not add code that disables authentication for testing convenience.
+- Do not remove authorization checks or leave temporary code that permits all Endpoints.
+- Do not add code that bypasses Token validation.
+- Do not delete Security-related Tests.
 
-## 보고 원칙
+## Reporting Principles
 
-- 보안과 관련된 가정이나 발견 사항은 조용히 넘어가지 않고 완료 보고에 명시한다.
-- 작업 범위 밖에서 보안 문제를 발견하면 임의로 수정하지 않고 후속 Issue 후보로 보고한다.
+- Do not silently pass over security-related assumptions or findings; state them in the completion report.
+- If you discover a security problem outside the work scope, do not fix it on your own; report it as a candidate follow-up Issue.

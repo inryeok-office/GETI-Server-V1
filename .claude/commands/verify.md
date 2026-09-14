@@ -1,32 +1,32 @@
 ---
-description: 현재 변경 사항이 요구사항과 품질 기준을 충족하는지 검증한다 (Test, Build, 링크, Secret)
+description: Verifies that the current changes meet the requirements and quality criteria (Test, Build, links, Secrets)
 ---
 
-## 목적
+## Purpose
 
-현재 변경 사항을 종합적으로 검증하고 결과를 정확하게 판정한다.
+Comprehensively verify the current changes and judge the results accurately.
 
-## 참조
+## References
 
-상세 기준은 [`test-and-verify` Skill](../skills/test-and-verify/SKILL.md)을 따른다.
+Follow the [`test-and-verify` Skill](../skills/test-and-verify/SKILL.md) for detailed criteria.
 
-## 수행 절차
+## Procedure
 
 1. `git status`
-2. 현재 Branch 확인
+2. Check the current Branch
 3. `git diff`
 4. `git diff --check`
-5. 변경 범위에 맞는 Test 실행
-6. Kotlin 코드를 변경했다면 `spotlessCheck`, `detekt` 실행 (포맷 위반이 있으면 `spotlessApply`로 자동 정리 후 재확인)
-7. 전체 Test 실행
-8. Build 실행 (`check`에 `spotlessCheck`, `detekt`가 포함되어 함께 실행됨)
-9. Markdown 상대 링크 및 설정 경로 확인
-10. Secret 및 개인 환경 파일 포함 여부 확인
-11. 불필요한 파일 포함 여부 확인
-12. Issue의 완료 조건과 제외 범위 대조
-13. 결과 보고
+5. Run Tests matching the change scope
+6. If Kotlin code changed, run `spotlessCheck` and `detekt` (if there are formatting violations, auto-fix with `spotlessApply` and re-check)
+7. Run the full Test suite
+8. Run the Build (`check` includes `spotlessCheck` and `detekt`, so they run as well)
+9. Check Markdown relative links and configuration paths
+10. Check whether Secrets or personal environment files are included
+11. Check whether unnecessary files are included
+12. Compare against the Issue's completion conditions and out-of-scope items
+13. Report the results
 
-## Gradle 기본 검증
+## Default Gradle Verification
 
 Windows:
 
@@ -36,7 +36,7 @@ Windows:
 .\gradlew.bat clean test build
 ```
 
-Git Bash 또는 Unix:
+Git Bash or Unix:
 
 ```bash
 ./gradlew spotlessCheck
@@ -44,45 +44,45 @@ Git Bash 또는 Unix:
 ./gradlew clean test build
 ```
 
-커버리지 Report 확인이 필요하면 별도로 실행한다(`check`에는 포함되지 않는다).
+If you need to check the coverage Report, run it separately (it is not included in `check`).
 
 ```bash
 ./gradlew koverHtmlReport
 ./gradlew koverXmlReport
 ```
 
-## 실패 분류
+## Failure Classification
 
 ```text
-컴파일 실패
-테스트 실패
-Spring Context 실패
-설정 실패
-Dependency 실패
-포맷 위반 (spotlessCheck)
-정적 분석 위반 (detekt)
-문서 또는 경로 실패
-외부 서비스 실패
-로컬 환경 실패
-권한 실패
+Compilation failure
+Test failure
+Spring Context failure
+Configuration failure
+Dependency failure
+Formatting violation (spotlessCheck)
+Static analysis violation (detekt)
+Documentation or path failure
+External service failure
+Local environment failure
+Permission failure
 ```
 
-## 금지 사항
+## Prohibited Actions
 
-- 실패 Test 삭제
-- `@Disabled` 추가로 우회
-- Assertion 제거
-- Build Task를 생략하고 성공으로 보고
-- 실행하지 않은 검증을 성공으로 처리
-- 경고와 오류를 임의로 혼동
+- Deleting failing Tests
+- Bypassing by adding `@Disabled`
+- Removing Assertions
+- Skipping Build Tasks and reporting success
+- Treating verification that was not run as successful
+- Arbitrarily confusing warnings and errors
 
-## 결과 상태
+## Result Status
 
-다음 중 하나로 명확히 표현한다 ([`docs/ai/completion-policy.md`](../../docs/ai/completion-policy.md) 참고).
+State the result clearly as one of the following (see [`docs/ai/completion-policy.md`](../../docs/ai/completion-policy.md), which defines these status terms in Korean).
 
 ```text
-완료
-부분 완료
-검증 불가
-실패
+완료       (Complete)
+부분 완료  (Partially complete)
+검증 불가  (Unverifiable)
+실패       (Failed)
 ```
