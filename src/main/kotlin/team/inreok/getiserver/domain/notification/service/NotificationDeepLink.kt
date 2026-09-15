@@ -29,11 +29,11 @@ object NotificationDeepLink {
 
             NotificationTargetType.JOB_APPLICATION -> "/job-applications/$targetId"
 
+            NotificationTargetType.PORTFOLIO_REQUEST -> "/portfolio-requests/$targetId"
+
             // 접근 가능 여부를 아직 계산할 수 없는 대상이라 이동 경로도 내려주지 않는다
             // (NotificationTargetResolver KDoc 참고).
-            NotificationTargetType.PORTFOLIO_REQUEST,
-            NotificationTargetType.MEMBER_APPROVAL,
-            -> null
+            NotificationTargetType.MEMBER_APPROVAL -> null
         }
     }
 }

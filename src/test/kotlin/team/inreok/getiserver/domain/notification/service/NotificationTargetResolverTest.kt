@@ -19,6 +19,8 @@ import team.inreok.getiserver.domain.job.query.JobNotificationTargetQueryPort
 import team.inreok.getiserver.domain.job.query.JobNotificationTargetSnapshot
 import team.inreok.getiserver.domain.notification.entity.type.NotificationTargetType
 import team.inreok.getiserver.domain.notification.entity.type.NotificationTargetUnavailableReason
+import team.inreok.getiserver.domain.portfolio.query.PortfolioRequestNotificationTargetQueryPort
+import team.inreok.getiserver.domain.portfolio.query.PortfolioRequestNotificationTargetSnapshot
 import team.inreok.getiserver.domain.program.query.ProgramNotificationTargetQueryPort
 import team.inreok.getiserver.domain.program.query.ProgramNotificationTargetSnapshot
 
@@ -37,9 +39,25 @@ class NotificationTargetResolverTest {
     @Mock
     private lateinit var applicationPort: JobApplicationNotificationTargetQueryPort
 
+    @Mock
+    private lateinit var portfolioRequestPort: PortfolioRequestNotificationTargetQueryPort
+
     private val viewerMemberId = 1L
 
-    private fun resolver() = NotificationTargetResolver(jobPort, programPort, inquiryPort, applicationPort)
+    private fun resolver() =
+        NotificationTargetResolver(jobPort, programPort, inquiryPort, applicationPort, portfolioRequestPort)
+
+    private fun portfolioRequestSnapshot(
+        id: Long,
+        status: String,
+        deleted: Boolean = false,
+        targetedToViewer: Boolean = true,
+    ) = PortfolioRequestNotificationTargetSnapshot(
+        requestId = id,
+        status = status,
+        deleted = deleted,
+        targetedToViewer = targetedToViewer,
+    )
 
     private fun jobSnapshot(
         id: Long,
@@ -131,7 +149,7 @@ class NotificationTargetResolverTest {
         assertThat(result[ref]?.available).isFalse
         assertThat(result[ref]?.reason).isNull()
         assertThat(result[ref]?.deepLink).isNull()
-        verifyNoInteractions(jobPort, programPort, inquiryPort, applicationPort)
+        verifyNoInteractions(jobPort, programPort, inquiryPort, applicationPort, portfolioRequestPort)
     }
 
     @Test
@@ -162,7 +180,7 @@ class NotificationTargetResolverTest {
         val result = resolver().resolveAll(emptySet(), viewerMemberId)
 
         assertThat(result).isEmpty()
-        verifyNoInteractions(jobPort, programPort, inquiryPort, applicationPort)
+        verifyNoInteractions(jobPort, programPort, inquiryPort, applicationPort, portfolioRequestPort)
     }
 
     @Test
@@ -258,5 +276,103 @@ class NotificationTargetResolverTest {
         assertThat(result.values).allMatch { it.available }
         verify(inquiryPort, times(1)).findAllByIds(setOf(1L, 2L))
         verify(applicationPort, times(1)).findAllByIds(setOf(3L, 4L))
+    }
+
+    @Test
+    fun `내가 대상 학생인 공개된 수합 요청은 이동할 수 있고 deepLink를 내려준다`() {
+        val ref = NotificationTargetRef(NotificationTargetType.PORTFOLIO_REQUEST, 50L)
+        given(portfolioRequestPort.findAllByIds(setOf(50L), viewerMemberId))
+            .willReturn(mapOf(50L to portfolioRequestSnapshot(50L, "PUBLISHED")))
+
+        val result = resolver().resolveAll(setOf(ref), viewerMemberId)
+
+        assertThat(result[ref]?.available).isTrue
+        assertThat(result[ref]?.reason).isNull()
+        assertThat(result[ref]?.deepLink).isEqualTo("/portfolio-requests/50")
+    }
+
+    @Test
+    fun `마감된 수합 요청도 대상 학생이면 열어볼 수 있다`() {
+        val ref = NotificationTargetRef(NotificationTargetType.PORTFOLIO_REQUEST, 51L)
+        given(portfolioRequestPort.findAllByIds(setOf(51L), viewerMemberId))
+            .willReturn(mapOf(51L to portfolioRequestSnapshot(51L, "CLOSED")))
+
+        val result = resolver().resolveAll(setOf(ref), viewerMemberId)
+
+        assertThat(result[ref]?.available).isTrue
+        assertThat(result[ref]?.deepLink).isEqualTo("/portfolio-requests/51")
+    }
+
+    @Test
+    fun `대상 학생이 아닌 수합 요청은 FORBIDDEN으로 판정한다`() {
+        val ref = NotificationTargetRef(NotificationTargetType.PORTFOLIO_REQUEST, 52L)
+        given(portfolioRequestPort.findAllByIds(setOf(52L), viewerMemberId))
+            .willReturn(mapOf(52L to portfolioRequestSnapshot(52L, "PUBLISHED", targetedToViewer = false)))
+
+        val result = resolver().resolveAll(setOf(ref), viewerMemberId)
+
+        assertThat(result[ref]?.available).isFalse
+        assertThat(result[ref]?.reason).isEqualTo(NotificationTargetUnavailableReason.FORBIDDEN)
+        assertThat(result[ref]?.deepLink).isNull()
+    }
+
+    @Test
+    fun `DRAFT 수합 요청은 대상 여부와 무관하게 NOT_VISIBLE로 판정한다`() {
+        val ref = NotificationTargetRef(NotificationTargetType.PORTFOLIO_REQUEST, 53L)
+        given(portfolioRequestPort.findAllByIds(setOf(53L), viewerMemberId))
+            .willReturn(mapOf(53L to portfolioRequestSnapshot(53L, "DRAFT", targetedToViewer = false)))
+
+        val result = resolver().resolveAll(setOf(ref), viewerMemberId)
+
+        assertThat(result[ref]?.available).isFalse
+        assertThat(result[ref]?.reason).isEqualTo(NotificationTargetUnavailableReason.NOT_VISIBLE)
+        assertThat(result[ref]?.deepLink).isNull()
+    }
+
+    @Test
+    fun `삭제된 수합 요청은 대상 학생이어도 DELETED로 판정한다`() {
+        val softDeleted = NotificationTargetRef(NotificationTargetType.PORTFOLIO_REQUEST, 54L)
+        val statusDeleted = NotificationTargetRef(NotificationTargetType.PORTFOLIO_REQUEST, 55L)
+        given(portfolioRequestPort.findAllByIds(setOf(54L, 55L), viewerMemberId))
+            .willReturn(
+                mapOf(
+                    54L to portfolioRequestSnapshot(54L, "PUBLISHED", deleted = true),
+                    55L to portfolioRequestSnapshot(55L, "DELETED"),
+                ),
+            )
+
+        val result = resolver().resolveAll(setOf(softDeleted, statusDeleted), viewerMemberId)
+
+        assertThat(result[softDeleted]?.reason).isEqualTo(NotificationTargetUnavailableReason.DELETED)
+        assertThat(result[statusDeleted]?.reason).isEqualTo(NotificationTargetUnavailableReason.DELETED)
+        assertThat(result.values).allMatch { !it.available && it.deepLink == null }
+    }
+
+    @Test
+    fun `Row가 사라진 수합 요청은 DELETED로 판정한다`() {
+        val ref = NotificationTargetRef(NotificationTargetType.PORTFOLIO_REQUEST, 56L)
+        given(portfolioRequestPort.findAllByIds(setOf(56L), viewerMemberId)).willReturn(emptyMap())
+
+        val result = resolver().resolveAll(setOf(ref), viewerMemberId)
+
+        assertThat(result[ref]?.available).isFalse
+        assertThat(result[ref]?.reason).isEqualTo(NotificationTargetUnavailableReason.DELETED)
+    }
+
+    @Test
+    fun `수합 요청도 요청자 기준으로 Domain당 조회를 한 번만 한다`() {
+        val refs =
+            setOf(
+                NotificationTargetRef(NotificationTargetType.PORTFOLIO_REQUEST, 1L),
+                NotificationTargetRef(NotificationTargetType.PORTFOLIO_REQUEST, 2L),
+            )
+        given(portfolioRequestPort.findAllByIds(setOf(1L, 2L), viewerMemberId))
+            .willReturn((1L..2L).associateWith { portfolioRequestSnapshot(it, "PUBLISHED") })
+
+        val result = resolver().resolveAll(refs, viewerMemberId)
+
+        assertThat(result.values).allMatch { it.available }
+        verify(portfolioRequestPort, times(1)).findAllByIds(setOf(1L, 2L), viewerMemberId)
+        verifyNoInteractions(jobPort, programPort, inquiryPort, applicationPort)
     }
 }

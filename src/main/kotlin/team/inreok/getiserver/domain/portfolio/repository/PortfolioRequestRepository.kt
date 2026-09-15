@@ -69,4 +69,27 @@ interface PortfolioRequestRepository : JpaRepository<PortfolioRequest, Long> {
         @Param("status") status: PortfolioRequestStatus?,
         pageable: Pageable,
     ): Page<PortfolioRequest>
+
+    /**
+     * 알림 이동 대상 판정용 조회다(Issue #332). 삭제·DRAFT 요청도 걸러내지 않고, 요청자가 대상
+     * 학생인지를 `EXISTS` 부분 Query로 함께 계산한다 -- 요청 Row와 대상 여부를 한 번의 Query로
+     * 가져와 목록 응답(최대 100건)에서 N+1이나 대상 학생 전체 로딩이 생기지 않게 하기 위해서다.
+     */
+    @Query(
+        """
+        SELECT r.id AS requestId,
+               r.status AS status,
+               r.deletedAt AS deletedAt,
+               CASE WHEN EXISTS (
+                 SELECT 1 FROM PortfolioRequestTarget t
+                 WHERE t.requestId = r.id AND t.studentMemberId = :viewerMemberId
+               ) THEN true ELSE false END AS targetedToViewer
+        FROM PortfolioRequest r
+        WHERE r.id IN :requestIds
+        """,
+    )
+    fun findNotificationTargetsByIds(
+        @Param("requestIds") requestIds: Collection<Long>,
+        @Param("viewerMemberId") viewerMemberId: Long,
+    ): List<PortfolioRequestNotificationTargetProjection>
 }
