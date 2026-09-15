@@ -19,10 +19,10 @@ import java.time.format.DateTimeFormatter
  * 수신자 수가 정해져 있지 않아 실제 생성은 전용 `notificationTaskExecutor`로 넘기고, 한 수신자의
  * 저장 실패가 나머지 수신자에게 번지지 않도록 개별로 감싼다.
  *
- * `targetType`은 [NotificationTargetType.PORTFOLIO_REQUEST]로 두지만, 이 대상은
- * [team.inreok.getiserver.domain.notification.service.NotificationTargetResolver]가 아직 해석하지
- * 않아 목록 응답에서 "이동 불가, 이유 없음"으로 내려간다. 접근 판정과 Deep Link는 Issue #332에서
- * 붙인다 -- 그때 이 Listener는 바뀌지 않고 Resolver 쪽만 추가된다.
+ * `targetType`은 [NotificationTargetType.PORTFOLIO_REQUEST]로 둔다. 접근 판정과 Deep Link는
+ * [team.inreok.getiserver.domain.notification.service.NotificationTargetResolver]가 계산한다
+ * (Issue #332). Resolver는 이 Listener가 대상 학생에게만 알림을 만든다는 전제로 역할 예외를 두지
+ * 않으므로, 수신자 범위를 넓히면 Resolver 판정도 함께 바꿔야 한다.
  *
  * Discord 발송 대상에는 넣지 않는다. 기존 Discord Listener(`job`/`program`/`inquiry`)는 모두 공개
  * 채널 브로드캐스트인 반면 수합 요청은 지정된 학생만 열람할 수 있는 대상 지정 리소스라, 채널에
