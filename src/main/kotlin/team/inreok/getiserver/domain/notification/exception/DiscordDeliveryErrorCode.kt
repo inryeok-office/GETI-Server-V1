@@ -26,6 +26,7 @@ enum class DiscordDeliveryErrorCode(
     DISCORD_DELIVERY_MANUAL_SEND_NOT_ALLOWED(HttpStatus.CONFLICT, "현재 대상 상태에서는 Discord 수동 발송을 요청할 수 없습니다."),
 
     DISCORD_DELIVERY_MANUAL_SEND_UNSUPPORTED(HttpStatus.BAD_REQUEST, "해당 대상 유형은 Discord 수동 발송을 지원하지 않습니다."),
+    DISCORD_DELIVERY_INVALID_TARGET_GRADE(HttpStatus.BAD_REQUEST, "대상 학년은 1, 2, 3 중 하나여야 합니다."),
 
     /**
      * Program Discord 상태 조회·재시도를 등록자·담당 교사·개발자가 아닌 사용자가 요청한 경우다

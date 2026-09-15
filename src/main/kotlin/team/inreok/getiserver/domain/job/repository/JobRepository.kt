@@ -18,6 +18,11 @@ interface JobRepository : JpaRepository<Job, Long> {
         @Param("query") query: String,
     ): List<Long>
 
+    @Query("SELECT j.id FROM Job j WHERE j.targetGrade IS NULL OR j.targetGrade = :targetGrade")
+    fun findIdsByTargetGrade(
+        @Param("targetGrade") targetGrade: Int,
+    ): List<Long>
+
     fun findBySourceNameAndExternalJobId(
         sourceName: String,
         externalJobId: String,

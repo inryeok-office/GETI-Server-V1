@@ -47,4 +47,8 @@ class JobDiscordPayloadQueryPortImpl(
     @Transactional(readOnly = true)
     override fun findIdsByTitleContaining(query: String): Set<Long> =
         jobRepository.findIdsByTitleContaining(query).toSet()
+
+    @Transactional(readOnly = true)
+    override fun findIdsByTargetGrade(targetGrade: Int): Set<Long> =
+        jobRepository.findIdsByTargetGrade(targetGrade).toSet()
 }

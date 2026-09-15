@@ -20,6 +20,22 @@ interface ProgramRepository : JpaRepository<Program, Long> {
         @Param("query") query: String,
     ): List<Long>
 
+    @Query(
+        """
+        SELECT p.id FROM Program p
+        WHERE NOT EXISTS (
+            SELECT g.id FROM ProgramTargetGrade g WHERE g.id.programId = p.id
+        )
+        OR EXISTS (
+            SELECT g.id FROM ProgramTargetGrade g
+            WHERE g.id.programId = p.id AND g.id.grade = :targetGrade
+        )
+        """,
+    )
+    fun findIdsByTargetGrade(
+        @Param("targetGrade") targetGrade: Int,
+    ): List<Long>
+
     // 삭제된 Program(deletedAt != null)은 조회 대상이 아니다(Soft Delete). 관리자 상세 조회는
     // 삭제 이력까지 확인해야 하므로 findById를 그대로 쓴다(JobRepository와 동일한 관례).
     fun findByIdAndDeletedAtIsNull(id: Long): Program?

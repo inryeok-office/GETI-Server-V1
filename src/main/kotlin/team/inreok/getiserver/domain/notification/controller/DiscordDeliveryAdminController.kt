@@ -97,7 +97,10 @@ class DiscordDeliveryAdminController(
     )
     @ApiResponses(
         SwaggerApiResponse(responseCode = "200", description = "조회 성공(결과가 없으면 빈 목록)"),
-        SwaggerApiResponse(responseCode = "400", description = "Filter 값이 올바르지 않음 (TYPE_MISMATCH)"),
+        SwaggerApiResponse(
+            responseCode = "400",
+            description = "Filter 값이 올바르지 않음 (TYPE_MISMATCH, DISCORD_DELIVERY_INVALID_TARGET_GRADE)",
+        ),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "403", description = "개발자 권한이 없음 (FORBIDDEN)"),
         SwaggerApiResponse(responseCode = "500", description = "서버 내부 오류"),
@@ -122,6 +125,14 @@ class DiscordDeliveryAdminController(
         @Parameter(description = "대상 이름 부분 일치 Filter(선택). JOB/PROGRAM은 제목, INQUIRY는 문의 유형을 검색하며 앞뒤 공백은 제거한다.")
         @RequestParam(required = false)
         targetName: String?,
+        @Parameter(
+            description =
+                "대상 학년 Filter(선택). 생략하면 전체를 조회한다. 1, 2, 3 중 하나이며, " +
+                    "원본 공고/프로그램의 대상 학년에 해당 학년이 포함된 전달만 조회한다. Inquiry에는 적용되지 않는다.",
+            example = "2",
+        )
+        @RequestParam(required = false)
+        targetGrade: Int?,
         @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20, 최대 100). sort는 무시된다.")
         pageable: Pageable,
     ): ApiResponse<DiscordDeliveryListResponse> =
@@ -134,6 +145,7 @@ class DiscordDeliveryAdminController(
                 targetType,
                 channelId,
                 targetName,
+                targetGrade,
             ),
         )
 

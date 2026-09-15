@@ -43,6 +43,9 @@ interface JobDiscordPayloadQueryPort {
     fun findDisplayNamesByIds(jobIds: Set<Long>): Map<Long, String>
 
     fun findIdsByTitleContaining(query: String): Set<Long>
+
+    /** 관리자 Discord 전달 목록의 대상 학년 필터에 사용할 공고 ID를 조회한다. */
+    fun findIdsByTargetGrade(targetGrade: Int): Set<Long>
 }
 
 /**

@@ -230,6 +230,9 @@ class DiscordDeliveryAdminQueryServiceImplTest {
             anyIdSet(),
             anyIdSet(),
             anyIdSet(),
+            anyBoolean(),
+            anyIdSet(),
+            anyIdSet(),
         )
         assertThat(statusCaptor.value).isEqualTo(DiscordDeliveryStatus.FAILED)
     }
@@ -253,6 +256,9 @@ class DiscordDeliveryAdminQueryServiceImplTest {
             any(),
             anyBoolean(),
             anyIdSet(),
+            anyIdSet(),
+            anyIdSet(),
+            anyBoolean(),
             anyIdSet(),
             anyIdSet(),
         )
@@ -292,6 +298,9 @@ class DiscordDeliveryAdminQueryServiceImplTest {
             anyIdSet(),
             anyIdSet(),
             anyIdSet(),
+            anyBoolean(),
+            anyIdSet(),
+            anyIdSet(),
         )
     }
 
@@ -300,6 +309,39 @@ class DiscordDeliveryAdminQueryServiceImplTest {
     // Mockito의 any()/anySet()은 null을 돌려주는데 이 Repository/Port 인자는 Kotlin non-null이라
     // 그대로 쓰면 NPE가 난다. 기존 Test(NotificationControllerTest.anyPageable)와 같은 방식으로
     // 감싼다.
+    @Test
+    fun `targetGrade는 원본 대상 학년 ID를 Page 조회 전에 적용한다`() {
+        val delivery = delivery(id = 1L, template = DiscordMessageTemplate.JOB_PUBLISHED, targetId = 10L)
+        given(jobPayloadQueryPort.findIdsByTargetGrade(2)).willReturn(setOf(10L))
+        given(programPayloadQueryPort.findIdsByTargetGrade(2)).willReturn(setOf(20L))
+        given(
+            deliveryRepository.findRecent(
+                null,
+                null,
+                null,
+                PageRequest.of(0, 20),
+                null,
+                null,
+                false,
+                setOf(-1L),
+                setOf(-1L),
+                setOf(-1L),
+                true,
+                setOf(10L),
+                setOf(20L),
+            ),
+        ).willReturn(PageImpl(listOf(delivery), PageRequest.of(0, 20), 1L))
+        given(jobPayloadQueryPort.findDisplayNamesByIds(setOf(10L))).willReturn(mapOf(10L to "공고"))
+        given(deliveryRepository.findLatestDeliveryIds(anyTargetTypeSet(), anyIdSet())).willReturn(listOf(1L))
+
+        val response = service().listRecent(null, PageRequest.of(0, 20), targetGrade = 2)
+
+        assertThat(response.totalElements).isEqualTo(1)
+        assertThat(response.content.single().targetId).isEqualTo(10L)
+        verify(jobPayloadQueryPort).findIdsByTargetGrade(2)
+        verify(programPayloadQueryPort).findIdsByTargetGrade(2)
+    }
+
     private fun anyPageable(): Pageable = any(Pageable::class.java) ?: Pageable.unpaged()
 
     private fun anyIdSet(): Set<Long> = anySet<Long>() ?: emptySet()
@@ -320,6 +362,9 @@ class DiscordDeliveryAdminQueryServiceImplTest {
                 any(),
                 anyBoolean(),
                 anyIdSet(),
+                anyIdSet(),
+                anyIdSet(),
+                anyBoolean(),
                 anyIdSet(),
                 anyIdSet(),
             ),

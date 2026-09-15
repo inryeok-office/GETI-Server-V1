@@ -173,7 +173,12 @@ class FileStorageIntegrationTest {
 
         @Container
         @JvmStatic
-        val minio = MinIOContainer(DockerImageName.parse("minio/minio:RELEASE.2025-09-07T16-13-09Z"))
+        val minio =
+            MinIOContainer(
+                DockerImageName
+                    .parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
+                    .asCompatibleSubstituteFor("minio/minio"),
+            )
 
         private lateinit var adapter: S3FileStorageAdapter
 

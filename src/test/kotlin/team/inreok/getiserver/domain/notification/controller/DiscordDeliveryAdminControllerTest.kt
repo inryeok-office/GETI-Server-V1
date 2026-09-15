@@ -148,7 +148,16 @@ class DiscordDeliveryAdminControllerTest
         @Test
         fun `개발자는 Discord 전달 내역 전체 목록을 조회할 수 있다`() {
             given(
-                discordDeliveryAdminQueryService.listRecent(any(), anyPageable(), any(), any(), any(), any(), any()),
+                discordDeliveryAdminQueryService.listRecent(
+                    any(),
+                    anyPageable(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                ),
             ).willReturn(listResponse())
 
             mockMvc
@@ -170,7 +179,16 @@ class DiscordDeliveryAdminControllerTest
             // Payload Snapshot을 저장하지 않고(요구사항 §19·§39) 문의 본문은 §40이 노출을 금지하므로,
             // Client Mock의 messageBody에 대응하는 Field가 응답에 생기지 않아야 한다.
             given(
-                discordDeliveryAdminQueryService.listRecent(any(), anyPageable(), any(), any(), any(), any(), any()),
+                discordDeliveryAdminQueryService.listRecent(
+                    any(),
+                    anyPageable(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                ),
             ).willReturn(listResponse())
 
             mockMvc
@@ -197,7 +215,16 @@ class DiscordDeliveryAdminControllerTest
         @Test
         fun `status Filter는 그대로 Service에 전달된다`() {
             given(
-                discordDeliveryAdminQueryService.listRecent(any(), anyPageable(), any(), any(), any(), any(), any()),
+                discordDeliveryAdminQueryService.listRecent(
+                    any(),
+                    anyPageable(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                ),
             ).willReturn(listResponse())
 
             mockMvc
@@ -210,14 +237,23 @@ class DiscordDeliveryAdminControllerTest
             val statusCaptor = ArgumentCaptor.forClass(DiscordDeliveryStatus::class.java)
             verify(
                 discordDeliveryAdminQueryService,
-            ).listRecent(statusCaptor.capture(), anyPageable(), any(), any(), any(), any(), any())
+            ).listRecent(statusCaptor.capture(), anyPageable(), any(), any(), any(), any(), any(), any())
             assertThat(statusCaptor.value).isEqualTo(DiscordDeliveryStatus.FAILED)
         }
 
         @Test
         fun `status를 생략하면 null로 전달되어 전체를 조회한다`() {
             given(
-                discordDeliveryAdminQueryService.listRecent(any(), anyPageable(), any(), any(), any(), any(), any()),
+                discordDeliveryAdminQueryService.listRecent(
+                    any(),
+                    anyPageable(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                ),
             ).willReturn(listResponse())
 
             mockMvc
@@ -227,7 +263,7 @@ class DiscordDeliveryAdminControllerTest
             val statusCaptor = ArgumentCaptor.forClass(DiscordDeliveryStatus::class.java)
             verify(
                 discordDeliveryAdminQueryService,
-            ).listRecent(statusCaptor.capture(), anyPageable(), any(), any(), any(), any(), any())
+            ).listRecent(statusCaptor.capture(), anyPageable(), any(), any(), any(), any(), any(), any())
             assertThat(statusCaptor.value).isNull()
         }
 
@@ -245,7 +281,16 @@ class DiscordDeliveryAdminControllerTest
         @Test
         fun `목록 size가 최대값을 넘으면 100으로 잘린다`() {
             given(
-                discordDeliveryAdminQueryService.listRecent(any(), anyPageable(), any(), any(), any(), any(), any()),
+                discordDeliveryAdminQueryService.listRecent(
+                    any(),
+                    anyPageable(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                ),
             ).willReturn(listResponse())
 
             mockMvc
@@ -259,6 +304,7 @@ class DiscordDeliveryAdminControllerTest
             verify(discordDeliveryAdminQueryService).listRecent(
                 any(),
                 pageableCaptor.capture() ?: Pageable.unpaged(),
+                any(),
                 any(),
                 any(),
                 any(),

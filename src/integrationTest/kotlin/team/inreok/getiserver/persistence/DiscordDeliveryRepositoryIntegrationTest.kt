@@ -337,6 +337,44 @@ class DiscordDeliveryRepositoryIntegrationTest
             assertThat(latestIds).containsExactlyInAnyOrder(latestOfJob.id, program.id)
         }
 
+        @Test
+        fun `대상 학년 Filter는 Job과 Program만 대상 ID로 조회하고 Inquiry를 제외한다`() {
+            val matchingJob =
+                deliveryRepository.saveAndFlush(
+                    delivery(key = "JOB:10:CREATE", template = DiscordMessageTemplate.JOB_PUBLISHED, targetId = 10L),
+                )
+            val excludedJob =
+                deliveryRepository.saveAndFlush(
+                    delivery(key = "JOB:11:CREATE", template = DiscordMessageTemplate.JOB_PUBLISHED, targetId = 11L),
+                )
+            val matchingProgram =
+                deliveryRepository.saveAndFlush(
+                    delivery(key = "PROGRAM:20:CREATE", targetId = 20L),
+                )
+            val excludedProgram =
+                deliveryRepository.saveAndFlush(
+                    delivery(key = "PROGRAM:21:CREATE", targetId = 21L),
+                )
+            val inquiry =
+                deliveryRepository.saveAndFlush(
+                    delivery(key = "INQUIRY:30:CREATE", template = DiscordMessageTemplate.INQUIRY_CREATED),
+                )
+
+            val page =
+                deliveryRepository.findRecent(
+                    status = null,
+                    pageable = PageRequest.of(0, 20),
+                    hasTargetGrade = true,
+                    jobTargetGradeIds = setOf(10L),
+                    programTargetGradeIds = setOf(20L),
+                )
+
+            assertThat(page.content.map { it.id })
+                .containsExactlyInAnyOrder(matchingProgram.id, matchingJob.id)
+                .doesNotContain(excludedJob.id, excludedProgram.id, inquiry.id)
+            assertThat(page.totalElements).isEqualTo(2)
+        }
+
         private fun reload(delivery: DiscordDelivery) =
             requireNotNull(deliveryRepository.findById(requireNotNull(delivery.id)).orElse(null))
 

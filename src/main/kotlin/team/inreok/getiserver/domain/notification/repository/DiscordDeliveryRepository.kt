@@ -55,6 +55,13 @@ interface DiscordDeliveryRepository : JpaRepository<DiscordDelivery, Long> {
             OR (d.targetType = team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryTargetType.INQUIRY
                 AND d.targetId IN :inquiryTargetIds)
           )
+          AND (
+            :hasTargetGrade = FALSE
+            OR (d.targetType = team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryTargetType.JOB
+                AND d.targetId IN :jobTargetGradeIds)
+            OR (d.targetType = team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryTargetType.PROGRAM
+                AND d.targetId IN :programTargetGradeIds)
+          )
         ORDER BY d.id DESC
         """,
     )
@@ -69,6 +76,9 @@ interface DiscordDeliveryRepository : JpaRepository<DiscordDelivery, Long> {
         @Param("jobTargetIds") jobTargetIds: Collection<Long> = setOf(-1),
         @Param("programTargetIds") programTargetIds: Collection<Long> = setOf(-1),
         @Param("inquiryTargetIds") inquiryTargetIds: Collection<Long> = setOf(-1),
+        @Param("hasTargetGrade") hasTargetGrade: Boolean = false,
+        @Param("jobTargetGradeIds") jobTargetGradeIds: Collection<Long> = setOf(-1),
+        @Param("programTargetGradeIds") programTargetGradeIds: Collection<Long> = setOf(-1),
     ): Page<DiscordDelivery>
 
     /**

@@ -32,6 +32,9 @@ interface ProgramDiscordPayloadQueryPort {
     fun findDisplayNamesByIds(programIds: Set<Long>): Map<Long, String>
 
     fun findIdsByTitleContaining(query: String): Set<Long>
+
+    /** 관리자 Discord 전달 목록의 대상 학년 필터에 사용할 프로그램 ID를 조회한다. */
+    fun findIdsByTargetGrade(targetGrade: Int): Set<Long>
 }
 
 /**

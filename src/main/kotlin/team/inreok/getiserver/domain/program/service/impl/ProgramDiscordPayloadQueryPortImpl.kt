@@ -45,4 +45,8 @@ class ProgramDiscordPayloadQueryPortImpl(
     @Transactional(readOnly = true)
     override fun findIdsByTitleContaining(query: String): Set<Long> =
         programRepository.findIdsByTitleContaining(query).toSet()
+
+    @Transactional(readOnly = true)
+    override fun findIdsByTargetGrade(targetGrade: Int): Set<Long> =
+        programRepository.findIdsByTargetGrade(targetGrade).toSet()
 }

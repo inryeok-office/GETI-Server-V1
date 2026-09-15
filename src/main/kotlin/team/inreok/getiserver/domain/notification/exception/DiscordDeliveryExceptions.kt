@@ -63,3 +63,6 @@ class DiscordDeliveryManualSendUnsupportedException(
         DiscordDeliveryErrorCode.DISCORD_DELIVERY_MANUAL_SEND_UNSUPPORTED,
         "해당 대상 유형은 Discord 수동 발송을 지원하지 않습니다. (targetType=$targetType)",
     )
+
+class DiscordDeliveryInvalidTargetGradeException :
+    BusinessException(DiscordDeliveryErrorCode.DISCORD_DELIVERY_INVALID_TARGET_GRADE)
