@@ -1,7 +1,7 @@
 plugins {
     kotlin("jvm") version "2.3.21"
     kotlin("plugin.spring") version "2.3.21"
-    id("org.springframework.boot") version "4.1.0"
+    id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
     kotlin("plugin.jpa") version "2.3.21"
     id("com.diffplug.spotless") version "8.9.0"
@@ -25,7 +25,7 @@ repositories {
 
 dependencyManagement {
     imports {
-        mavenBom("org.springframework.modulith:spring-modulith-bom:2.1.0")
+        mavenBom("org.springframework.modulith:spring-modulith-bom:2.1.1")
         // Spring Boot Dependency Management가 spring-boot-dependencies POM 안에서
         // testcontainers-bom을 Import하지만, io.spring.dependency-management Plugin은
         // 이런 중첩 Import를 항상 전파하지 않는다(실측 결과 org.testcontainers:postgresql,
