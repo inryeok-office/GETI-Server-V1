@@ -171,9 +171,19 @@ class FileStorageIntegrationTest {
         private val TTL: Duration = Duration.ofMinutes(5)
         private const val BUCKET = "geti-integration-test"
 
+        /**
+         * Docker Hub의 `minio/minio`는 더 이상 익명으로 Pull할 수 없어(`denied`) CI가 실패한다.
+         * MinIO가 공식으로 함께 게시하는 Quay.io Mirror에서 같은 Release를 받는다.
+         * Registry만 다르고 Image는 동일하므로 Testcontainers에 호환 Image임을 알린다.
+         */
         @Container
         @JvmStatic
-        val minio = MinIOContainer(DockerImageName.parse("minio/minio:RELEASE.2025-09-07T16-13-09Z"))
+        val minio =
+            MinIOContainer(
+                DockerImageName
+                    .parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
+                    .asCompatibleSubstituteFor("minio/minio"),
+            )
 
         private lateinit var adapter: S3FileStorageAdapter
 

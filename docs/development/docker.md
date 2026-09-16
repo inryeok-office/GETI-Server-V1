@@ -195,7 +195,9 @@ docker compose build app
 | --- | --- | --- |
 | PostgreSQL | `postgres:18.4-alpine` | 공식 Image, 확인 시점 최신 Stable Major(18), Alpine으로 Image 크기 최소화 |
 | Redis | `redis:8.8.1-alpine` | 공식 Image, 확인 시점 최신 Stable |
-| MinIO | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | 공식 Image, 확인 시점(2026년 7월) Docker Hub에 게시된 가장 최근 Release. MinIO의 Docker Hub 공개 Image가 2025-09-07 이후로는 새 Release를 게시하지 않은 상태였다 |
+| MinIO | `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z` | MinIO 공식 Image, 2025-09-07 이후 새 Release가 게시되지 않은 마지막 Release. 2026-09 기준 Docker Hub의 `minio/minio`는 익명 Pull이 막혀(`denied`) 받을 수 없어, MinIO가 공식으로 함께 게시하는 Quay.io Mirror를 사용한다(Image 내용은 동일) |
 | Dockerfile Base | `eclipse-temurin:25.0.3_9-jdk-alpine` / `25.0.3_9-jre-alpine` | 프로젝트 Java Toolchain(25)과 동일한 Major Version, 공식 Temurin Image, Patch까지 고정 |
 
 모든 Image는 `latest`나 Major-only Tag가 아닌 특정 Patch/Release Tag로 고정했다.
+
+MinIO는 Docker Hub(`minio/minio`)와 Quay.io(`quay.io/minio/minio`) 양쪽에 같은 Release를 게시해 왔다. 2026-09 기준 Docker Hub Repository는 익명 Pull 시 `denied: requested access to the resource is denied`를 반환하므로, 로컬 Compose와 `FileStorageIntegrationTest` 모두 Quay.io를 참조한다. `FileStorageIntegrationTest`는 Testcontainers `MinIOContainer`가 `minio/minio`만 허용하기 때문에 `asCompatibleSubstituteFor("minio/minio")`를 함께 지정한다.
