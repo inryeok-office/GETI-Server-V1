@@ -8,6 +8,7 @@ enum class DiscordSendTargetErrorCode(
     override val defaultMessage: String,
 ) : ErrorCode {
     INVALID_TARGET_GRADE(HttpStatus.BAD_REQUEST, "대상 학년은 1, 2, 3 중 하나여야 합니다."),
+    PAGE_TOO_DEEP(HttpStatus.BAD_REQUEST, "Discord send target page is too deep."),
     ;
 
     override val code: String get() = name

@@ -17,6 +17,7 @@ import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliverySta
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryTargetType
 import team.inreok.getiserver.domain.notification.entity.type.DiscordSendTargetType
 import team.inreok.getiserver.domain.notification.exception.DiscordSendTargetInvalidTargetGradeException
+import team.inreok.getiserver.domain.notification.exception.DiscordSendTargetPageTooDeepException
 import team.inreok.getiserver.domain.notification.repository.DiscordDeliveryRepository
 import team.inreok.getiserver.domain.notification.service.DiscordDeliveryRetryPolicy
 import team.inreok.getiserver.domain.notification.service.DiscordSendTargetQueryService
@@ -45,6 +46,9 @@ class DiscordSendTargetQueryServiceImpl(
         val pageRequest = PageRequest.of(pageable.pageNumber, normalizedPageSize(pageable))
         if (pageRequest.offset >= totalElements) {
             return emptyPage(pageRequest, totalElements)
+        }
+        if (pageRequest.pageNumber > MAX_PAGE_NUMBER) {
+            throw DiscordSendTargetPageTooDeepException()
         }
 
         val rows = mergePage(targetType, normalizedName, targetGrade, pageRequest)
@@ -123,7 +127,7 @@ class DiscordSendTargetQueryServiceImpl(
     }
 
     private fun resolveDeliveries(rows: List<TargetRow>): ResolvedDeliveries {
-        if (rows.isEmpty()) return ResolvedDeliveries(emptyMap(), emptySet())
+        if (rows.isEmpty()) return ResolvedDeliveries(emptyMap(), emptyMap())
         val targetTypes = rows.mapTo(mutableSetOf()) { it.deliveryTargetType }
         val targetIds = rows.mapTo(mutableSetOf()) { it.targetId }
         val latestCreate =
@@ -132,13 +136,13 @@ class DiscordSendTargetQueryServiceImpl(
                 targetIds,
                 DiscordDeliveryAction.CREATE,
             )
-        val latestAnyKeys =
+        val latestAnyDeliveryIds =
             deliveryRepository
                 .findLatestDeliveries(targetTypes, targetIds)
-                .mapTo(mutableSetOf()) { TargetKey(it.targetType, it.targetId) }
+                .associate { TargetKey(it.targetType, it.targetId) to requireNotNull(it.id) }
         return ResolvedDeliveries(
             latestCreate.associateBy { TargetKey(it.targetType, it.targetId) },
-            latestAnyKeys,
+            latestAnyDeliveryIds,
         )
     }
 
@@ -149,18 +153,20 @@ class DiscordSendTargetQueryServiceImpl(
             targetId = targetId,
             targetName = targetName,
             targetGrades = targetGrades,
-            delivery = delivery?.toResponse(deliveries.latestAnyKeys),
+            delivery = delivery?.toResponse(deliveries.latestAnyDeliveryIds),
         )
     }
 
-    private fun DiscordDelivery.toResponse(latestAnyKeys: Set<TargetKey>): DiscordSendTargetDeliveryResponse =
+    private fun DiscordDelivery.toResponse(
+        latestAnyDeliveryIds: Map<TargetKey, Long>,
+    ): DiscordSendTargetDeliveryResponse =
         DiscordSendTargetDeliveryResponse(
             deliveryId = requireNotNull(id) { "저장된 DiscordDelivery는 id를 가져야 합니다." },
             status = status,
             requestedAt = requireNotNull(createdAt) { "저장된 DiscordDelivery는 createdAt을 가져야 합니다." },
             manualRetryCount = manualRetryCount,
             canRetry =
-                TargetKey(targetType, targetId) in latestAnyKeys &&
+                latestAnyDeliveryIds[TargetKey(targetType, targetId)] == id &&
                     status == DiscordDeliveryStatus.FAILED &&
                     retryPolicy.canRetryManually(manualRetryCount),
         )
@@ -208,7 +214,7 @@ class DiscordSendTargetQueryServiceImpl(
 
     private data class ResolvedDeliveries(
         val latestCreate: Map<TargetKey, DiscordDelivery>,
-        val latestAnyKeys: Set<TargetKey>,
+        val latestAnyDeliveryIds: Map<TargetKey, Long>,
     )
 
     private class TargetCursor<T>(
@@ -253,6 +259,7 @@ class DiscordSendTargetQueryServiceImpl(
         const val MIN_TARGET_GRADE = 1
         const val MAX_TARGET_GRADE = 3
         const val MAX_PAGE_SIZE = 100
+        const val MAX_PAGE_NUMBER = 100
         const val BATCH_SIZE = 100
 
         val CURSOR_ORDER =

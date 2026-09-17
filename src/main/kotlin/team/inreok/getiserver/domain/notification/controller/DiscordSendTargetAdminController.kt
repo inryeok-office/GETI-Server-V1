@@ -37,7 +37,10 @@ class DiscordSendTargetAdminController(
     )
     @ApiResponses(
         SwaggerApiResponse(responseCode = "200", description = "조회 성공(결과가 없으면 빈 Page)"),
-        SwaggerApiResponse(responseCode = "400", description = "targetGrade가 1~3이 아니거나 지원하지 않는 targetType"),
+        SwaggerApiResponse(
+            responseCode = "400",
+            description = "targetGrade가 1~3이 아니거나 지원하지 않는 targetType, 허용 범위를 초과한 page",
+        ),
         SwaggerApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음 (UNAUTHORIZED)"),
         SwaggerApiResponse(responseCode = "403", description = "개발자 권한이 없음 (FORBIDDEN)"),
     )
@@ -52,7 +55,7 @@ class DiscordSendTargetAdminController(
         @Parameter(description = "대상 학년 Filter(선택). 1, 2, 3 중 하나이며 미지정 학년 대상은 전체 학년으로 간주한다.", example = "2")
         @RequestParam(required = false)
         targetGrade: Int?,
-        @Parameter(description = "Pagination(page: 0부터 시작, size: 기본 20, 최대 100). sort는 무시된다.")
+        @Parameter(description = "Pagination(page: 0부터 시작, 최대 100, size: 기본 20, 최대 100). sort는 무시된다.")
         pageable: Pageable,
     ): ApiResponse<DiscordSendTargetListResponse> =
         ApiResponse.of(queryService.list(targetType, targetName, targetGrade, pageable))

@@ -27,6 +27,7 @@ import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryTar
 import team.inreok.getiserver.domain.notification.entity.type.DiscordMessageTemplate
 import team.inreok.getiserver.domain.notification.entity.type.DiscordSendTargetType
 import team.inreok.getiserver.domain.notification.exception.DiscordSendTargetInvalidTargetGradeException
+import team.inreok.getiserver.domain.notification.exception.DiscordSendTargetPageTooDeepException
 import team.inreok.getiserver.domain.notification.repository.DiscordDeliveryRepository
 import team.inreok.getiserver.domain.notification.service.DiscordDeliveryRetryPolicy
 import team.inreok.getiserver.domain.program.query.ProgramDiscordSendTargetQueryPort
@@ -125,6 +126,14 @@ class DiscordSendTargetQueryServiceImplTest {
     }
 
     @Test
+    fun `deep page is rejected when results exist`() {
+        given(jobQueryPort.countPublished(null, null)).willReturn(2_000L)
+
+        assertThatThrownBy { service().list(DiscordSendTargetType.JOB, null, null, PageRequest.of(101, 10)) }
+            .isInstanceOf(DiscordSendTargetPageTooDeepException::class.java)
+    }
+
+    @Test
     fun `최신 CREATE Delivery가 없으면 delivery는 null이다`() {
         given(jobQueryPort.countPublished(null, null)).willReturn(1L)
         given(jobQueryPort.findPublished(null, null, null, null, 100))
@@ -164,6 +173,28 @@ class DiscordSendTargetQueryServiceImplTest {
         assertThat(delivery?.status).isEqualTo(DiscordDeliveryStatus.FAILED)
         assertThat(delivery?.manualRetryCount).isEqualTo(1)
         assertThat(delivery?.canRetry).isTrue()
+    }
+
+    @Test
+    fun `latest UPDATE makes failed CREATE non-retryable`() {
+        val failed = delivery(3L, DiscordDeliveryAction.CREATE, DiscordDeliveryStatus.FAILED)
+        val update = delivery(9L, DiscordDeliveryAction.UPDATE, DiscordDeliveryStatus.DELIVERED)
+        given(jobQueryPort.countPublished(null, null)).willReturn(1L)
+        given(jobQueryPort.findPublished(null, null, null, null, 100))
+            .willReturn(listOf(job(1L, "job", LocalDateTime.of(2026, 9, 17, 12, 0), null)))
+        given(deliveryRepository.findLatestCreateDeliveries(anyTargetTypeSet(), anyIdSet(), anyAction()))
+            .willReturn(listOf(failed))
+        given(deliveryRepository.findLatestDeliveries(anyTargetTypeSet(), anyIdSet())).willReturn(listOf(update))
+
+        val delivery =
+            service()
+                .list(null, null, null, PageRequest.of(0, 20))
+                .content
+                .single()
+                .delivery
+
+        assertThat(delivery?.status).isEqualTo(DiscordDeliveryStatus.FAILED)
+        assertThat(delivery?.canRetry).isFalse()
     }
 
     @ParameterizedTest
