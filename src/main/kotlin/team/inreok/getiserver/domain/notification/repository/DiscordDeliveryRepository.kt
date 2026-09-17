@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.transaction.annotation.Transactional
 import team.inreok.getiserver.domain.notification.entity.DiscordDelivery
+import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryAction
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryStatus
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryTargetType
 import java.time.LocalDateTime
@@ -101,6 +102,44 @@ interface DiscordDeliveryRepository : JpaRepository<DiscordDelivery, Long> {
         @Param("targetTypes") targetTypes: Set<DiscordDeliveryTargetType>,
         @Param("targetIds") targetIds: Set<Long>,
     ): List<Long>
+
+    @Query(
+        """
+        SELECT d FROM DiscordDelivery d
+        WHERE d.targetType IN :targetTypes
+          AND d.targetId IN :targetIds
+          AND NOT EXISTS (
+              SELECT 1 FROM DiscordDelivery o
+              WHERE o.targetType = d.targetType AND o.targetId = d.targetId AND o.id > d.id
+          )
+        """,
+    )
+    fun findLatestDeliveries(
+        @Param("targetTypes") targetTypes: Set<DiscordDeliveryTargetType>,
+        @Param("targetIds") targetIds: Set<Long>,
+    ): List<DiscordDelivery>
+
+    /** 주어진 Resource들의 최신 CREATE Delivery만 한 번에 조회한다. */
+    @Query(
+        """
+        SELECT d FROM DiscordDelivery d
+        WHERE d.action = :action
+          AND d.targetType IN :targetTypes
+          AND d.targetId IN :targetIds
+          AND NOT EXISTS (
+              SELECT 1 FROM DiscordDelivery newer
+              WHERE newer.targetType = d.targetType
+                AND newer.targetId = d.targetId
+                AND newer.action = :action
+                AND newer.id > d.id
+          )
+        """,
+    )
+    fun findLatestCreateDeliveries(
+        @Param("targetTypes") targetTypes: Set<DiscordDeliveryTargetType>,
+        @Param("targetIds") targetIds: Set<Long>,
+        @Param("action") action: DiscordDeliveryAction,
+    ): List<DiscordDelivery>
 
     /**
      * Worker가 이번 Sweep에서 처리할 후보 Id다(§30). 아직 한 번도 시도하지 않은 Row는

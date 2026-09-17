@@ -18,6 +18,42 @@ interface JobRepository : JpaRepository<Job, Long> {
         @Param("query") query: String,
     ): List<Long>
 
+    @Query(
+        """
+        SELECT COUNT(j) FROM Job j
+        WHERE j.status = team.inreok.getiserver.domain.job.entity.type.JobStatus.PUBLISHED
+          AND j.deletedAt IS NULL
+          AND (:targetName IS NULL OR LOWER(j.title) LIKE LOWER(CONCAT('%', :targetName, '%')))
+          AND (:targetGrade IS NULL OR j.targetGrade IS NULL OR j.targetGrade = :targetGrade)
+        """,
+    )
+    fun countPublishedDiscordSendTargets(
+        @Param("targetName") targetName: String?,
+        @Param("targetGrade") targetGrade: Int?,
+    ): Long
+
+    @Query(
+        """
+        SELECT j FROM Job j
+        WHERE j.status = team.inreok.getiserver.domain.job.entity.type.JobStatus.PUBLISHED
+          AND j.deletedAt IS NULL
+          AND (:targetName IS NULL OR LOWER(j.title) LIKE LOWER(CONCAT('%', :targetName, '%')))
+          AND (:targetGrade IS NULL OR j.targetGrade IS NULL OR j.targetGrade = :targetGrade)
+          AND (
+              j.createdAt < :afterCreatedAt
+              OR (j.createdAt = :afterCreatedAt AND j.id < :afterId)
+          )
+        ORDER BY j.createdAt DESC, j.id DESC
+        """,
+    )
+    fun findPublishedDiscordSendTargets(
+        @Param("targetName") targetName: String?,
+        @Param("targetGrade") targetGrade: Int?,
+        @Param("afterCreatedAt") afterCreatedAt: LocalDateTime,
+        @Param("afterId") afterId: Long,
+        pageable: Pageable,
+    ): List<Job>
+
     fun findBySourceNameAndExternalJobId(
         sourceName: String,
         externalJobId: String,

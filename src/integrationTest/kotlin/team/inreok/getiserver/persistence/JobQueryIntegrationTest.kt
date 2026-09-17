@@ -154,6 +154,28 @@ class JobQueryIntegrationTest
             assertThat(collected).containsExactlyElementsOf(ids)
         }
 
+        @Test
+        fun `Discord 수동 발송 대상 조회는 PUBLISHED와 학년·이름 조건을 DB에서 적용한다`() {
+            persist("백엔드 게시", targetGrade = 2)
+            persist("프론트엔드 게시", targetGrade = 3)
+            persist("전체 학년 게시", targetGrade = null)
+            persist("초안", status = JobStatus.DRAFT, targetGrade = 2)
+            persist("삭제된 게시", targetGrade = 2, deletedAt = now)
+
+            val count = jobRepository.countPublishedDiscordSendTargets("게시", 2)
+            val page =
+                jobRepository.findPublishedDiscordSendTargets(
+                    targetName = "게시",
+                    targetGrade = 2,
+                    afterCreatedAt = LocalDateTime.of(9999, 12, 31, 23, 59, 59),
+                    afterId = Long.MAX_VALUE,
+                    pageable = PageRequest.of(0, 20),
+                )
+
+            assertThat(count).isEqualTo(2)
+            assertThat(page.map { it.title }).containsExactly("전체 학년 게시", "백엔드 게시")
+        }
+
         private fun persist(
             title: String,
             status: JobStatus = JobStatus.PUBLISHED,
@@ -161,6 +183,7 @@ class JobQueryIntegrationTest
             endDate: LocalDateTime? = null,
             publishedAt: LocalDateTime? = LocalDateTime.of(2026, 7, 1, 0, 0),
             deletedAt: LocalDateTime? = null,
+            targetGrade: Int? = null,
         ): Job =
             jobRepository.saveAndFlush(
                 Job(
@@ -175,6 +198,7 @@ class JobQueryIntegrationTest
                     recruitmentEndedAt = endDate
                     this.publishedAt = publishedAt
                     this.deletedAt = deletedAt
+                    this.targetGrade = targetGrade
                 },
             )
 

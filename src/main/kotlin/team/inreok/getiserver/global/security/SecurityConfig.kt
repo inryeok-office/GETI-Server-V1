@@ -293,6 +293,7 @@ private fun AuthorizeHttpRequestsDsl.applyNormalSecurityRules() {
     // Endpoint라 "/**" 형태는 추가하지 않는다.
     authorize("/api/v1/admin/discord-deliveries", hasRole("DEVELOPER"))
     authorize("/api/v1/admin/discord-deliveries/**", hasRole("DEVELOPER"))
+    authorize("/api/v1/admin/discord-send-targets", hasRole("DEVELOPER"))
     authorize("/api/v1/admin/discord-channels", hasRole("DEVELOPER"))
     // 정기 작업 운영 상태는 개발자만 접근한다(Issue #227).
     authorize("/api/v1/admin/system/jobs", hasRole("DEVELOPER"))

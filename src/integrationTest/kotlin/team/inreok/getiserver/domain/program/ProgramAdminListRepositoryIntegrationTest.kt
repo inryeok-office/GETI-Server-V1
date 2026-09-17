@@ -15,9 +15,12 @@ import team.inreok.getiserver.domain.member.entity.Member
 import team.inreok.getiserver.domain.member.entity.type.OAuthProvider
 import team.inreok.getiserver.domain.member.repository.MemberRepository
 import team.inreok.getiserver.domain.program.entity.Program
+import team.inreok.getiserver.domain.program.entity.ProgramTargetGrade
+import team.inreok.getiserver.domain.program.entity.ProgramTargetGradeId
 import team.inreok.getiserver.domain.program.entity.type.ProgramStatus
 import team.inreok.getiserver.domain.program.entity.type.ProgramType
 import team.inreok.getiserver.domain.program.repository.ProgramRepository
+import team.inreok.getiserver.domain.program.repository.ProgramTargetGradeRepository
 import java.time.LocalDateTime
 
 @DataJpaTest
@@ -26,6 +29,9 @@ import java.time.LocalDateTime
 class ProgramAdminListRepositoryIntegrationTest {
     @Autowired
     private lateinit var programRepository: ProgramRepository
+
+    @Autowired
+    private lateinit var targetGradeRepository: ProgramTargetGradeRepository
 
     @Autowired
     private lateinit var memberRepository: MemberRepository
@@ -67,6 +73,34 @@ class ProgramAdminListRepositoryIntegrationTest {
         assertThat(repeatedNullQueryPage.totalElements).isEqualTo(3)
         assertThat(deletedPage.content.map { it.title }).containsExactly("삭제")
         assertThat(searchPage.content.map { it.title }).containsExactly("공개 특강")
+    }
+
+    @Test
+    fun `Discord 수동 발송 대상 조회는 PUBLISHED와 학년·이름 조건을 DB에서 적용한다`() {
+        val matching = save("AI 게시", ProgramStatus.PUBLISHED, 1)
+        targetGradeRepository.saveAndFlush(ProgramTargetGrade(ProgramTargetGradeId(matching.id!!, 2)))
+        save("전체 게시", ProgramStatus.PUBLISHED, 2)
+        save("다른 학년 게시", ProgramStatus.PUBLISHED, 3).also {
+            targetGradeRepository.saveAndFlush(ProgramTargetGrade(ProgramTargetGradeId(it.id!!, 3)))
+        }
+        save("초안", ProgramStatus.DRAFT, 4)
+        save("삭제된 게시", ProgramStatus.PUBLISHED, 5).also {
+            it.deletedAt = LocalDateTime.now()
+            programRepository.saveAndFlush(it)
+        }
+
+        val count = programRepository.countPublishedDiscordSendTargets("게시", 2)
+        val page =
+            programRepository.findPublishedDiscordSendTargets(
+                targetName = "게시",
+                targetGrade = 2,
+                afterCreatedAt = LocalDateTime.of(9999, 12, 31, 23, 59, 59),
+                afterId = Long.MAX_VALUE,
+                pageable = PageRequest.of(0, 20),
+            )
+
+        assertThat(count).isEqualTo(2)
+        assertThat(page.map { it.title }).containsExactly("전체 게시", "AI 게시")
     }
 
     private fun save(
