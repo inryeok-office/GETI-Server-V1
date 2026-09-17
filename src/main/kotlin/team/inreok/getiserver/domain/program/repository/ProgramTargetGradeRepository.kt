@@ -8,4 +8,6 @@ import team.inreok.getiserver.domain.program.entity.ProgramTargetGradeId
 // 게시 전 수정 API도 targetGrades를 다루지 않아 삭제·재저장 Method는 필요하지 않다.
 interface ProgramTargetGradeRepository : JpaRepository<ProgramTargetGrade, ProgramTargetGradeId> {
     fun findAllByIdProgramId(programId: Long): List<ProgramTargetGrade>
+
+    fun findAllByIdProgramIdIn(programIds: Collection<Long>): List<ProgramTargetGrade>
 }

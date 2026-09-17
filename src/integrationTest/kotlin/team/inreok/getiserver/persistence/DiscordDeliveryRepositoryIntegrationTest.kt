@@ -18,6 +18,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import team.inreok.getiserver.domain.notification.entity.DiscordDelivery
 import team.inreok.getiserver.domain.notification.entity.DiscordDeliveryAttempt
+import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryAction
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryAttemptResult
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryAttemptType
 import team.inreok.getiserver.domain.notification.entity.type.DiscordDeliveryStatus
@@ -335,6 +336,29 @@ class DiscordDeliveryRepositoryIntegrationTest
 
             // 공고 1번과 프로그램 1번은 targetId가 같아도 서로 다른 대상으로 취급된다.
             assertThat(latestIds).containsExactlyInAnyOrder(latestOfJob.id, program.id)
+        }
+
+        @Test
+        fun `대상별 최신 CREATE Delivery만 반환하고 UPDATE는 제외한다`() {
+            val create =
+                deliveryRepository.saveAndFlush(
+                    delivery(key = "JOB:1:CREATE", template = DiscordMessageTemplate.JOB_PUBLISHED).apply {
+                        status = DiscordDeliveryStatus.FAILED
+                    },
+                )
+            deliveryRepository.saveAndFlush(
+                delivery(key = "JOB:1:UPDATE", template = DiscordMessageTemplate.JOB_UPDATED),
+            )
+
+            val latestCreate =
+                deliveryRepository.findLatestCreateDeliveries(
+                    targetTypes = setOf(DiscordMessageTemplate.JOB_PUBLISHED.targetType),
+                    targetIds = setOf(1L),
+                    action = DiscordDeliveryAction.CREATE,
+                )
+
+            assertThat(latestCreate.map { it.id }).containsExactly(create.id)
+            assertThat(latestCreate.single().status).isEqualTo(DiscordDeliveryStatus.FAILED)
         }
 
         private fun reload(delivery: DiscordDelivery) =
